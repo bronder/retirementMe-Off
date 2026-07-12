@@ -99,6 +99,42 @@ export interface Expense {
   endAge: number | null;
 }
 
+export type PropertyType = 'primary_residence' | 'vacation' | 'investment' | 'land' | 'other';
+
+export interface Property {
+  id: string;
+  name: string;
+  type: PropertyType;
+  /** Estimated current market value in today's dollars. */
+  currentValue: number;
+  /** Remaining mortgage balance, if any (today's dollars). */
+  mortgageBalance: number;
+  /** Expected annual appreciation rate (decimal, e.g., 0.03 = 3%). */
+  annualAppreciation: number;
+  /** Annual property tax in today's dollars. */
+  annualPropertyTax: number;
+  /** Annual insurance cost in today's dollars. */
+  annualInsurance: number;
+
+  // --- Future purchase (optional) ---
+  /** If set, this property will be purchased at this age (not yet owned). */
+  purchaseAge?: number | null;
+  /** Purchase price in today's dollars (only if purchaseAge is set). */
+  purchasePrice?: number;
+  /** Down payment amount in today's dollars (deducted from savings at purchase). */
+  downPayment?: number;
+  /** New mortgage interest rate (decimal, e.g., 0.065 = 6.5%). */
+  mortgageRate?: number;
+  /** New mortgage term in years (e.g., 30). */
+  mortgageTerm?: number;
+
+  // --- Future sale (optional) ---
+  /** If set, this property will be sold at this age. */
+  saleAge?: number | null;
+  /** Net proceeds from sale in today's dollars (sale price - closing costs - mortgage payoff). */
+  saleProceeds?: number;
+}
+
 export type EventType = 'home_purchase' | 'home_sale' | 'large_purchase' | 'windfall' | 'other';
 
 export interface LifeEvent {
@@ -158,6 +194,7 @@ export interface Scenario {
   name: string;
   assumptions: Assumptions;
   accounts: Account[];
+  properties?: Property[];
   incomeSources: IncomeSource[];
   expenses: Expense[];
   events: LifeEvent[];

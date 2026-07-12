@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Plan, Scenario, Account, IncomeSource, Expense, LifeEvent, Assumptions } from './types';
+import type { Plan, Scenario, Account, IncomeSource, Expense, LifeEvent, Assumptions, Property } from './types';
 import { defaultPlan, defaultScenario, createId, PLAN_VERSION } from './defaults';
 
 interface PlanStore {
@@ -20,6 +20,11 @@ interface PlanStore {
   updateAccount: (scenarioId: string, accountId: string, patch: Partial<Account>) => void;
   deleteAccount: (scenarioId: string, accountId: string) => void;
   reorderAccounts: (scenarioId: string, fromIndex: number, toIndex: number) => void;
+
+  // Property operations
+  addProperty: (scenarioId: string, property: Omit<Property, 'id'>) => void;
+  updateProperty: (scenarioId: string, propertyId: string, patch: Partial<Property>) => void;
+  deleteProperty: (scenarioId: string, propertyId: string) => void;
 
   // Income operations
   addIncome: (scenarioId: string, income: Omit<IncomeSource, 'id'>) => void;
@@ -161,6 +166,47 @@ export const usePlanStore = create<PlanStore>()(
               accounts.splice(toIndex, 0, moved);
               return { ...s, accounts };
             }),
+          },
+        })),
+
+      addProperty: (scenarioId, property) =>
+        set((state) => ({
+          plan: {
+            ...state.plan,
+            scenarios: state.plan.scenarios.map((s) =>
+              s.id === scenarioId
+                ? { ...s, properties: [...(s.properties ?? []), { ...property, id: createId() }] }
+                : s,
+            ),
+          },
+        })),
+
+      updateProperty: (scenarioId, propertyId, patch) =>
+        set((state) => ({
+          plan: {
+            ...state.plan,
+            scenarios: state.plan.scenarios.map((s) =>
+              s.id === scenarioId
+                ? {
+                    ...s,
+                    properties: (s.properties ?? []).map((p) =>
+                      p.id === propertyId ? { ...p, ...patch } : p,
+                    ),
+                  }
+                : s,
+            ),
+          },
+        })),
+
+      deleteProperty: (scenarioId, propertyId) =>
+        set((state) => ({
+          plan: {
+            ...state.plan,
+            scenarios: state.plan.scenarios.map((s) =>
+              s.id === scenarioId
+                ? { ...s, properties: (s.properties ?? []).filter((p) => p.id !== propertyId) }
+                : s,
+            ),
           },
         })),
 
@@ -344,7 +390,7 @@ export const usePlanStore = create<PlanStore>()(
     }),
     {
       name: 'retirement-planner',
-      version: 3,
+      version: 4,
       partialize: (state) => ({
         plan: state.plan,
         activeScenarioId: state.activeScenarioId,
@@ -367,6 +413,14 @@ export const usePlanStore = create<PlanStore>()(
                 retirementAge: 65,
                 endAge: 95,
               };
+            }
+          }
+        }
+        // v3→v4: ensure properties array exists on all scenarios
+        if (version < 4 && state?.plan) {
+          for (const scenario of state.plan.scenarios) {
+            if (!scenario.properties) {
+              scenario.properties = [];
             }
           }
         }
