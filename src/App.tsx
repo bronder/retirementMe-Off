@@ -113,7 +113,7 @@ function useThemeColors() {
 }
 
 type Tab = 'inputs' | 'results' | 'compare';
-type InputSection = 'assumptions' | 'accounts' | 'expenses' | 'income' | 'events';
+type InputSection = 'overview' | 'assumptions' | 'accounts' | 'expenses' | 'income' | 'events';
 type Theme = 'dark' | 'light' | 'sepia' | 'nord';
 
 const THEMES: { id: Theme; label: string }[] = [
@@ -485,6 +485,7 @@ function InputsView({ scenario, store }: {
   }, [section]);
 
   const navItems: { id: InputSection; label: string; icon: string }[] = [
+    { id: 'overview', label: 'Overview', icon: '📊' },
     { id: 'assumptions', label: 'Assumptions', icon: '⚙️' },
     { id: 'accounts', label: 'Accounts & Savings', icon: '🏦' },
     { id: 'expenses', label: 'Expenses', icon: '📋' },
@@ -607,6 +608,7 @@ function InputsView({ scenario, store }: {
         })}
       </aside>
       <div className="inputs-content">
+        {section === 'overview' && <OverviewPanel scenario={scenario} store={store} />}
         {section === 'assumptions' && <AssumptionsPanel scenario={scenario} store={store} />}
         {section === 'accounts' && <AccountsPanel scenario={scenario} store={store} />}
         {section === 'expenses' && <ExpensesPanel scenario={scenario} store={store} />}
@@ -725,6 +727,125 @@ function PlannerHero({ title, subtitle, stats, compact }: {
         </div>
       </div>
     </section>
+  );
+}
+
+/* ============ OVERVIEW PANEL ============ */
+
+function OverviewPanel({ scenario, store }: {
+  scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
+  store: ReturnType<typeof usePlanStore.getState>;
+}) {
+  void store;
+  const tc = useThemeColors();
+  const result = useMemo(() => runProjection(scenario), [scenario]);
+  const readiness = useMemo(
+    () => getReadinessSummary(result, scenario.assumptions.retirementAge, scenario.assumptions.safeWithdrawalRate),
+    [result, scenario.assumptions.retirementAge, scenario.assumptions.safeWithdrawalRate],
+  );
+
+  const currentNetWorth = scenario.accounts.reduce((s, a) => s + a.balance, 0);
+  const totalContributions = scenario.accounts.reduce((s, a) => s + a.annualContribution + a.employerMatch, 0);
+
+  const checks = [
+    { label: 'Has at least 1 account', pass: scenario.accounts.length > 0, weight: 15 },
+    { label: 'Account balances > $0', pass: scenario.accounts.some(a => a.balance > 0), weight: 10 },
+    { label: 'Has retirement contributions', pass: scenario.accounts.some(a => a.annualContribution > 0), weight: 10 },
+    { label: 'Has expenses defined', pass: scenario.expenses.length > 0, weight: 15 },
+    { label: 'Has post-retirement expenses', pass: scenario.expenses.some(e => e.postRetirement), weight: 10 },
+    { label: 'Has income sources', pass: scenario.incomeSources.length > 0, weight: 10 },
+    { label: 'Has Social Security or pension', pass: scenario.incomeSources.some(i => i.type === 'social_security' || i.type === 'pension'), weight: 10 },
+    { label: 'Current age < retirement age', pass: scenario.assumptions.currentAge < scenario.assumptions.retirementAge, weight: 5 },
+    { label: 'Retirement age < end age', pass: scenario.assumptions.retirementAge < scenario.assumptions.endAge, weight: 5 },
+    { label: 'Realistic withdrawal rate (3-5%)', pass: scenario.assumptions.safeWithdrawalRate >= 0.03 && scenario.assumptions.safeWithdrawalRate <= 0.05, weight: 5 },
+    { label: 'Realistic pre-retirement return (5-10%)', pass: scenario.assumptions.preRetirementReturn >= 0.05 && scenario.assumptions.preRetirementReturn <= 0.10, weight: 5 },
+  ];
+  const wellnessScore = checks.reduce((sum, c) => sum + (c.pass ? c.weight : 0), 0);
+  const wellnessColor = wellnessScore >= 80 ? 'var(--green)' : wellnessScore >= 50 ? 'var(--yellow)' : 'var(--red)';
+  const wellnessLabel = wellnessScore >= 80 ? 'Well Populated' : wellnessScore >= 50 ? 'Needs Attention' : 'Incomplete';
+  const gaugeDeg = Math.min(180, (wellnessScore / 100) * 180);
+
+  const miniChartData = result.years.map((y) => ({ age: y.age, netWorth: Math.round(y.realAssets) }));
+
+  return (
+    <div>
+      <div className="summary-grid">
+        <div className="summary-card">
+          <div className="label">Current Net Worth</div>
+          <div className="value">{formatCurrency(currentNetWorth, { compact: true })}</div>
+          <div className="sub">{scenario.accounts.length} {scenario.accounts.length === 1 ? 'account' : 'accounts'}</div>
+        </div>
+        <div className="summary-card">
+          <div className="label">Projected at Retirement</div>
+          <div className="value">{formatCurrency(readiness.nestEggAtRetirement, { compact: true })}</div>
+          <div className="sub">{formatCurrency(readiness.nestEggAtRetirementReal, { compact: true })} in today's $</div>
+        </div>
+        <div className="summary-card">
+          <div className="label">Annual Savings Rate</div>
+          <div className="value">{formatCurrency(totalContributions, { compact: true })}</div>
+          <div className="sub">{totalContributions > 0 && currentNetWorth > 0 ? `${formatPercent(totalContributions / currentNetWorth)} of net worth` : '—'}</div>
+        </div>
+        <div className="summary-card">
+          <div className="label">Plan Outcome</div>
+          <div className={`value ${result.success ? 'value-good' : 'value-bad'}`}>{result.success ? '✓ On Track' : '✗ At Risk'}</div>
+          <div className="sub">{result.success ? `Lasts to age ${scenario.assumptions.endAge}` : `Depleted at age ${formatAge(result.depletionAge)}`}</div>
+        </div>
+      </div>
+
+      <div className="overview-wellness-grid">
+        <div className="panel overview-gauge-card">
+          <h3 className="overview-section-title">📋 Data Completeness</h3>
+          <div className="overview-gauge-container">
+            <div className="overview-gauge" style={{ background: `conic-gradient(from 270deg, ${wellnessColor} 0deg ${gaugeDeg}deg, var(--bg-subtle) ${gaugeDeg}deg 180deg, transparent 180deg)` }}>
+              <div className="overview-gauge-inner">
+                <span className="overview-gauge-score" style={{ color: wellnessColor }}>{wellnessScore}%</span>
+                <span className="overview-gauge-label">{wellnessLabel}</span>
+              </div>
+            </div>
+          </div>
+          <div className="overview-gauge-hint">Higher = more complete and realistic data</div>
+        </div>
+        <div className="panel overview-checks-card">
+          <h3 className="overview-section-title">✅ Checklist</h3>
+          <div className="overview-checks-list">
+            {checks.map((c, i) => (
+              <div key={i} className="overview-check-item">
+                <span className={`overview-check-icon ${c.pass ? 'pass' : 'fail'}`}>{c.pass ? '✓' : '○'}</span>
+                <span className={`overview-check-label ${c.pass ? '' : 'incomplete'}`}>{c.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="chart-container">
+        <h3>📈 Projected Net Worth (Today's Dollars)</h3>
+        <ResponsiveContainer width="100%" height={240}>
+          <AreaChart data={miniChartData}>
+            <defs>
+              <linearGradient id="overviewGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={tc.chart} stopOpacity={0.3} />
+                <stop offset="100%" stopColor={tc.chart} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
+            <XAxis dataKey="age" stroke={tc.textDim} />
+            <YAxis stroke={tc.textDim} tickFormatter={(v) => formatCurrency(v, { compact: true })} />
+            <Tooltip contentStyle={{ background: tc.panel, border: `1px solid ${tc.border}`, borderRadius: 8 }} formatter={(v: number) => formatCurrency(v)} labelFormatter={(l) => `Age ${l}`} labelStyle={{ color: tc.text }} itemStyle={{ color: tc.text }} />
+            <Area type="monotone" dataKey="netWorth" stroke={tc.chart} strokeWidth={2} fill="url(#overviewGradient)" />
+            <ReferenceLine x={scenario.assumptions.retirementAge} stroke={tc.yellow} strokeDasharray="5 5" label={{ value: 'Retire', fill: tc.yellow, fontSize: 11 }} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="summary-strip">
+        <div className="summary-strip-item"><span className="label">Years to Retirement</span><span className="value">{Math.max(0, scenario.assumptions.retirementAge - scenario.assumptions.currentAge)}</span></div>
+        <div className="summary-strip-item"><span className="label">Years in Retirement</span><span className="value">{scenario.assumptions.endAge - scenario.assumptions.retirementAge}</span></div>
+        <div className="summary-strip-item"><span className="label">Monthly Expenses (Ret.)</span><span className="value">{formatCurrency(readiness.firstYearExpenses / 12, { compact: true })}</span></div>
+        <div className="summary-strip-item"><span className="label">Monthly Income (Ret.)</span><span className="value">{formatCurrency(readiness.firstYearIncome / 12, { compact: true })}</span></div>
+        <div className="summary-strip-item"><span className="label">Life Events</span><span className="value">{scenario.events.length}</span></div>
+      </div>
+    </div>
   );
 }
 
