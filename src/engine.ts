@@ -135,10 +135,15 @@ export function runProjection(scenario: Scenario): ProjectionResult {
           expenses += computedMortgages[prop.id] * inflationFactor;
         }
 
-        // Existing mortgage balance — estimate annual payment (simple 30-year amortization)
+        // Existing mortgage — use actual payment if provided, otherwise estimate
         if (!prop.purchaseAge && prop.mortgageBalance > 0) {
-          const annualPaydown = prop.mortgageBalance / 30;
-          expenses += annualPaydown * inflationFactor;
+          const yearsLeft = prop.mortgageYearsLeft ?? 30;
+          // Only charge mortgage payment if years haven't expired
+          const yearsFromPurchase = age - assumptions.currentAge;
+          if (yearsFromPurchase < yearsLeft) {
+            const annualPayment = prop.mortgagePayment ?? (prop.mortgageBalance / 30);
+            expenses += annualPayment * inflationFactor;
+          }
         }
       }
     }

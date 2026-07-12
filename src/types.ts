@@ -109,6 +109,10 @@ export interface Property {
   currentValue: number;
   /** Remaining mortgage balance, if any (today's dollars). */
   mortgageBalance: number;
+  /** Current annual mortgage payment (principal + interest), if any (today's dollars). */
+  mortgagePayment?: number;
+  /** Years remaining on the mortgage. */
+  mortgageYearsLeft?: number;
   /** Expected annual appreciation rate (decimal, e.g., 0.03 = 3%). */
   annualAppreciation: number;
   /** Annual property tax in today's dollars. */
@@ -116,9 +120,14 @@ export interface Property {
   /** Annual insurance cost in today's dollars. */
   annualInsurance: number;
 
+  /** What the user plans to do with this property. */
+  planAction?: 'keep' | 'sell' | 'sell_and_buy' | 'undecided';
+
   // --- Future purchase (optional) ---
   /** If set, this property will be purchased at this age (not yet owned). */
   purchaseAge?: number | null;
+  /** What kind of future purchase this represents. */
+  purchaseType?: 'replacement' | 'additional' | 'move';
   /** Purchase price in today's dollars (only if purchaseAge is set). */
   purchasePrice?: number;
   /** Down payment amount in today's dollars (deducted from savings at purchase). */

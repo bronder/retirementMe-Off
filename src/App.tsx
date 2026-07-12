@@ -1148,6 +1148,269 @@ function AccountsPanel({ scenario, store }: {
 
 const PROPERTY_TYPES: PropertyType[] = ['primary_residence', 'vacation', 'investment', 'land', 'other'];
 
+/** Helper: compute estimated annual mortgage payment for a future purchase */
+function computeAnnualMortgage(principal: number, annualRate: number, years: number): number {
+  if (principal <= 0 || years <= 0) return 0;
+  const r = annualRate / 12;
+  const n = years * 12;
+  const monthly = principal * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1);
+  return monthly * 12;
+}
+
+const PLAN_ACTION_LABELS: { value: string; label: string; icon: string }[] = [
+  { value: 'keep', label: 'Keep it', icon: '🏠' },
+  { value: 'sell', label: 'Sell it', icon: '🏡' },
+  { value: 'sell_and_buy', label: 'Sell and buy another', icon: '🔄' },
+  { value: 'undecided', label: 'Not sure yet', icon: '🤔' },
+];
+
+function PropertyCard({ prop, scenario, store }: {
+  prop: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]['properties'] extends (infer T)[] | undefined ? T : never;
+  scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
+  store: ReturnType<typeof usePlanStore.getState>;
+}) {
+  const equity = prop.currentValue - prop.mortgageBalance;
+  const annualHousing = prop.annualPropertyTax + prop.annualInsurance;
+  const loanAmount = (prop.purchasePrice ?? 0) - (prop.downPayment ?? 0);
+  const estMortgage = computeAnnualMortgage(loanAmount, prop.mortgageRate ?? 0.065, prop.mortgageTerm ?? 30);
+  const payoffYears = prop.mortgageYearsLeft ?? (prop.mortgageBalance > 0 ? 30 : 0);
+  const planAction = prop.planAction ?? 'undecided';
+  const showSaleFields = planAction === 'sell' || planAction === 'sell_and_buy';
+  const showBuyFields = planAction === 'sell_and_buy';
+
+  // Build retirement impact summary sentence
+  let impactSentence = '';
+  if (planAction === 'keep') {
+    impactSentence = `You'll have ~${formatCurrency(equity, { compact: true })} in equity and pay ~${formatCurrency(annualHousing + (prop.mortgagePayment ?? 0), { compact: true })}/yr in housing costs during retirement.`;
+  } else if (planAction === 'sell' || planAction === 'sell_and_buy') {
+    const proceeds = prop.saleProceeds ?? equity;
+    if (planAction === 'sell') {
+      impactSentence = `Selling at age ${prop.saleAge ?? '?'} frees up ~${formatCurrency(proceeds, { compact: true })} and eliminates ${formatCurrency(annualHousing + (prop.mortgagePayment ?? 0), { compact: true })}/yr in housing costs.`;
+    } else {
+      impactSentence = `Selling at age ${prop.saleAge ?? '?'} frees up ~${formatCurrency(proceeds, { compact: true })}, then buying at age ${prop.purchaseAge ?? '?'} adds ~${formatCurrency(estMortgage, { compact: true })}/yr in mortgage costs.`;
+    }
+  } else {
+    impactSentence = `This property represents ~${formatCurrency(equity, { compact: true })} in equity. Choose a plan above to see the retirement impact.`;
+  }
+
+  return (
+    <div className="prop-card">
+      {/* === Header === */}
+      <div className="prop-card-header">
+        <span className="prop-icon">{prop.type === 'land' ? '🌳' : '🏠'}</span>
+        <input type="text" className="prop-name-input" value={prop.name} placeholder="e.g. Family Home" onChange={(e) => store.updateProperty(scenario.id, prop.id, { name: e.target.value })} />
+        <select className="table-select" value={prop.type} onChange={(e) => store.updateProperty(scenario.id, prop.id, { type: e.target.value as PropertyType })} style={{ width: 'auto', minWidth: 140 }}>
+          {PROPERTY_TYPES.map((t) => <option key={t} value={t}>{prettify(t)}</option>)}
+        </select>
+        <ConfirmDelete title="Delete property" onConfirm={() => store.deleteProperty(scenario.id, prop.id)} />
+      </div>
+
+      {/* === SECTION A: Property Details === */}
+      <div className="prop-zone prop-zone-current">
+        <div className="prop-zone-label">📍 Property Details</div>
+        <div className="prop-zone-grid">
+          <div className="prop-field">
+            <label>Current market value</label>
+            <CurrencyCellInput value={prop.currentValue} onChange={(v) => store.updateProperty(scenario.id, prop.id, { currentValue: v })} />
+            <a href={`https://www.zillow.com/homes/${encodeURIComponent(prop.name || '')}_rb/`} target="_blank" rel="noopener noreferrer" className="prop-zillow-link">🔍 Check Zillow</a>
+          </div>
+          <div className="prop-field">
+            <label>Expected annual home value growth</label>
+            <PctCellInput value={prop.annualAppreciation} onChange={(v) => store.updateProperty(scenario.id, prop.id, { annualAppreciation: v })} />
+          </div>
+        </div>
+      </div>
+
+      {/* === SECTION B: Current Finances === */}
+      <div className="prop-zone prop-zone-current" style={{ paddingTop: 0 }}>
+        <div className="prop-zone-label">💰 Current Mortgage</div>
+        <div className="prop-zone-grid">
+          <div className="prop-field">
+            <label>Remaining mortgage balance</label>
+            <CurrencyCellInput value={prop.mortgageBalance} onChange={(v) => store.updateProperty(scenario.id, prop.id, { mortgageBalance: v })} />
+          </div>
+          <div className="prop-field">
+            <label>Annual mortgage payment (P+I)</label>
+            <CurrencyCellInput value={prop.mortgagePayment ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { mortgagePayment: v })} />
+          </div>
+          <div className="prop-field">
+            <label>Years remaining on mortgage</label>
+            <input type="number" value={prop.mortgageYearsLeft ?? ''} placeholder="—" onChange={(e) => store.updateProperty(scenario.id, prop.id, { mortgageYearsLeft: +e.target.value || undefined })} />
+          </div>
+        </div>
+      </div>
+
+      {/* === SECTION C: Annual Ownership Costs === */}
+      <div className="prop-zone prop-zone-current" style={{ paddingTop: 0 }}>
+        <div className="prop-zone-label">📋 Annual Ownership Costs</div>
+        <div className="prop-zone-grid">
+          <div className="prop-field">
+            <label>Property tax per year</label>
+            <CurrencyCellInput value={prop.annualPropertyTax} onChange={(v) => store.updateProperty(scenario.id, prop.id, { annualPropertyTax: v })} />
+          </div>
+          <div className="prop-field">
+            <label>Home insurance per year</label>
+            <CurrencyCellInput value={prop.annualInsurance} onChange={(v) => store.updateProperty(scenario.id, prop.id, { annualInsurance: v })} />
+          </div>
+        </div>
+      </div>
+
+      {/* === Calculated metrics — visually distinct === */}
+      <div className="prop-metrics">
+        <div className="prop-metric">
+          <span className="prop-metric-label">Current Equity</span>
+          <span className="prop-metric-value" style={{ color: equity >= 0 ? 'var(--green)' : 'var(--red)' }}>{formatCurrency(equity)}</span>
+        </div>
+        <div className="prop-metric">
+          <span className="prop-metric-label">Annual Housing Cost</span>
+          <span className="prop-metric-value">{formatCurrency(annualHousing + (prop.mortgagePayment ?? 0))}</span>
+          <span className="prop-metric-sub">mortgage + tax + insurance</span>
+        </div>
+        {payoffYears > 0 && (
+          <div className="prop-metric">
+            <span className="prop-metric-label">Mortgage Payoff</span>
+            <span className="prop-metric-value">~{payoffYears} yrs</span>
+            <span className="prop-metric-sub">remaining</span>
+          </div>
+        )}
+      </div>
+
+      {/* === SECTION D: Future Plan === */}
+      <div className="prop-zone prop-zone-planned">
+        <div className="prop-zone-label">🔄 What do you plan to do with this property?</div>
+
+        {/* Plan action selector */}
+        <div className="prop-plan-grid">
+          {PLAN_ACTION_LABELS.map((opt) => (
+            <button
+              key={opt.value}
+              className={`prop-plan-option ${planAction === opt.value ? 'active' : ''}`}
+              onClick={() => {
+                const action = opt.value as 'keep' | 'sell' | 'sell_and_buy' | 'undecided';
+                const updates: Record<string, unknown> = { planAction: action };
+                // Auto-set sale age for sell actions
+                if ((action === 'sell' || action === 'sell_and_buy') && !prop.saleAge) {
+                  updates.saleAge = scenario.assumptions.retirementAge;
+                  updates.saleProceeds = equity;
+                }
+                // Auto-set purchase age for sell_and_buy
+                if (action === 'sell_and_buy' && !prop.purchaseAge) {
+                  updates.purchaseAge = scenario.assumptions.retirementAge;
+                }
+                store.updateProperty(scenario.id, prop.id, updates);
+              }}
+            >
+              <span className="prop-plan-icon">{opt.icon}</span>
+              <span>{opt.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Sale fields — shown for sell or sell_and_buy */}
+        {showSaleFields && (
+          <div className="prop-plan-fields">
+            <div className="prop-zone-label" style={{ marginTop: 14 }}>🏡 Sale Details</div>
+            <div className="prop-zone-grid">
+              <div className="prop-field">
+                <label>Sell at age</label>
+                <input type="number" value={prop.saleAge ?? ''} placeholder="—" onChange={(e) => { const val = +e.target.value || null; store.updateProperty(scenario.id, prop.id, { saleAge: val, saleProceeds: val ? equity : (prop.saleProceeds ?? 0) }); }} />
+              </div>
+              <div className="prop-field">
+                <label>Estimated net proceeds after mortgage payoff</label>
+                <CurrencyCellInput value={prop.saleProceeds ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { saleProceeds: v })} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Purchase fields — shown only for sell_and_buy */}
+        {showBuyFields && (
+          <div className="prop-plan-fields">
+            <div className="prop-zone-label" style={{ marginTop: 14 }}>🔑 New Home Purchase</div>
+            <div className="prop-zone-grid">
+              <div className="prop-field">
+                <label>Buy at age</label>
+                <input type="number" value={prop.purchaseAge ?? ''} placeholder="—" onChange={(e) => store.updateProperty(scenario.id, prop.id, { purchaseAge: +e.target.value || null })} />
+              </div>
+              <div className="prop-field">
+                <label>Purchase price</label>
+                <CurrencyCellInput value={prop.purchasePrice ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { purchasePrice: v })} />
+              </div>
+              <div className="prop-field">
+                <label>Down payment</label>
+                <CurrencyCellInput value={prop.downPayment ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { downPayment: v })} />
+              </div>
+              <div className="prop-field">
+                <label>New mortgage rate</label>
+                <PctCellInput value={prop.mortgageRate ?? 0.065} onChange={(v) => store.updateProperty(scenario.id, prop.id, { mortgageRate: v })} />
+              </div>
+              <div className="prop-field">
+                <label>Mortgage term (years)</label>
+                <input type="number" value={prop.mortgageTerm ?? 30} onChange={(e) => store.updateProperty(scenario.id, prop.id, { mortgageTerm: +e.target.value })} />
+              </div>
+            </div>
+            {estMortgage > 0 && (
+              <div className="prop-metrics prop-metrics-inline">
+                <span className="prop-metric-label">Estimated payment:</span>
+                <span className="prop-metric-value" style={{ fontSize: 'var(--text-sm)' }}>{formatCurrency(estMortgage)}/yr</span>
+                <span className="prop-metric-sub">({formatCurrency(estMortgage / 12)}/mo)</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Keep message */}
+        {planAction === 'keep' && (
+          <p className="prop-plan-note">You'll keep this property through retirement. Housing costs (mortgage if remaining, tax, insurance) will continue as expenses.</p>
+        )}
+        {planAction === 'undecided' && (
+          <p className="prop-plan-note">Choose a plan above to model how this property affects your retirement. You can change this anytime.</p>
+        )}
+      </div>
+
+      {/* === SECTION E: Retirement Impact === */}
+      <div className="prop-zone prop-zone-impact">
+        <div className="prop-zone-label">📊 Retirement Impact</div>
+        <div className="prop-impact-grid">
+          <div className="prop-impact-item">
+            <span className="prop-impact-icon">🏠</span>
+            <div>
+              <div className="prop-impact-value">{formatCurrency(equity, { compact: true })}</div>
+              <div className="prop-impact-label">Equity available</div>
+            </div>
+          </div>
+          <div className="prop-impact-item">
+            <span className="prop-impact-icon">💰</span>
+            <div>
+              <div className="prop-impact-value">{formatCurrency(annualHousing + (prop.mortgagePayment ?? 0), { compact: true })}/yr</div>
+              <div className="prop-impact-label">Housing cost in retirement</div>
+            </div>
+          </div>
+          {showSaleFields && (prop.saleProceeds ?? 0) > 0 && (
+            <div className="prop-impact-item">
+              <span className="prop-impact-icon">💵</span>
+              <div>
+                <div className="prop-impact-value" style={{ color: 'var(--green)' }}>{formatCurrency(prop.saleProceeds ?? 0, { compact: true })}</div>
+                <div className="prop-impact-label">Cash from sale at age {prop.saleAge}</div>
+              </div>
+            </div>
+          )}
+          {showBuyFields && estMortgage > 0 && (
+            <div className="prop-impact-item">
+              <span className="prop-impact-icon">🔑</span>
+              <div>
+                <div className="prop-impact-value">{formatCurrency(estMortgage, { compact: true })}/yr</div>
+                <div className="prop-impact-label">New mortgage at age {prop.purchaseAge}</div>
+              </div>
+            </div>
+          )}
+        </div>
+        <p className="prop-impact-summary">{impactSentence}</p>
+      </div>
+    </div>
+  );
+}
+
 function PropertiesPanel({ scenario, store }: {
   scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
   store: ReturnType<typeof usePlanStore.getState>;
@@ -1166,16 +1429,16 @@ function PropertiesPanel({ scenario, store }: {
         })}>+ Add Property</button>
       </div>
       <p className="section-help">
-        Add properties you own — primary residence, vacation homes, or investment properties. Track market value, mortgage balance,
-        appreciation, and recurring costs like property tax and insurance.
+        Track properties you own and model future purchases or sales. Property tax and insurance are automatically included in your retirement expenses.
+        Your home equity and any sale proceeds are factored into your retirement plan.
       </p>
       <div className="summary-strip">
         <div className="summary-strip-item">
-          <span className="label">Total Value</span>
+          <span className="label">Total Property Value</span>
           <span className="value">{formatCurrency(totalValue, { compact: true })}</span>
         </div>
         <div className="summary-strip-item">
-          <span className="label">Total Mortgage</span>
+          <span className="label">Total Mortgages</span>
           <span className="value" style={{ color: 'var(--red)' }}>{formatCurrency(totalMortgage, { compact: true })}</span>
         </div>
         <div className="summary-strip-item">
@@ -1190,98 +1453,11 @@ function PropertiesPanel({ scenario, store }: {
       {properties.length === 0 ? (
         <p className="muted" style={{ padding: '8px 0' }}>No properties added yet. Click "Add Property" to include your home or other real estate in your plan.</p>
       ) : (
-        properties.map((prop) => {
-          const equity = prop.currentValue - prop.mortgageBalance;
-          return (
-            <div key={prop.id} className="event-card">
-              <div className="event-card-header">
-                <span className="event-icon">{prop.type === 'land' ? '🌳' : '🏠'}</span>
-                <span className="event-name">
-                  <input type="text" value={prop.name} placeholder="e.g. My House" onChange={(e) => store.updateProperty(scenario.id, prop.id, { name: e.target.value })} />
-                </span>
-                <select className="table-select" value={prop.type} onChange={(e) => store.updateProperty(scenario.id, prop.id, { type: e.target.value as PropertyType })} style={{ width: 'auto', minWidth: 140 }}>
-                  {PROPERTY_TYPES.map((t) => <option key={t} value={t}>{prettify(t)}</option>)}
-                </select>
-                <ConfirmDelete title="Delete property" onConfirm={() => store.deleteProperty(scenario.id, prop.id)} />
-              </div>
-              <div style={{ marginTop: '8px' }}>
-                <a href={`https://www.zillow.com/homes/${encodeURIComponent(prop.name || '')}_rb/`} target="_blank" rel="noopener noreferrer" className="resource-link" style={{ display: 'inline-flex', fontSize: 'var(--text-xs)', color: 'var(--accent)' }}>
-                  <span className="resource-icon">🔍</span>
-                  <span>Look up on Zillow</span>
-                  <span className="resource-ext">↗</span>
-                </a>
-              </div>
-              <div className="event-card-body">
-                <div className="event-field-group">
-                  <span className="group-label">Current Value</span>
-                  <div className="field-row"><CurrencyCellInput value={prop.currentValue} onChange={(v) => store.updateProperty(scenario.id, prop.id, { currentValue: v })} /></div>
-                </div>
-                <div className="event-field-group">
-                  <span className="group-label">Mortgage Balance</span>
-                  <div className="field-row"><CurrencyCellInput value={prop.mortgageBalance} onChange={(v) => store.updateProperty(scenario.id, prop.id, { mortgageBalance: v })} /></div>
-                </div>
-                <div className="event-field-group">
-                  <span className="group-label">Annual Appreciation</span>
-                  <div className="field-row"><PctCellInput value={prop.annualAppreciation} onChange={(v) => store.updateProperty(scenario.id, prop.id, { annualAppreciation: v })} /></div>
-                </div>
-                <div className="event-field-group">
-                  <span className="group-label">Property Tax /yr</span>
-                  <div className="field-row"><CurrencyCellInput value={prop.annualPropertyTax} onChange={(v) => store.updateProperty(scenario.id, prop.id, { annualPropertyTax: v })} /></div>
-                </div>
-                <div className="event-field-group">
-                  <span className="group-label">Insurance /yr</span>
-                  <div className="field-row"><CurrencyCellInput value={prop.annualInsurance} onChange={(v) => store.updateProperty(scenario.id, prop.id, { annualInsurance: v })} /></div>
-                </div>
-                <div className="event-field-group">
-                  <span className="group-label">Equity</span>
-                  <div className="field-row"><span style={{ fontWeight: 700, color: equity >= 0 ? 'var(--green)' : 'var(--red)' }}>{formatCurrency(equity, { compact: true })}</span></div>
-                </div>
-              </div>
-
-              {/* Future Purchase section */}
-              <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--border)' }}>
-                <span className="group-label" style={{ marginBottom: '6px', display: 'block' }}>🔑 Future Purchase (optional)</span>
-                <div className="event-card-body">
-                  <div className="event-field-group">
-                    <span className="group-label">Buy at Age</span>
-                    <div className="field-row"><input type="number" value={prop.purchaseAge ?? ''} placeholder="—" onChange={(e) => store.updateProperty(scenario.id, prop.id, { purchaseAge: +e.target.value || null })} style={{ width: 70 }} /></div>
-                  </div>
-                  <div className="event-field-group">
-                    <span className="group-label">Purchase Price</span>
-                    <div className="field-row"><CurrencyCellInput value={prop.purchasePrice ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { purchasePrice: v })} /></div>
-                  </div>
-                  <div className="event-field-group">
-                    <span className="group-label">Down Payment</span>
-                    <div className="field-row"><CurrencyCellInput value={prop.downPayment ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { downPayment: v })} /></div>
-                  </div>
-                  <div className="event-field-group">
-                    <span className="group-label">Mortgage Rate</span>
-                    <div className="field-row"><PctCellInput value={prop.mortgageRate ?? 0.065} onChange={(v) => store.updateProperty(scenario.id, prop.id, { mortgageRate: v })} /></div>
-                  </div>
-                  <div className="event-field-group">
-                    <span className="group-label">Mortgage Term (yrs)</span>
-                    <div className="field-row"><input type="number" value={prop.mortgageTerm ?? 30} onChange={(e) => store.updateProperty(scenario.id, prop.id, { mortgageTerm: +e.target.value })} style={{ width: 70 }} /></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Future Sale section */}
-              <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--border)' }}>
-                <span className="group-label" style={{ marginBottom: '6px', display: 'block' }}>🏡 Future Sale (optional)</span>
-                <div className="event-card-body">
-                  <div className="event-field-group">
-                    <span className="group-label">Sell at Age</span>
-                    <div className="field-row"><input type="number" value={prop.saleAge ?? ''} placeholder="—" onChange={(e) => { const val = +e.target.value || null; store.updateProperty(scenario.id, prop.id, { saleAge: val, saleProceeds: val ? (prop.currentValue - prop.mortgageBalance) : (prop.saleProceeds ?? 0) }); }} style={{ width: 70 }} /></div>
-                  </div>
-                  <div className="event-field-group">
-                    <span className="group-label">Net Proceeds</span>
-                    <div className="field-row"><CurrencyCellInput value={prop.saleProceeds ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { saleProceeds: v })} /></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })
+        <div className="prop-card-list">
+          {properties.map((prop) => (
+            <PropertyCard key={prop.id} prop={prop} scenario={scenario} store={store} />
+          ))}
+        </div>
       )}
     </div>
   );
