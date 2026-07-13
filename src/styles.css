@@ -1849,7 +1849,7 @@ tr.drag-over {
 }
 
 .income-flag {
-  padding: 3px 8px;
+  padding: 3px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--panel);
@@ -1862,9 +1862,9 @@ tr.drag-over {
 }
 
 .income-flag.active {
-  background: var(--accent-dim);
-  color: var(--accent);
-  border-color: var(--accent);
+  background: var(--bg-subtle);
+  color: var(--text);
+  border-color: var(--border-strong);
 }
 
 .income-flag:hover {
@@ -1881,53 +1881,26 @@ tr.drag-over {
 }
 
 .income-phase-badge {
-  font-size: 9px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 20px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-.income-phase-pre {
-  background: var(--bg-subtle);
-  color: var(--text-dim);
-}
-
-.income-phase-post {
-  background: var(--green-dim);
-  color: var(--green);
-}
-
-.income-phase-both {
-  background: var(--accent-dim);
-  color: var(--accent);
-}
-
-.income-timing-text {
   font-size: var(--text-xs);
-  color: var(--text-dim);
-}
-
-/* Expense phase badges */
-.exp-phase-both {
-  background: var(--accent-dim);
-  color: var(--accent);
-}
-
-.exp-phase-pre {
-  background: var(--bg-subtle);
-  color: var(--text-dim);
-}
-
-.exp-phase-post {
-  background: var(--green-dim);
-  color: var(--green);
-}
-
-.exp-phase-none {
-  background: var(--bg-subtle);
+  font-weight: 500;
+  padding: 0;
   color: var(--text-faint);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Expense phase badges — calm, readable, not all-caps pills */
+.exp-phase-both,
+.exp-phase-pre,
+.exp-phase-post,
+.exp-phase-none {
+  background: transparent;
+  color: var(--text-faint);
+  padding: 0;
+  border-radius: 0;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .income-group-total-muted {
