@@ -4,11 +4,11 @@
  * Provides:
  * - buildPlanContext(): Serializes the current plan + projection results into a
  *   structured text summary for the LLM.
- * - callAI(): Calls the OpenAI Chat Completions API directly from the browser.
+ * - callAI(): Calls an AI provider's chat completions API directly from the browser.
  * - System prompt and quick-action prompt templates.
  *
  * All data stays client-side. The user's API key is stored in localStorage and
- * is only sent to the OpenAI API endpoint.
+ * is only sent to the AI provider's API endpoint.
  */
 import type { Plan, ProjectionResult, Scenario } from './types';
 import { formatCurrency, formatPercent } from './format';
@@ -25,8 +25,6 @@ export interface AiProvider {
   models: { id: string; label: string; hint: string }[];
   /** Auth header builder — returns the Authorization header value */
   authHeader: (apiKey: string) => string;
-  /** Whether the provider uses the OpenAI-compatible request/response format */
-  openAICompatible: boolean;
 }
 
 export const AI_PROVIDERS: AiProvider[] = [
@@ -34,7 +32,6 @@ export const AI_PROVIDERS: AiProvider[] = [
     id: 'openai',
     label: 'OpenAI',
     endpoint: 'https://api.openai.com/v1/chat/completions',
-    openAICompatible: true,
     authHeader: (key) => `Bearer ${key}`,
     models: [
       { id: 'gpt-4o', label: 'GPT-4o', hint: 'Most capable' },
@@ -45,7 +42,6 @@ export const AI_PROVIDERS: AiProvider[] = [
     id: 'minimax',
     label: 'MiniMax',
     endpoint: 'https://api.minimax.io/v1/chat/completions',
-    openAICompatible: true,
     authHeader: (key) => `Bearer ${key}`,
     models: [
       { id: 'MiniMax-M3', label: 'MiniMax-M3', hint: 'Reasoning model (flagship)' },
@@ -56,7 +52,6 @@ export const AI_PROVIDERS: AiProvider[] = [
     id: 'zai',
     label: 'Z.ai (GLM)',
     endpoint: 'https://api.z.ai/api/paas/v4/chat/completions',
-    openAICompatible: true,
     authHeader: (key) => `Bearer ${key}`,
     models: [
       { id: 'glm-4-plus', label: 'GLM-4-Plus', hint: 'Most capable' },
@@ -120,7 +115,6 @@ export const QUICK_ACTIONS = [
 
 /**
  * Build a structured text summary of the plan for AI context.
- * This is compact (avoids raw year-by-year data to save tokens).
  */
 export function buildPlanContext(
   plan: Plan,
@@ -159,7 +153,6 @@ export function buildPlanContext(
     }
     lines.push('');
 
-    // Accounts
     const totalBalance = scenario.accounts.reduce((s, x) => s + x.balance, 0);
     const totalContrib = scenario.accounts.reduce((s, x) => s + x.annualContribution + x.employerMatch, 0);
     lines.push(`**Accounts** (total: ${formatCurrency(totalBalance)}, annual savings: ${formatCurrency(totalContrib)}):`);
@@ -170,7 +163,6 @@ export function buildPlanContext(
     }
     lines.push('');
 
-    // Income sources
     if (scenario.incomeSources.length > 0) {
       lines.push('**Income Sources:**');
       for (const inc of scenario.incomeSources) {
@@ -181,7 +173,6 @@ export function buildPlanContext(
       lines.push('');
     }
 
-    // Expenses
     const preRetExpenses = scenario.expenses.filter((e) => e.preRetirement).reduce((s, e) => s + e.annualAmount, 0);
     const postRetExpenses = scenario.expenses.filter((e) => e.postRetirement).reduce((s, e) => s + e.annualAmount, 0);
     lines.push(`**Expenses** (pre-ret: ${formatCurrency(preRetExpenses)}/yr, post-ret: ${formatCurrency(postRetExpenses)}/yr):`);
@@ -191,7 +182,6 @@ export function buildPlanContext(
     }
     lines.push('');
 
-    // Properties
     if (scenario.properties && scenario.properties.length > 0) {
       lines.push('**Properties:**');
       for (const prop of scenario.properties) {
@@ -203,7 +193,6 @@ export function buildPlanContext(
       lines.push('');
     }
 
-    // Life events
     if (scenario.events.length > 0) {
       lines.push('**Life Events:**');
       for (const ev of scenario.events) {
@@ -214,7 +203,6 @@ export function buildPlanContext(
       lines.push('');
     }
 
-    // Projection summary
     if (result && readiness) {
       lines.push('**Projection Results:**');
       lines.push(`- Outcome: ${result.success ? 'Sustainable' : `Runs out at age ${result.depletionAge}`}`);
@@ -230,7 +218,6 @@ export function buildPlanContext(
   return lines.join('\n');
 }
 
-/** System prompt that sets the AI's role and instructions */
 export const SYSTEM_PROMPT = `You are a knowledgeable retirement planning assistant integrated into the retirementMe-Off app. You help users analyze their retirement plan, fact-check assumptions, suggest improvements, and create alternative scenarios.
 
 Guidelines:
@@ -251,9 +238,7 @@ Guidelines:
 
 /**
  * Call an AI provider's chat completions API.
- * Supports OpenAI, MiniMax, and Z.ai (GLM) — all use OpenAI-compatible
- * request/response formats.
- * Returns the assistant's text response.
+ * Supports OpenAI, MiniMax, and Z.ai (GLM).
  */
 export async function callAI(
   providerId: string,
@@ -281,28 +266,20 @@ export async function callAI(
     let msg = `${provider.label} API error (${response.status})`;
     try {
       const parsed = JSON.parse(errorText);
-      // OpenAI-style error
       if (parsed.error?.message) {
         msg = parsed.error.message;
-      }
-      // Some providers nest error differently
-      else if (parsed.message) {
+      } else if (parsed.message) {
         msg = parsed.message;
-      }
-      // MiniMax / Z.ai style: base_resp.status_msg or base_resp.status_code
-      else if (parsed.base_resp?.status_msg) {
+      } else if (parsed.base_resp?.status_msg) {
         msg = parsed.base_resp.status_msg;
       }
-      // Include full detail for 400 errors to help debug request format issues
       if (response.status === 400 && parsed.base_resp) {
         msg += ` (status code: ${parsed.base_resp.status_code ?? 'unknown'})`;
       }
-      // Include param-level errors if available (OpenAI validation errors)
       if (parsed.error?.param) {
         msg += ` [param: ${parsed.error.param}]`;
       }
     } catch {
-      // Not JSON — show raw text for debugging
       if (errorText) msg = `${msg}: ${errorText.slice(0, 300)}`;
     }
     throw new Error(msg);
@@ -310,29 +287,23 @@ export async function callAI(
 
   const data = await response.json();
 
-  // Safely extract the response content — different providers may structure
-  // the response differently, but all use OpenAI-compatible format with choices[]
   const choices = data.choices;
   if (choices && Array.isArray(choices) && choices.length > 0) {
     return choices[0]?.message?.content ?? choices[0]?.text ?? '';
   }
 
-  // Fallback: some providers return content at different paths
   const fallbackContent = data.content ?? data.text ?? data.output ?? data.result;
   if (typeof fallbackContent === 'string') return fallbackContent;
 
-  // Some providers return data nested under data.created_message.content (MiniMax)
   if (data.created_message?.content) {
     const msg = data.created_message.content;
     if (typeof msg === 'string') return msg;
-    // MiniMax structured content
     if (Array.isArray(msg)) {
       const text = msg.map((p: { text?: string; content?: string }) => p.text ?? p.content ?? '').join('\n');
       if (text) return text;
     }
   }
 
-  // If we get here, include diagnostic info so the user can troubleshoot
   const responseKeys = Object.keys(data).join(', ');
   const errorMsg = data.error?.message || data.message || data.base_resp?.status_msg || '';
   throw new Error(
@@ -344,7 +315,6 @@ export async function callAI(
 
 /**
  * Parse a scenario suggestion from the AI response.
- * Looks for a <scenario>...</scenario> JSON block.
  */
 export function parseScenarioSuggestion(content: string): ScenarioSuggestion | undefined {
   const match = content.match(/<scenario>\s*([\s\S]*?)\s*<\/scenario>/i);
@@ -370,4 +340,19 @@ export function parseScenarioSuggestion(content: string): ScenarioSuggestion | u
  */
 export function stripScenarioBlock(content: string): string {
   return content.replace(/<scenario>\s*[\s\S]*?\s*<\/scenario>/i, '').trim();
+}
+
+/**
+ * Strip <think>, <reasoning>, <reflection>, and similar chain-of-thought blocks.
+ * Some models (e.g. MiniMax-M1, GLM reasoning) emit these and they should
+ * never be shown to the user.
+ */
+export function stripThinkBlocks(content: string): string {
+  return content
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
+    .replace(/<reflection>[\s\S]*?<\/reflection>/gi, '')
+    .replace(/<\/?(?:think|thinking|reasoning|reflection)\s*\/?>/gi, '')
+    .trim();
 }

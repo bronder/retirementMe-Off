@@ -11,6 +11,7 @@ import {
   getDefaultModel,
   parseScenarioSuggestion,
   stripScenarioBlock,
+  stripThinkBlocks,
   type ChatMessage,
 } from './ai';
 import { formatPercent } from './format';
@@ -39,22 +40,18 @@ export function AiChat() {
   const hasApiKey = store.aiApiKey.length > 0;
 
   // Validate that the stored model exists for the current provider.
-  // If not (e.g. model list changed or provider switched), reset to default.
   useEffect(() => {
     const provider = getProvider(store.aiProvider);
     const isValid = provider.models.some((m) => m.id === store.aiModel);
     if (!isValid) {
-      const defaultModel = getDefaultModel(store.aiProvider);
-      store.setAiModel(defaultModel);
+      store.setAiModel(getDefaultModel(store.aiProvider));
     }
   }, [store.aiProvider]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  // Auto-focus input when opening
   useEffect(() => {
     if (isOpen && hasApiKey) {
       inputRef.current?.focus();
@@ -82,11 +79,9 @@ export function AiChat() {
       setError(null);
 
       try {
-        // Build plan context for the AI
         const results = store.plan.scenarios.map((s) => runProjection(s));
         const planContext = buildPlanContext(store.plan, results, store.activeScenarioId);
 
-        // Build the API messages: system prompt + plan context + conversation history
         const apiMessages = [
           { role: 'system' as const, content: SYSTEM_PROMPT },
           { role: 'system' as const, content: `Here is the user's current plan data:\n\n${planContext}` },
@@ -95,9 +90,8 @@ export function AiChat() {
 
         const response = await callAI(store.aiProvider, store.aiApiKey, store.aiModel, apiMessages);
 
-        // Check for embedded scenario suggestion
         const suggestion = parseScenarioSuggestion(response);
-        const displayContent = stripScenarioBlock(response);
+        const displayContent = stripScenarioBlock(stripThinkBlocks(response));
 
         const assistantMsg: ChatMessage = {
           role: 'assistant',
@@ -116,10 +110,6 @@ export function AiChat() {
     },
     [messages, loading, store],
   );
-
-  const handleQuickAction = (prompt: string) => {
-    sendMessage(prompt);
-  };
 
   const handleApplySuggestion = () => {
     const lastMsg = messages[messages.length - 1];
@@ -140,7 +130,6 @@ export function AiChat() {
     setShowSettings(false);
   };
 
-  // When provider changes in settings, reset model to that provider's default
   const handleProviderChange = (newProviderId: string) => {
     setProviderInput(newProviderId);
     setModelInput(getDefaultModel(newProviderId));
@@ -153,10 +142,8 @@ export function AiChat() {
     }
   };
 
-  // Don't render the chat button if not needed
   return (
     <>
-      {/* Floating button */}
       <button
         className="ai-chat-fab"
         onClick={() => setIsOpen(!isOpen)}
@@ -165,81 +152,45 @@ export function AiChat() {
         {isOpen ? '✕' : '🤖'}
       </button>
 
-      {/* Chat panel */}
       {isOpen && (
         <div className="ai-chat-panel">
-          {/* Header */}
           <div className="ai-chat-header">
             <span className="ai-chat-title">🤖 AI Assistant</span>
             <div className="ai-chat-header-actions">
-              <button
-                className="ai-chat-icon-btn"
-                onClick={() => setShowSettings(!showSettings)}
-                title="Settings"
-              >
-                ⚙️
-              </button>
-              <button
-                className="ai-chat-icon-btn"
-                onClick={() => setIsOpen(false)}
-                title="Close"
-              >
-                ✕
-              </button>
+              <button className="ai-chat-icon-btn" onClick={() => setShowSettings(!showSettings)} title="Settings">⚙️</button>
+              <button className="ai-chat-icon-btn" onClick={() => setIsOpen(false)} title="Close">✕</button>
             </div>
           </div>
 
-          {/* Settings panel */}
           {showSettings && (
             <div className="ai-chat-settings">
               <label className="ai-chat-label">
                 Provider
-                <select
-                  value={providerInput}
-                  onChange={(e) => handleProviderChange(e.target.value)}
-                  className="ai-chat-select"
-                >
+                <select value={providerInput} onChange={(e) => handleProviderChange(e.target.value)} className="ai-chat-select">
                   {AI_PROVIDERS.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                    </option>
+                    <option key={p.id} value={p.id}>{p.label}</option>
                   ))}
                 </select>
               </label>
               <label className="ai-chat-label">
                 API Key
-                <input
-                  type="password"
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder="Enter your API key..."
-                  className="ai-chat-input"
-                />
+                <input type="password" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} placeholder="Enter your API key..." className="ai-chat-input" />
               </label>
               <label className="ai-chat-label">
                 Model
-                <select
-                  value={modelInput}
-                  onChange={(e) => setModelInput(e.target.value)}
-                  className="ai-chat-select"
-                >
+                <select value={modelInput} onChange={(e) => setModelInput(e.target.value)} className="ai-chat-select">
                   {getProvider(providerInput).models.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.label} — {m.hint}
-                    </option>
+                    <option key={m.id} value={m.id}>{m.label} — {m.hint}</option>
                   ))}
                 </select>
               </label>
-              <button className="ai-chat-save-btn" onClick={handleSaveSettings}>
-                Save
-              </button>
+              <button className="ai-chat-save-btn" onClick={handleSaveSettings}>Save</button>
               <p className="ai-chat-disclaimer">
                 Your API key is stored in your browser only. It is sent directly to {getProvider(providerInput).label} and never to any other server.
               </p>
             </div>
           )}
 
-          {/* Messages */}
           <div className="ai-chat-messages">
             {messages.length === 0 && !showSettings && (
               <div className="ai-chat-welcome">
@@ -249,20 +200,13 @@ export function AiChat() {
                 {hasApiKey ? (
                   <div className="ai-chat-quick-actions">
                     {QUICK_ACTIONS.map((action) => (
-                      <button
-                        key={action.id}
-                        className="ai-chat-quick-btn"
-                        onClick={() => handleQuickAction(action.prompt)}
-                      >
+                      <button key={action.id} className="ai-chat-quick-btn" onClick={() => sendMessage(action.prompt)}>
                         {action.label}
                       </button>
                     ))}
                   </div>
                 ) : (
-                  <button
-                    className="ai-chat-quick-btn"
-                    onClick={() => setShowSettings(true)}
-                  >
+                  <button className="ai-chat-quick-btn" onClick={() => setShowSettings(true)}>
                     ⚙️ Configure API Key
                   </button>
                 )}
@@ -272,9 +216,7 @@ export function AiChat() {
             {messages.map((msg, i) => (
               <div key={i} className={`ai-chat-msg ai-chat-msg-${msg.role}`}>
                 <div className="ai-chat-msg-content">
-                  {msg.content.split('\n').map((line, j) => (
-                    <p key={j}>{line}</p>
-                  ))}
+                  <FormattedContent text={msg.content} />
                 </div>
                 {msg.suggestion && (
                   <div className="ai-chat-suggestion">
@@ -289,18 +231,13 @@ export function AiChat() {
                         {Object.entries(msg.suggestion.assumptions).map(([key, val]) => (
                           <span key={key} className="ai-chat-suggestion-change">
                             <strong>{key}:</strong>{' '}
-                            {typeof val === 'number' && key.includes('Rate')
-                              ? formatPercent(val)
-                              : String(val)}
+                            {typeof val === 'number' && key.includes('Rate') ? formatPercent(val) : String(val)}
                           </span>
                         ))}
                       </div>
                     )}
                     <div className="ai-chat-suggestion-actions">
-                      <button
-                        className="ai-chat-apply-btn"
-                        onClick={handleApplySuggestion}
-                      >
+                      <button className="ai-chat-apply-btn" onClick={handleApplySuggestion}>
                         ✓ Apply & Create Scenario
                       </button>
                     </div>
@@ -320,15 +257,12 @@ export function AiChat() {
             )}
 
             {error && (
-              <div className="ai-chat-error">
-                ⚠️ {error}
-              </div>
+              <div className="ai-chat-error">⚠️ {error}</div>
             )}
 
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
           <div className="ai-chat-input-area">
             <textarea
               ref={inputRef}
@@ -352,4 +286,89 @@ export function AiChat() {
       )}
     </>
   );
+}
+
+/**
+ * Lightweight markdown renderer for AI chat messages.
+ * Handles: **bold**, headings (###, ##, #), bullet lists, numbered lists,
+ * and paragraphs. No external dependencies.
+ */
+function FormattedContent({ text }: { text: string }) {
+  const lines = text.split('\n');
+  const elements: React.ReactNode[] = [];
+  let listItems: string[] = [];
+  let listType: 'ul' | 'ol' | null = null;
+
+  const flushList = () => {
+    if (listItems.length > 0 && listType) {
+      const Tag = listType;
+      elements.push(
+        <Tag key={`list-${elements.length}`} className="ai-chat-list">
+          {listItems.map((item, i) => (
+            <li key={i}>{renderInline(item)}</li>
+          ))}
+        </Tag>,
+      );
+      listItems = [];
+      listType = null;
+    }
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      flushList();
+      continue;
+    }
+
+    // Headings
+    if (/^#{1,3}\s/.test(trimmed)) {
+      flushList();
+      const level = trimmed.match(/^(#{1,3})/)?.[1].length ?? 3;
+      const content = trimmed.replace(/^#{1,3}\s/, '');
+      if (level <= 2) {
+        elements.push(<h4 key={i} className="ai-chat-h4">{renderInline(content)}</h4>);
+      } else {
+        elements.push(<h5 key={i} className="ai-chat-h5">{renderInline(content)}</h5>);
+      }
+      continue;
+    }
+
+    // Bullet list
+    if (/^[-*•]\s/.test(trimmed)) {
+      if (listType && listType !== 'ul') flushList();
+      listType = 'ul';
+      listItems.push(trimmed.replace(/^[-*•]\s/, ''));
+      continue;
+    }
+
+    // Numbered list
+    if (/^\d+\.\s/.test(trimmed)) {
+      if (listType && listType !== 'ol') flushList();
+      listType = 'ol';
+      listItems.push(trimmed.replace(/^\d+\.\s/, ''));
+      continue;
+    }
+
+    // Regular paragraph
+    flushList();
+    elements.push(<p key={i}>{renderInline(trimmed)}</p>);
+  }
+
+  flushList();
+
+  return <>{elements}</>;
+}
+
+/** Render inline markdown: **bold** */
+function renderInline(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (/^\*\*[^*]+\*\*$/.test(part)) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
 }

@@ -3151,9 +3151,10 @@ tr.drag-over {
 }
 
 .ai-chat-msg-user .ai-chat-msg-content {
-  background: var(--accent);
-  color: #ffffff;
+  background: var(--bg-subtle);
+  color: var(--text);
   border-bottom-right-radius: 4px;
+  border: 1px solid var(--border);
 }
 
 .ai-chat-msg-assistant .ai-chat-msg-content {
@@ -3162,12 +3163,52 @@ tr.drag-over {
   border-bottom-left-radius: 4px;
 }
 
+/* Markdown elements inside messages */
 .ai-chat-msg-content p {
   margin: 0;
 }
 
 .ai-chat-msg-content p + p {
-  margin-top: 6px;
+  margin-top: 8px;
+}
+
+.ai-chat-msg-content .ai-chat-h4 {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text);
+  margin: 14px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ai-chat-msg-content .ai-chat-h4:first-child {
+  margin-top: 0;
+}
+
+.ai-chat-msg-content .ai-chat-h5 {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text);
+  margin: 10px 0 4px;
+}
+
+.ai-chat-msg-content .ai-chat-h5:first-child {
+  margin-top: 0;
+}
+
+.ai-chat-msg-content .ai-chat-list {
+  margin: 4px 0 4px 0;
+  padding-left: 20px;
+}
+
+.ai-chat-msg-content .ai-chat-list li {
+  margin: 3px 0;
+  line-height: 1.5;
+}
+
+.ai-chat-msg-content strong {
+  font-weight: 700;
+  color: var(--text);
 }
 
 .ai-chat-typing {
