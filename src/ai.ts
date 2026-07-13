@@ -17,13 +17,68 @@ import { getReadinessSummary } from './engine';
 const prettify = (s: string): string =>
   s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-/** AI model options */
-export const AI_MODELS = [
-  { id: 'gpt-4o', label: 'GPT-4o', hint: 'Most capable' },
-  { id: 'gpt-4o-mini', label: 'GPT-4o mini', hint: 'Fast & affordable' },
-] as const;
+/** AI provider definitions */
+export interface AiProvider {
+  id: string;
+  label: string;
+  endpoint: string;
+  models: { id: string; label: string; hint: string }[];
+  /** Auth header builder — returns the Authorization header value */
+  authHeader: (apiKey: string) => string;
+  /** Whether the provider uses the OpenAI-compatible request/response format */
+  openAICompatible: boolean;
+}
 
+export const AI_PROVIDERS: AiProvider[] = [
+  {
+    id: 'openai',
+    label: 'OpenAI',
+    endpoint: 'https://api.openai.com/v1/chat/completions',
+    openAICompatible: true,
+    authHeader: (key) => `Bearer ${key}`,
+    models: [
+      { id: 'gpt-4o', label: 'GPT-4o', hint: 'Most capable' },
+      { id: 'gpt-4o-mini', label: 'GPT-4o mini', hint: 'Fast & affordable' },
+    ],
+  },
+  {
+    id: 'minimax',
+    label: 'MiniMax',
+    endpoint: 'https://api.minimax.chat/v1/text/chatcompletion_v2',
+    openAICompatible: true,
+    authHeader: (key) => `Bearer ${key}`,
+    models: [
+      { id: 'MiniMax-Text-01', label: 'MiniMax-Text-01', hint: 'Most capable' },
+      { id: 'abab6.5s-chat', label: 'abab6.5s', hint: 'Fast & affordable' },
+    ],
+  },
+  {
+    id: 'zai',
+    label: 'Z.ai (GLM)',
+    endpoint: 'https://api.z.ai/api/paas/v4/chat/completions',
+    openAICompatible: true,
+    authHeader: (key) => `Bearer ${key}`,
+    models: [
+      { id: 'glm-4-plus', label: 'GLM-4-Plus', hint: 'Most capable' },
+      { id: 'glm-4-flash', label: 'GLM-4-Flash', hint: 'Fast & free' },
+      { id: 'glm-4', label: 'GLM-4', hint: 'Balanced' },
+    ],
+  },
+];
+
+export const DEFAULT_AI_PROVIDER = 'openai';
 export const DEFAULT_AI_MODEL = 'gpt-4o-mini';
+
+/** Get a provider by ID (falls back to OpenAI) */
+export function getProvider(providerId: string): AiProvider {
+  return AI_PROVIDERS.find((p) => p.id === providerId) ?? AI_PROVIDERS[0];
+}
+
+/** Get the default model for a provider */
+export function getDefaultModel(providerId: string): string {
+  const provider = getProvider(providerId);
+  return provider.models[provider.models.length - 1]?.id ?? '';
+}
 
 /** Chat message types for the UI */
 export interface ChatMessage {
@@ -195,19 +250,23 @@ Guidelines:
 - If you notice potential issues (unrealistic returns, missing expenses, tax inefficiencies), flag them clearly.`;
 
 /**
- * Call the OpenAI Chat Completions API.
+ * Call an AI provider's chat completions API.
+ * Supports OpenAI, MiniMax, and Z.ai (GLM) — all use OpenAI-compatible
+ * request/response formats.
  * Returns the assistant's text response.
  */
 export async function callAI(
+  providerId: string,
   apiKey: string,
   model: string,
   messages: { role: 'user' | 'assistant' | 'system'; content: string }[],
 ): Promise<string> {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const provider = getProvider(providerId);
+  const response = await fetch(provider.endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: provider.authHeader(apiKey),
     },
     body: JSON.stringify({
       model,

@@ -9,8 +9,10 @@ interface PlanStore {
   activeScenarioId: string;
 
   // AI settings (stored separately, not in plan JSON)
+  aiProvider: string;
   aiApiKey: string;
   aiModel: string;
+  setAiProvider: (provider: string) => void;
   setAiApiKey: (key: string) => void;
   setAiModel: (model: string) => void;
 
@@ -70,9 +72,11 @@ export const usePlanStore = create<PlanStore>()(
     (set) => ({
       plan: defaultPlan(),
       activeScenarioId: '',
+      aiProvider: 'openai',
       aiApiKey: '',
       aiModel: 'gpt-4o-mini',
 
+      setAiProvider: (provider) => set({ aiProvider: provider }),
       setAiApiKey: (key) => set({ aiApiKey: key }),
       setAiModel: (model) => set({ aiModel: model }),
 
@@ -426,6 +430,7 @@ export const usePlanStore = create<PlanStore>()(
       partialize: (state) => ({
         plan: state.plan,
         activeScenarioId: state.activeScenarioId,
+        aiProvider: state.aiProvider,
         aiApiKey: state.aiApiKey,
         aiModel: state.aiModel,
       }),

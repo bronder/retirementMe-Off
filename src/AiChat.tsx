@@ -2,11 +2,13 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { usePlanStore } from './store';
 import { runProjection } from './engine';
 import {
-  AI_MODELS,
+  AI_PROVIDERS,
   QUICK_ACTIONS,
   SYSTEM_PROMPT,
   buildPlanContext,
   callAI,
+  getProvider,
+  getDefaultModel,
   parseScenarioSuggestion,
   stripScenarioBlock,
   type ChatMessage,
@@ -29,6 +31,7 @@ export function AiChat() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState(store.aiApiKey);
+  const [providerInput, setProviderInput] = useState(store.aiProvider);
   const [modelInput, setModelInput] = useState(store.aiModel);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -79,7 +82,7 @@ export function AiChat() {
           ...newMessages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
         ];
 
-        const response = await callAI(store.aiApiKey, store.aiModel, apiMessages);
+        const response = await callAI(store.aiProvider, store.aiApiKey, store.aiModel, apiMessages);
 
         // Check for embedded scenario suggestion
         const suggestion = parseScenarioSuggestion(response);
@@ -120,9 +123,16 @@ export function AiChat() {
   };
 
   const handleSaveSettings = () => {
+    store.setAiProvider(providerInput);
     store.setAiApiKey(apiKeyInput.trim());
     store.setAiModel(modelInput);
     setShowSettings(false);
+  };
+
+  // When provider changes in settings, reset model to that provider's default
+  const handleProviderChange = (newProviderId: string) => {
+    setProviderInput(newProviderId);
+    setModelInput(getDefaultModel(newProviderId));
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -172,12 +182,26 @@ export function AiChat() {
           {showSettings && (
             <div className="ai-chat-settings">
               <label className="ai-chat-label">
-                OpenAI API Key
+                Provider
+                <select
+                  value={providerInput}
+                  onChange={(e) => handleProviderChange(e.target.value)}
+                  className="ai-chat-select"
+                >
+                  {AI_PROVIDERS.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="ai-chat-label">
+                API Key
                 <input
                   type="password"
                   value={apiKeyInput}
                   onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder="sk-..."
+                  placeholder="Enter your API key..."
                   className="ai-chat-input"
                 />
               </label>
@@ -188,7 +212,7 @@ export function AiChat() {
                   onChange={(e) => setModelInput(e.target.value)}
                   className="ai-chat-select"
                 >
-                  {AI_MODELS.map((m) => (
+                  {getProvider(providerInput).models.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.label} — {m.hint}
                     </option>
@@ -199,7 +223,7 @@ export function AiChat() {
                 Save
               </button>
               <p className="ai-chat-disclaimer">
-                Your API key is stored in your browser only. It is sent directly to OpenAI and never to any other server.
+                Your API key is stored in your browser only. It is sent directly to {getProvider(providerInput).label} and never to any other server.
               </p>
             </div>
           )}
