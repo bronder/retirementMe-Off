@@ -44,7 +44,7 @@ export const AI_PROVIDERS: AiProvider[] = [
   {
     id: 'minimax',
     label: 'MiniMax',
-    endpoint: 'https://api.minimax.chat/v1/text/chatcompletion_v2',
+    endpoint: 'https://api.minimax.io/v1/chat/completions',
     openAICompatible: true,
     authHeader: (key) => `Bearer ${key}`,
     models: [
