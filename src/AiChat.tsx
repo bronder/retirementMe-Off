@@ -38,6 +38,17 @@ export function AiChat() {
 
   const hasApiKey = store.aiApiKey.length > 0;
 
+  // Validate that the stored model exists for the current provider.
+  // If not (e.g. model list changed or provider switched), reset to default.
+  useEffect(() => {
+    const provider = getProvider(store.aiProvider);
+    const isValid = provider.models.some((m) => m.id === store.aiModel);
+    if (!isValid) {
+      const defaultModel = getDefaultModel(store.aiProvider);
+      store.setAiModel(defaultModel);
+    }
+  }, [store.aiProvider]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
