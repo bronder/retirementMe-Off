@@ -54,9 +54,13 @@ export const AI_PROVIDERS: AiProvider[] = [
     endpoint: 'https://api.z.ai/api/paas/v4/chat/completions',
     authHeader: (key) => `Bearer ${key}`,
     models: [
-      { id: 'glm-4-plus', label: 'GLM-4-Plus', hint: 'Most capable' },
+      { id: 'glm-5.2', label: 'GLM-5.2', hint: 'Most capable' },
+      { id: 'glm-5.1', label: 'GLM-5.1', hint: 'High performance' },
+      { id: 'glm-5', label: 'GLM-5', hint: 'Balanced' },
+      { id: 'glm-5-turbo', label: 'GLM-5-Turbo', hint: 'Fast & affordable' },
+      { id: 'glm-4-plus', label: 'GLM-4-Plus', hint: 'Previous gen' },
       { id: 'glm-4-flash', label: 'GLM-4-Flash', hint: 'Fast & free' },
-      { id: 'glm-4', label: 'GLM-4', hint: 'Balanced' },
+      { id: 'glm-4', label: 'GLM-4', hint: 'Previous gen' },
     ],
   },
 ];
