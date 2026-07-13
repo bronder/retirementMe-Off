@@ -20,6 +20,7 @@ import { ACCOUNT_TAX_TREATMENT } from './types';
 import type { AccountType, IncomeType, ExpenseCategory, EventType, PropertyType } from './types';
 import { formatCurrency, formatPercent, formatAge } from './format';
 import { exportMarkdown } from './markdown';
+import { AiChat } from './AiChat';
 
 const ACCOUNT_TYPES: AccountType[] = [
   'checking_savings',
@@ -361,6 +362,9 @@ export default function App() {
       {tab === 'compare' && (
         <CompareView results={allResults} />
       )}
+
+      {/* AI Chat Assistant */}
+      <AiChat />
     </div>
   );
 }

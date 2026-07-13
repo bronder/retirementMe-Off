@@ -2,10 +2,17 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Plan, Scenario, Account, IncomeSource, Expense, LifeEvent, Assumptions, Property } from './types';
 import { defaultPlan, defaultScenario, createId, PLAN_VERSION } from './defaults';
+import type { ScenarioSuggestion } from './ai';
 
 interface PlanStore {
   plan: Plan;
   activeScenarioId: string;
+
+  // AI settings (stored separately, not in plan JSON)
+  aiApiKey: string;
+  aiModel: string;
+  setAiApiKey: (key: string) => void;
+  setAiModel: (model: string) => void;
 
   // Scenario operations
   setActiveScenario: (id: string) => void;
@@ -14,6 +21,9 @@ interface PlanStore {
   deleteScenario: (id: string) => void;
   renameScenario: (id: string, name: string) => void;
   updateAssumptions: (scenarioId: string, patch: Partial<Assumptions>) => void;
+
+  /** Create a new scenario from an AI suggestion (duplicates active scenario, applies assumption changes) */
+  applyScenarioSuggestion: (suggestion: ScenarioSuggestion) => void;
 
   // Account operations
   addAccount: (scenarioId: string, account: Omit<Account, 'id'>) => void;
@@ -60,6 +70,11 @@ export const usePlanStore = create<PlanStore>()(
     (set) => ({
       plan: defaultPlan(),
       activeScenarioId: '',
+      aiApiKey: '',
+      aiModel: 'gpt-4o-mini',
+
+      setAiApiKey: (key) => set({ aiApiKey: key }),
+      setAiModel: (model) => set({ aiModel: model }),
 
       setActiveScenario: (id) => set({ activeScenarioId: id }),
 
@@ -112,6 +127,23 @@ export const usePlanStore = create<PlanStore>()(
             ),
           },
         })),
+
+      applyScenarioSuggestion: (suggestion) =>
+        set((state) => {
+          const original = getScenario(state.plan, state.activeScenarioId);
+          const copy: Scenario = {
+            ...structuredClone(original),
+            id: createId(),
+            name: suggestion.name,
+            assumptions: suggestion.assumptions
+              ? { ...original.assumptions, ...suggestion.assumptions }
+              : { ...original.assumptions },
+          };
+          return {
+            plan: { ...state.plan, scenarios: [...state.plan.scenarios, copy] },
+            activeScenarioId: copy.id,
+          };
+        }),
 
       addAccount: (scenarioId, account) =>
         set((state) => ({
@@ -394,6 +426,8 @@ export const usePlanStore = create<PlanStore>()(
       partialize: (state) => ({
         plan: state.plan,
         activeScenarioId: state.activeScenarioId,
+        aiApiKey: state.aiApiKey,
+        aiModel: state.aiModel,
       }),
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as PlanStore;
