@@ -238,7 +238,7 @@ export default function App() {
     <div className="app">
       {/* Header */}
       <div className="header">
-        <h1><img src="/images/title.png" alt="retirementMe-Off" style={{ height: '96px', width: 'auto', verticalAlign: 'middle', background: 'var(--bg)', borderRadius: 'var(--radius)', padding: '4px 8px' }} /></h1>
+        <h1><img src="/images/retirementmeoff-dark.png" alt="retirementMe-Off" style={{ height: '96px', width: 'auto', verticalAlign: 'middle' }} /></h1>
         <div className="header-actions">
           <select value={theme} onChange={(e) => setTheme(e.target.value as Theme)} style={{ width: 'auto' }}>
             {THEMES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
