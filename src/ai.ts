@@ -277,19 +277,40 @@ export async function callAI(
   });
 
   if (!response.ok) {
-    const error = await response.text();
+    const errorText = await response.text();
     let msg = `API error (${response.status})`;
     try {
-      const parsed = JSON.parse(error);
-      msg = parsed.error?.message || msg;
+      const parsed = JSON.parse(errorText);
+      // OpenAI-style error
+      if (parsed.error?.message) {
+        msg = parsed.error.message;
+      }
+      // Some providers nest error differently
+      else if (parsed.message) {
+        msg = parsed.message;
+      }
+      // Z.ai / other providers
+      else if (parsed.base_resp?.status_msg) {
+        msg = parsed.base_resp.status_msg;
+      }
     } catch {
-      // use default msg
+      // use default msg or raw text
+      if (errorText) msg = errorText.slice(0, 200);
     }
     throw new Error(msg);
   }
 
   const data = await response.json();
-  return data.choices[0]?.message?.content ?? '';
+  // Safely extract the response content — different providers may structure
+  // the response differently, but all use OpenAI-compatible format with choices[]
+  const choices = data.choices;
+  if (!choices || !Array.isArray(choices) || choices.length === 0) {
+    // Some providers return content at different paths
+    const content = data.content ?? data.text ?? data.output ?? data.result;
+    if (typeof content === 'string') return content;
+    throw new Error('Unexpected API response format — no choices in response');
+  }
+  return choices[0]?.message?.content ?? choices[0]?.text ?? '';
 }
 
 /**
