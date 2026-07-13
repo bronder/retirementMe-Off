@@ -48,8 +48,12 @@ export const AI_PROVIDERS: AiProvider[] = [
     openAICompatible: true,
     authHeader: (key) => `Bearer ${key}`,
     models: [
-      { id: 'MiniMax-Text-01', label: 'MiniMax-Text-01', hint: 'Most capable' },
-      { id: 'abab6.5s-chat', label: 'abab6.5s', hint: 'Fast & affordable' },
+      { id: 'MiniMax-M1', label: 'MiniMax-M1', hint: 'Reasoning model (flagship)' },
+      { id: 'MiniMax-M1-40k', label: 'MiniMax-M1-40k', hint: 'Reasoning, 40k context' },
+      { id: 'MiniMax-M1-80k', label: 'MiniMax-M1-80k', hint: 'Reasoning, 80k context' },
+      { id: 'MiniMax-Text-01', label: 'MiniMax-Text-01', hint: '456B MoE, 1M context' },
+      { id: 'abab6.5s-chat', label: 'abab6.5s', hint: 'Fast & lightweight' },
+      { id: 'abab6.5-chat', label: 'abab6.5', hint: 'Balanced conversational' },
     ],
   },
   {
