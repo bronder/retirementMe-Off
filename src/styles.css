@@ -2953,9 +2953,9 @@ tr.drag-over {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  width: 380px;
+  width: 520px;
   max-width: calc(100vw - 32px);
-  height: 540px;
+  height: 75vh;
   max-height: calc(100vh - 48px);
   background: var(--panel);
   border: 1px solid var(--border);
