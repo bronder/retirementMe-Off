@@ -3,7 +3,6 @@ import { usePlanStore } from './store';
 import { runProjection } from './engine';
 import {
   AI_PROVIDERS,
-  QUICK_ACTIONS,
   SYSTEM_PROMPT,
   buildPlanContext,
   callAI,
@@ -205,15 +204,7 @@ export function AiChat() {
                 <p className="ai-chat-welcome-title">
                   {hasApiKey ? 'Ask me about your retirement plan!' : 'Set up your API key to get started'}
                 </p>
-                {hasApiKey ? (
-                  <div className="ai-chat-quick-actions">
-                    {QUICK_ACTIONS.map((action) => (
-                      <button key={action.id} className="ai-chat-quick-btn" onClick={() => sendMessage(action.prompt)}>
-                        {action.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
+                {!hasApiKey && (
                   <button className="ai-chat-quick-btn" onClick={() => setShowSettings(true)}>
                     ⚙️ Configure API Key
                   </button>
