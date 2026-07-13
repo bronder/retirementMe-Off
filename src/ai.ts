@@ -301,16 +301,37 @@ export async function callAI(
   }
 
   const data = await response.json();
+
   // Safely extract the response content — different providers may structure
   // the response differently, but all use OpenAI-compatible format with choices[]
   const choices = data.choices;
-  if (!choices || !Array.isArray(choices) || choices.length === 0) {
-    // Some providers return content at different paths
-    const content = data.content ?? data.text ?? data.output ?? data.result;
-    if (typeof content === 'string') return content;
-    throw new Error('Unexpected API response format — no choices in response');
+  if (choices && Array.isArray(choices) && choices.length > 0) {
+    return choices[0]?.message?.content ?? choices[0]?.text ?? '';
   }
-  return choices[0]?.message?.content ?? choices[0]?.text ?? '';
+
+  // Fallback: some providers return content at different paths
+  const fallbackContent = data.content ?? data.text ?? data.output ?? data.result;
+  if (typeof fallbackContent === 'string') return fallbackContent;
+
+  // Some providers return data nested under data.created_message.content (MiniMax)
+  if (data.created_message?.content) {
+    const msg = data.created_message.content;
+    if (typeof msg === 'string') return msg;
+    // MiniMax structured content
+    if (Array.isArray(msg)) {
+      const text = msg.map((p: { text?: string; content?: string }) => p.text ?? p.content ?? '').join('\n');
+      if (text) return text;
+    }
+  }
+
+  // If we get here, include diagnostic info so the user can troubleshoot
+  const responseKeys = Object.keys(data).join(', ');
+  const errorMsg = data.error?.message || data.message || data.base_resp?.status_msg || '';
+  throw new Error(
+    `No response content received. Response keys: [${responseKeys}]` +
+    (errorMsg ? `. Error: ${errorMsg}` : '') +
+    `. Check that your API key and model name are correct for ${provider.label}.`,
+  );
 }
 
 /**
