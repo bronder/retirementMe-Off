@@ -278,7 +278,7 @@ export async function callAI(
 
   if (!response.ok) {
     const errorText = await response.text();
-    let msg = `API error (${response.status})`;
+    let msg = `${provider.label} API error (${response.status})`;
     try {
       const parsed = JSON.parse(errorText);
       // OpenAI-style error
@@ -289,13 +289,21 @@ export async function callAI(
       else if (parsed.message) {
         msg = parsed.message;
       }
-      // Z.ai / other providers
+      // MiniMax / Z.ai style: base_resp.status_msg or base_resp.status_code
       else if (parsed.base_resp?.status_msg) {
         msg = parsed.base_resp.status_msg;
       }
+      // Include full detail for 400 errors to help debug request format issues
+      if (response.status === 400 && parsed.base_resp) {
+        msg += ` (status code: ${parsed.base_resp.status_code ?? 'unknown'})`;
+      }
+      // Include param-level errors if available (OpenAI validation errors)
+      if (parsed.error?.param) {
+        msg += ` [param: ${parsed.error.param}]`;
+      }
     } catch {
-      // use default msg or raw text
-      if (errorText) msg = errorText.slice(0, 200);
+      // Not JSON — show raw text for debugging
+      if (errorText) msg = `${msg}: ${errorText.slice(0, 300)}`;
     }
     throw new Error(msg);
   }
