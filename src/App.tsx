@@ -16,6 +16,7 @@ import {
 } from 'recharts';
 import { usePlanStore } from './store';
 import { runProjection, getReadinessSummary } from './engine';
+import { ACCOUNT_TAX_TREATMENT } from './types';
 import type { AccountType, IncomeType, ExpenseCategory, EventType, PropertyType } from './types';
 import { formatCurrency, formatPercent, formatAge } from './format';
 import { exportMarkdown } from './markdown';
@@ -42,6 +43,30 @@ const INCOME_TYPES: IncomeType[] = [
   'annuity',
   'dividends',
   'other',
+];
+
+const COMMON_EXPENSES: { name: string; icon: string; category: ExpenseCategory; annualAmount: number; preRetirement: boolean; postRetirement: boolean; startAge: number | null; endAge: number | null }[] = [
+  // Based on BLS Consumer Expenditure Survey national averages (sorted alphabetically)
+  { name: 'Clothing & Apparel', icon: '👕', category: 'other', annualAmount: 1833, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Dining Out', icon: '🍕', category: 'food', annualAmount: 3639, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Entertainment', icon: '🎬', category: 'entertainment', annualAmount: 3458, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Food & Groceries', icon: '🍽️', category: 'food', annualAmount: 9985, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Gifts & Donations', icon: '🎁', category: 'other', annualAmount: 2551, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Healthcare (Medicare)', icon: '💊', category: 'healthcare', annualAmount: 4392, preRetirement: false, postRetirement: true, startAge: 65, endAge: null },
+  { name: 'Healthcare (pre-Medicare)', icon: '🏥', category: 'healthcare', annualAmount: 6194, preRetirement: true, postRetirement: true, startAge: null, endAge: 64 },
+  { name: 'Home Insurance', icon: '🏡', category: 'insurance', annualAmount: 1716, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Home Maintenance & Repairs', icon: '🔧', category: 'housing', annualAmount: 2208, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Life Insurance', icon: '📋', category: 'insurance', annualAmount: 680, preRetirement: true, postRetirement: false, startAge: null, endAge: null },
+  { name: 'Miscellaneous', icon: '📦', category: 'other', annualAmount: 1820, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Mortgage / Rent', icon: '🏠', category: 'housing', annualAmount: 22032, preRetirement: true, postRetirement: false, startAge: null, endAge: null },
+  { name: 'Personal Care', icon: '🧴', category: 'other', annualAmount: 1010, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Pet Expenses', icon: '🐾', category: 'other', annualAmount: 1464, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Phone & Internet', icon: '📱', category: 'utilities', annualAmount: 1680, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Subscriptions (streaming, etc.)', icon: '📺', category: 'entertainment', annualAmount: 1272, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Travel & Vacations', icon: '✈️', category: 'travel', annualAmount: 4500, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Utilities (gas, electric, water)', icon: '💡', category: 'utilities', annualAmount: 4725, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Vehicle Insurance', icon: '🛡️', category: 'insurance', annualAmount: 1905, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Vehicle Payment & Gas', icon: '🚗', category: 'transportation', annualAmount: 12285, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
 ];
 
 const EXPENSE_CATEGORIES: ExpenseCategory[] = [
@@ -750,11 +775,13 @@ function OverviewPanel({ scenario, store }: {
   const totalContributions = scenario.accounts.reduce((s, a) => s + a.annualContribution + a.employerMatch, 0);
 
   const checks = [
-    { label: 'Has at least 1 account', pass: scenario.accounts.length > 0, weight: 15 },
-    { label: 'Account balances > $0', pass: scenario.accounts.some(a => a.balance > 0), weight: 10 },
-    { label: 'Has retirement contributions', pass: scenario.accounts.some(a => a.annualContribution > 0), weight: 10 },
-    { label: 'Has expenses defined', pass: scenario.expenses.length > 0, weight: 15 },
-    { label: 'Has post-retirement expenses', pass: scenario.expenses.some(e => e.postRetirement), weight: 10 },
+    { label: 'Has at least 1 account', pass: scenario.accounts.length > 0, weight: 8 },
+    { label: 'Account balances > $0', pass: scenario.accounts.some(a => a.balance > 0), weight: 7 },
+    { label: 'Has retirement contributions', pass: scenario.accounts.some(a => a.annualContribution > 0), weight: 8 },
+    { label: `Well-balanced accounts (${Math.min(scenario.accounts.length, 5)}/5)`, pass: scenario.accounts.length >= 5, weight: 12, partial: Math.min(12, Math.round((Math.min(scenario.accounts.length, 5) / 5) * 12)) },
+    { label: 'Has expenses defined', pass: scenario.expenses.length > 0, weight: 8 },
+    { label: 'Has post-retirement expenses', pass: scenario.expenses.some(e => e.postRetirement), weight: 5 },
+    { label: `Covers ${Math.min(10, scenario.expenses.length)}/10+ common categories`, pass: scenario.expenses.length >= 10, weight: 12, partial: Math.min(12, Math.round((Math.min(scenario.expenses.length, 10) / 10) * 12)) },
     { label: 'Has income sources', pass: scenario.incomeSources.length > 0, weight: 10 },
     { label: 'Has Social Security or pension', pass: scenario.incomeSources.some(i => i.type === 'social_security' || i.type === 'pension'), weight: 10 },
     { label: 'Current age < retirement age', pass: scenario.assumptions.currentAge < scenario.assumptions.retirementAge, weight: 5 },
@@ -762,7 +789,12 @@ function OverviewPanel({ scenario, store }: {
     { label: 'Realistic withdrawal rate (3-5%)', pass: scenario.assumptions.safeWithdrawalRate >= 0.03 && scenario.assumptions.safeWithdrawalRate <= 0.05, weight: 5 },
     { label: 'Realistic pre-retirement return (5-10%)', pass: scenario.assumptions.preRetirementReturn >= 0.05 && scenario.assumptions.preRetirementReturn <= 0.10, weight: 5 },
   ];
-  const wellnessScore = checks.reduce((sum, c) => sum + (c.pass ? c.weight : 0), 0);
+  const wellnessScore = checks.reduce((sum, c) => {
+    const earned = 'partial' in c && (c as { partial?: number }).partial !== undefined
+      ? Math.max((c as { partial?: number }).partial!, c.pass ? c.weight : 0)
+      : (c.pass ? c.weight : 0);
+    return sum + earned;
+  }, 0);
   const wellnessColor = wellnessScore >= 80 ? 'var(--green)' : wellnessScore >= 50 ? 'var(--yellow)' : 'var(--red)';
   const wellnessLabel = wellnessScore >= 80 ? 'Well Populated' : wellnessScore >= 50 ? 'Needs Attention' : 'Incomplete';
   const gaugeDeg = Math.min(180, (wellnessScore / 100) * 180);
@@ -916,27 +948,38 @@ function AssumptionsPanel({ scenario, store }: {
         )
       ))}
 
+      {/* Compact summary banner */}
+      <div className="assumptions-summary-banner">
+        <span className="asm-summary-item"><strong>Retire at {a.retirementAge}</strong></span>
+        <span className="asm-summary-sep">·</span>
+        <span className="asm-summary-item">Plan through <strong>{a.endAge}</strong></span>
+        <span className="asm-summary-sep">·</span>
+        <span className="asm-summary-item"><strong>{formatPercent(a.inflationRate)}</strong> inflation</span>
+        <span className="asm-summary-sep">·</span>
+        <span className="asm-summary-item"><strong>{formatPercent(a.safeWithdrawalRate)}</strong> withdrawal</span>
+        <span className="asm-summary-sep">·</span>
+        <span className="asm-summary-item">{yearsToRetirement > 0 ? `${yearsToRetirement} yrs to save` : 'At retirement'}</span>
+        <span className="asm-summary-sep">·</span>
+        <span className="asm-summary-item">{yearsInRetirement} yrs in retirement</span>
+      </div>
+
       {/* Timeline section */}
       <div className="form-section">
         <div className="form-section-title">🗓️ Timeline</div>
-        <div className="form-section-help">Define your retirement window. These ages determine how long you have to save and how long your savings need to last.</div>
         <div className="form-row-3">
-          <FieldGroup
-            label="Current Age"
-            helpText="Your age today. The model starts from this year."
-          >
+          <FieldGroup label="Current Age">
             <AgeInput value={a.currentAge} onChange={(v) => upd({ currentAge: v })} />
           </FieldGroup>
           <FieldGroup
             label="Retirement Age"
-            helpText={`When you stop working and start withdrawals. You have ${yearsToRetirement > 0 ? yearsToRetirement : 0} years left to save.`}
+            helpText={`${yearsToRetirement > 0 ? yearsToRetirement : 0} years left to save`}
             highImpact
           >
             <AgeInput value={a.retirementAge} onChange={(v) => upd({ retirementAge: v })} />
           </FieldGroup>
           <FieldGroup
             label="Plan End Age"
-            helpText={`How long the plan must last. This covers ${yearsInRetirement} years of retirement.`}
+            helpText={`${yearsInRetirement} years of retirement`}
             highImpact
           >
             <AgeInput value={a.endAge} onChange={(v) => upd({ endAge: v })} />
@@ -1055,93 +1098,191 @@ function AssumptionsPanel({ scenario, store }: {
   );
 }
 
+const ACCOUNT_GROUP_META: { types: AccountType[]; label: string; icon: string; hint: string }[] = [
+  { types: ['checking_savings'], label: 'Cash & Liquid', icon: '💵', hint: 'Checking and savings — easily accessible, low return' },
+  { types: ['taxable_brokerage'], label: 'Taxable Investments', icon: '📈', hint: 'Brokerage accounts — taxed on gains each year' },
+  { types: ['traditional_401k', 'roth_401k', 'traditional_ira', 'roth_ira', 'hsa'], label: 'Tax-Advantaged', icon: '🛡️', hint: '401k, IRA, HSA — tax-deferred or tax-free growth' },
+  { types: ['pension', 'other'], label: 'Other', icon: '📦', hint: 'Pensions and other account types' },
+];
+
+function AccountCard({ acct, scenario, store }: {
+  acct: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]['accounts'][0];
+  scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
+  store: ReturnType<typeof usePlanStore.getState>;
+}) {
+  const is401k = acct.type === 'traditional_401k' || acct.type === 'roth_401k';
+  const taxTreatment = ACCOUNT_TAX_TREATMENT[acct.type];
+  const taxLabel = taxTreatment === 'tax_free' ? 'Tax-Free' : taxTreatment === 'tax_deferred' ? 'Tax-Deferred' : 'Taxable';
+  const taxColor = taxTreatment === 'tax_free' ? 'var(--green)' : taxTreatment === 'tax_deferred' ? 'var(--chart)' : 'var(--text-dim)';
+  const totalContrib = acct.annualContribution + acct.employerMatch;
+
+  return (
+    <div className="acct-card">
+      <div className="acct-card-header">
+        <div className="acct-card-header-left">
+          <span className="acct-card-icon">{acct.type === 'checking_savings' ? '💵' : acct.type === 'taxable_brokerage' ? '📈' : acct.type.includes('roth') ? '🌿' : acct.type === 'hsa' ? '🏥' : acct.type === 'pension' ? '🏢' : '🏦'}</span>
+          <div className="acct-card-title-area">
+            <input
+              type="text"
+              className="acct-card-name"
+              value={acct.name}
+              onChange={(e) => store.updateAccount(scenario.id, acct.id, { name: e.target.value })}
+            />
+            <div className="acct-card-meta">
+              <select className="table-select acct-type-select" value={acct.type} onChange={(e) => store.updateAccount(scenario.id, acct.id, { type: e.target.value as AccountType })}>
+                {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{prettify(t)}</option>)}
+              </select>
+              <span className="acct-tax-badge" style={{ color: taxColor, borderColor: taxColor }}>{taxLabel}</span>
+            </div>
+          </div>
+        </div>
+        <ConfirmDelete title="Delete account" onConfirm={() => store.deleteAccount(scenario.id, acct.id)} />
+      </div>
+      <div className="acct-card-body">
+        <div className="acct-card-field">
+          <label>Balance</label>
+          <CurrencyCellInput value={acct.balance} onChange={(v) => store.updateAccount(scenario.id, acct.id, { balance: v })} />
+        </div>
+        <div className="acct-card-field">
+          <label>Return Rate</label>
+          <PctCellInput value={acct.annualReturn} onChange={(v) => store.updateAccount(scenario.id, acct.id, { annualReturn: v })} />
+        </div>
+        <div className="acct-card-field">
+          <label>Annual Contribution</label>
+          <CurrencyCellInput value={acct.annualContribution} onChange={(v) => store.updateAccount(scenario.id, acct.id, { annualContribution: v })} />
+        </div>
+        {is401k && (
+          <div className="acct-card-field acct-card-match">
+            <label>Employer Match</label>
+            <CurrencyCellInput value={acct.employerMatch} onChange={(v) => store.updateAccount(scenario.id, acct.id, { employerMatch: v })} />
+          </div>
+        )}
+      </div>
+      {totalContrib > 0 && (
+        <div className="acct-card-insight">
+          <span className="acct-insight-label">Total annual savings:</span>
+          <span className="acct-insight-value">{formatCurrency(totalContrib)}</span>
+          {acct.employerMatch > 0 && <span className="acct-insight-sub">({formatCurrency(acct.employerMatch)} from employer)</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AccountsPanel({ scenario, store }: {
   scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
   store: ReturnType<typeof usePlanStore.getState>;
 }) {
-  const dragIndex = useRef<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const totalBalance = scenario.accounts.reduce((s, a) => s + a.balance, 0);
+  const totalContrib = scenario.accounts.reduce((s, a) => s + a.annualContribution + a.employerMatch, 0);
+  const totalMatch = scenario.accounts.reduce((s, a) => s + a.employerMatch, 0);
 
-  const handleDragStart = (idx: number) => { dragIndex.current = idx; };
-  const handleDragOver = (e: React.DragEvent, idx: number) => { e.preventDefault(); setDragOverIndex(idx); };
-  const handleDrop = (idx: number) => {
-    if (dragIndex.current !== null && dragIndex.current !== idx) {
-      store.reorderAccounts(scenario.id, dragIndex.current, idx);
-    }
-    dragIndex.current = null;
-    setDragOverIndex(null);
-  };
-  const handleDragEnd = () => { dragIndex.current = null; setDragOverIndex(null); };
+  // Group accounts by category
+  const groups = ACCOUNT_GROUP_META.map((g) => ({
+    ...g,
+    accounts: scenario.accounts.filter((a) => g.types.includes(a.type)),
+  }));
+  // Note: do NOT filter out empty groups — the "+ Add" button lives on each group header
 
   return (
     <div className="panel">
       <div className="panel-header">
         <h2>🏦 Accounts & Savings</h2>
-        <button className="btn btn-sm" onClick={() => store.addAccount(scenario.id, {
-          name: 'New Account', type: 'checking_savings', balance: 0, annualReturn: 0.05, annualContribution: 0, employerMatch: 0,
-        })}>+ Add Account</button>
       </div>
       <p className="section-help">
-        Add all your savings and investment accounts. Enter the <strong>current balance</strong>, expected <strong>annual return rate</strong>,
-        and how much you contribute <strong>per year</strong>. Employer match applies to 401(k) plans.
+        Track all your savings and investment accounts. Enter the <strong>current balance</strong>, expected <strong>annual return</strong>,
+        and your <strong>yearly contribution</strong>. Employer match is only shown for 401(k) accounts.
       </p>
+
+      {/* Summary strip */}
       <div className="summary-strip">
         <div className="summary-strip-item">
           <span className="label">Total Balance</span>
-          <span className="value">{formatCurrency(scenario.accounts.reduce((s, a) => s + a.balance, 0), { compact: true })}</span>
+          <span className="value">{formatCurrency(totalBalance, { compact: true })}</span>
         </div>
         <div className="summary-strip-item">
-          <span className="label">Annual Contributions</span>
-          <span className="value">{formatCurrency(scenario.accounts.reduce((s, a) => s + a.annualContribution + a.employerMatch, 0), { compact: true })}</span>
+          <span className="label">Annual Savings</span>
+          <span className="value">{formatCurrency(totalContrib, { compact: true })}</span>
+          {totalMatch > 0 && <span className="muted" style={{ fontSize: 11 }}>incl. {formatCurrency(totalMatch, { compact: true })} match</span>}
         </div>
         <div className="summary-strip-item">
           <span className="label">Accounts</span>
           <span className="value">{scenario.accounts.length}</span>
         </div>
+        {totalBalance > 0 && (
+          <div className="summary-strip-item">
+            <span className="label">Savings Rate</span>
+            <span className="value">{formatPercent(totalContrib / totalBalance)}</span>
+            <span className="muted" style={{ fontSize: 11 }}>of balance/yr</span>
+          </div>
+        )}
       </div>
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th style={{ width: 28 }}></th>
-            <th>Name</th>
-            <th>Type</th>
-            <th className="text-right" title="Current balance">Balance</th>
-            <th className="text-right" title="Expected annual rate of return">Return %</th>
-            <th className="text-right" title="Annual contribution you make">Your Contrib.</th>
-            <th className="text-right" title="Employer match (401k only)">Match</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {scenario.accounts.map((acct, idx) => (
-            <tr
-              key={acct.id}
-              draggable
-              onDragStart={() => handleDragStart(idx)}
-              onDragOver={(e) => handleDragOver(e, idx)}
-              onDrop={() => handleDrop(idx)}
-              onDragEnd={handleDragEnd}
-              className={`${dragIndex.current === idx ? 'dragging' : ''} ${dragOverIndex === idx && dragIndex.current !== null ? 'drag-over' : ''}`}
-            >
-              <td className="drag-handle" title="Drag to reorder">⋮⋮</td>
-              <td className="col-name"><input className="table-input" value={acct.name} onChange={(e) => store.updateAccount(scenario.id, acct.id, { name: e.target.value })} /></td>
-              <td className="col-type">
-                <select className="table-select" value={acct.type} onChange={(e) => store.updateAccount(scenario.id, acct.id, { type: e.target.value as AccountType })}>
-                  {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{prettify(t)}</option>)}
-                </select>
-              </td>
-              <td><CurrencyCellInput value={acct.balance} onChange={(v) => store.updateAccount(scenario.id, acct.id, { balance: v })} /></td>
-              <td><PctCellInput value={acct.annualReturn} onChange={(v) => store.updateAccount(scenario.id, acct.id, { annualReturn: v })} /></td>
-              <td><CurrencyCellInput value={acct.annualContribution} onChange={(v) => store.updateAccount(scenario.id, acct.id, { annualContribution: v })} /></td>
-              <td><CurrencyCellInput value={acct.employerMatch} onChange={(v) => store.updateAccount(scenario.id, acct.id, { employerMatch: v })} /></td>
-              <td><ConfirmDelete title="Delete account" onConfirm={() => store.deleteAccount(scenario.id, acct.id)} /></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="add-row muted text-right">
-        Total: {formatCurrency(scenario.accounts.reduce((s, a) => s + a.balance, 0))}
-      </div>
+
+      {/* Allocation bar */}
+      {totalBalance > 0 && (
+        <div className="acct-allocation">
+          <div className="acct-allocation-label">Allocation by Account Type</div>
+          <div className="acct-allocation-bar">
+            {groups.map((g, i) => {
+              const groupTotal = g.accounts.reduce((s, a) => s + a.balance, 0);
+              const pct = (groupTotal / totalBalance) * 100;
+              const colors = ['var(--chart)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)'];
+              return (
+                <div
+                  key={g.label}
+                  className="acct-allocation-segment"
+                  style={{ width: `${pct}%`, background: colors[i % colors.length] }}
+                  title={`${g.label}: ${formatCurrency(groupTotal)} (${pct.toFixed(0)}%)`}
+                />
+              );
+            })}
+          </div>
+          <div className="acct-allocation-legend">
+            {groups.map((g, i) => {
+              const groupTotal = g.accounts.reduce((s, a) => s + a.balance, 0);
+              const pct = (groupTotal / totalBalance) * 100;
+              const colors = ['var(--chart)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)'];
+              return (
+                <div key={g.label} className="acct-allocation-legend-item">
+                  <span className="acct-allocation-dot" style={{ background: colors[i % colors.length] }} />
+                  <span>{g.icon} {g.label}</span>
+                  <span className="muted" style={{ fontSize: 11 }}>{pct.toFixed(0)}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Account groups */}
+      {groups.map((g) => {
+        const groupTotal = g.accounts.reduce((s, a) => s + a.balance, 0);
+        const groupContrib = g.accounts.reduce((s, a) => s + a.annualContribution + a.employerMatch, 0);
+        return (
+          <div key={g.label} className="acct-group">
+            <div className="acct-group-header">
+              <span className="acct-group-icon">{g.icon}</span>
+              <span className="acct-group-label">{g.label}</span>
+              <span className="acct-group-count">{g.accounts.length}</span>
+              <span className="acct-group-total">{formatCurrency(groupTotal, { compact: true })}</span>
+              {groupContrib > 0 && <span className="acct-group-contrib">+{formatCurrency(groupContrib, { compact: true })}/yr</span>}
+              <button className="btn btn-sm acct-group-add" onClick={() => store.addAccount(scenario.id, {
+                name: 'New ' + g.label.replace(/ &.*/, ''), type: g.types[0], balance: 0, annualReturn: g.types[0] === 'checking_savings' ? 0.02 : 0.07, annualContribution: 0, employerMatch: 0,
+              })}>+ Add</button>
+            </div>
+            <div className="acct-group-hint muted">{g.hint}</div>
+            <div className="acct-group-cards">
+              {g.accounts.map((acct) => (
+                <AccountCard key={acct.id} acct={acct} scenario={scenario} store={store} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      {scenario.accounts.length === 0 && (
+        <p className="muted" style={{ padding: '8px 0' }}>No accounts added yet. Click "Add Account" to start tracking your savings and investments.</p>
+      )}
     </div>
   );
 }
@@ -1195,7 +1336,7 @@ function PropertyCard({ prop, scenario, store }: {
 
   return (
     <div className="prop-card">
-      {/* === Header === */}
+      {/* === Step 1: Property header + basics === */}
       <div className="prop-card-header">
         <span className="prop-icon">{prop.type === 'land' ? '🌳' : '🏠'}</span>
         <input type="text" className="prop-name-input" value={prop.name} placeholder="e.g. Family Home" onChange={(e) => store.updateProperty(scenario.id, prop.id, { name: e.target.value })} />
@@ -1205,26 +1346,15 @@ function PropertyCard({ prop, scenario, store }: {
         <ConfirmDelete title="Delete property" onConfirm={() => store.deleteProperty(scenario.id, prop.id)} />
       </div>
 
-      {/* === SECTION A: Property Details === */}
-      <div className="prop-zone prop-zone-current">
-        <div className="prop-zone-label">📍 Property Details</div>
+      {/* === Step 1: Current property (compact) === */}
+      <div className="prop-step">
+        <div className="prop-step-label">① Current Property</div>
         <div className="prop-zone-grid">
           <div className="prop-field">
             <label>Current market value</label>
             <CurrencyCellInput value={prop.currentValue} onChange={(v) => store.updateProperty(scenario.id, prop.id, { currentValue: v })} />
             <a href={`https://www.zillow.com/homes/${encodeURIComponent(prop.name || '')}_rb/`} target="_blank" rel="noopener noreferrer" className="prop-zillow-link">🔍 Check Zillow</a>
           </div>
-          <div className="prop-field">
-            <label>Expected annual home value growth</label>
-            <PctCellInput value={prop.annualAppreciation} onChange={(v) => store.updateProperty(scenario.id, prop.id, { annualAppreciation: v })} />
-          </div>
-        </div>
-      </div>
-
-      {/* === SECTION B: Current Finances === */}
-      <div className="prop-zone prop-zone-current" style={{ paddingTop: 0 }}>
-        <div className="prop-zone-label">💰 Current Mortgage</div>
-        <div className="prop-zone-grid">
           <div className="prop-field">
             <label>Remaining mortgage balance</label>
             <CurrencyCellInput value={prop.mortgageBalance} onChange={(v) => store.updateProperty(scenario.id, prop.id, { mortgageBalance: v })} />
@@ -1234,52 +1364,45 @@ function PropertyCard({ prop, scenario, store }: {
             <CurrencyCellInput value={prop.mortgagePayment ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { mortgagePayment: v })} />
           </div>
           <div className="prop-field">
-            <label>Years remaining on mortgage</label>
+            <label>Years remaining</label>
             <input type="number" value={prop.mortgageYearsLeft ?? ''} placeholder="—" onChange={(e) => store.updateProperty(scenario.id, prop.id, { mortgageYearsLeft: +e.target.value || undefined })} />
           </div>
-        </div>
-      </div>
-
-      {/* === SECTION C: Annual Ownership Costs === */}
-      <div className="prop-zone prop-zone-current" style={{ paddingTop: 0 }}>
-        <div className="prop-zone-label">📋 Annual Ownership Costs</div>
-        <div className="prop-zone-grid">
           <div className="prop-field">
-            <label>Property tax per year</label>
+            <label>Property tax /yr</label>
             <CurrencyCellInput value={prop.annualPropertyTax} onChange={(v) => store.updateProperty(scenario.id, prop.id, { annualPropertyTax: v })} />
           </div>
           <div className="prop-field">
-            <label>Home insurance per year</label>
+            <label>Home insurance /yr</label>
             <CurrencyCellInput value={prop.annualInsurance} onChange={(v) => store.updateProperty(scenario.id, prop.id, { annualInsurance: v })} />
+          </div>
+          <div className="prop-field">
+            <label>Expected annual home value growth</label>
+            <PctCellInput value={prop.annualAppreciation} onChange={(v) => store.updateProperty(scenario.id, prop.id, { annualAppreciation: v })} />
           </div>
         </div>
       </div>
 
-      {/* === Calculated metrics — visually distinct === */}
-      <div className="prop-metrics">
-        <div className="prop-metric">
-          <span className="prop-metric-label">Current Equity</span>
-          <span className="prop-metric-value" style={{ color: equity >= 0 ? 'var(--green)' : 'var(--red)' }}>{formatCurrency(equity)}</span>
+      {/* === Quick metrics (calculated, not editable) === */}
+      <div className="prop-quick-metrics">
+        <div className="prop-quick-metric">
+          <span className="prop-quick-label">Equity</span>
+          <span className="prop-quick-value" style={{ color: equity >= 0 ? 'var(--green)' : 'var(--red)' }}>{formatCurrency(equity, { compact: true })}</span>
         </div>
-        <div className="prop-metric">
-          <span className="prop-metric-label">Annual Housing Cost</span>
-          <span className="prop-metric-value">{formatCurrency(annualHousing + (prop.mortgagePayment ?? 0))}</span>
-          <span className="prop-metric-sub">mortgage + tax + insurance</span>
+        <div className="prop-quick-metric">
+          <span className="prop-quick-label">Housing cost/yr</span>
+          <span className="prop-quick-value">{formatCurrency(annualHousing + (prop.mortgagePayment ?? 0), { compact: true })}</span>
         </div>
         {payoffYears > 0 && (
-          <div className="prop-metric">
-            <span className="prop-metric-label">Mortgage Payoff</span>
-            <span className="prop-metric-value">~{payoffYears} yrs</span>
-            <span className="prop-metric-sub">remaining</span>
+          <div className="prop-quick-metric">
+            <span className="prop-quick-label">Mortgage payoff</span>
+            <span className="prop-quick-value">~{payoffYears} yrs</span>
           </div>
         )}
       </div>
 
-      {/* === SECTION D: Future Plan === */}
-      <div className="prop-zone prop-zone-planned">
-        <div className="prop-zone-label">🔄 What do you plan to do with this property?</div>
-
-        {/* Plan action selector */}
+      {/* === Step 2: Plan decision (moved UP) === */}
+      <div className="prop-step prop-step-decision">
+        <div className="prop-step-label">② What's your plan for this property?</div>
         <div className="prop-plan-grid">
           {PLAN_ACTION_LABELS.map((opt) => (
             <button
@@ -1288,12 +1411,10 @@ function PropertyCard({ prop, scenario, store }: {
               onClick={() => {
                 const action = opt.value as 'keep' | 'sell' | 'sell_and_buy' | 'undecided';
                 const updates: Record<string, unknown> = { planAction: action };
-                // Auto-set sale age for sell actions
                 if ((action === 'sell' || action === 'sell_and_buy') && !prop.saleAge) {
                   updates.saleAge = scenario.assumptions.retirementAge;
                   updates.saleProceeds = equity;
                 }
-                // Auto-set purchase age for sell_and_buy
                 if (action === 'sell_and_buy' && !prop.purchaseAge) {
                   updates.purchaseAge = scenario.assumptions.retirementAge;
                 }
@@ -1305,72 +1426,77 @@ function PropertyCard({ prop, scenario, store }: {
             </button>
           ))}
         </div>
-
-        {/* Sale fields — shown for sell or sell_and_buy */}
-        {showSaleFields && (
-          <div className="prop-plan-fields">
-            <div className="prop-zone-label" style={{ marginTop: 14 }}>🏡 Sale Details</div>
-            <div className="prop-zone-grid">
-              <div className="prop-field">
-                <label>Sell at age</label>
-                <input type="number" value={prop.saleAge ?? ''} placeholder="—" onChange={(e) => { const val = +e.target.value || null; store.updateProperty(scenario.id, prop.id, { saleAge: val, saleProceeds: val ? equity : (prop.saleProceeds ?? 0) }); }} />
-              </div>
-              <div className="prop-field">
-                <label>Estimated net proceeds after mortgage payoff</label>
-                <CurrencyCellInput value={prop.saleProceeds ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { saleProceeds: v })} />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Purchase fields — shown only for sell_and_buy */}
-        {showBuyFields && (
-          <div className="prop-plan-fields">
-            <div className="prop-zone-label" style={{ marginTop: 14 }}>🔑 New Home Purchase</div>
-            <div className="prop-zone-grid">
-              <div className="prop-field">
-                <label>Buy at age</label>
-                <input type="number" value={prop.purchaseAge ?? ''} placeholder="—" onChange={(e) => store.updateProperty(scenario.id, prop.id, { purchaseAge: +e.target.value || null })} />
-              </div>
-              <div className="prop-field">
-                <label>Purchase price</label>
-                <CurrencyCellInput value={prop.purchasePrice ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { purchasePrice: v })} />
-              </div>
-              <div className="prop-field">
-                <label>Down payment</label>
-                <CurrencyCellInput value={prop.downPayment ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { downPayment: v })} />
-              </div>
-              <div className="prop-field">
-                <label>New mortgage rate</label>
-                <PctCellInput value={prop.mortgageRate ?? 0.065} onChange={(v) => store.updateProperty(scenario.id, prop.id, { mortgageRate: v })} />
-              </div>
-              <div className="prop-field">
-                <label>Mortgage term (years)</label>
-                <input type="number" value={prop.mortgageTerm ?? 30} onChange={(e) => store.updateProperty(scenario.id, prop.id, { mortgageTerm: +e.target.value })} />
-              </div>
-            </div>
-            {estMortgage > 0 && (
-              <div className="prop-metrics prop-metrics-inline">
-                <span className="prop-metric-label">Estimated payment:</span>
-                <span className="prop-metric-value" style={{ fontSize: 'var(--text-sm)' }}>{formatCurrency(estMortgage)}/yr</span>
-                <span className="prop-metric-sub">({formatCurrency(estMortgage / 12)}/mo)</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Keep message */}
-        {planAction === 'keep' && (
-          <p className="prop-plan-note">You'll keep this property through retirement. Housing costs (mortgage if remaining, tax, insurance) will continue as expenses.</p>
-        )}
-        {planAction === 'undecided' && (
-          <p className="prop-plan-note">Choose a plan above to model how this property affects your retirement. You can change this anytime.</p>
-        )}
       </div>
 
-      {/* === SECTION E: Retirement Impact === */}
-      <div className="prop-zone prop-zone-impact">
-        <div className="prop-zone-label">📊 Retirement Impact</div>
+      {/* === Step 3: Conditional details (progressive disclosure) === */}
+      {planAction === 'keep' && (
+        <div className="prop-step prop-step-conditional">
+          <div className="prop-step-label">③ Keep Through Retirement</div>
+          <p className="prop-plan-note">Housing costs (mortgage if remaining, tax, insurance) will continue as expenses in your retirement projection. Your equity stays illiquid unless you sell later.</p>
+        </div>
+      )}
+
+      {planAction === 'undecided' && (
+        <div className="prop-step prop-step-conditional">
+          <div className="prop-step-label">③ Exploration Mode</div>
+          <p className="prop-plan-note">Choose a plan above to model how this property affects your retirement. You can change your selection anytime — the projection updates instantly.</p>
+        </div>
+      )}
+
+      {showSaleFields && (
+        <div className="prop-step prop-step-conditional">
+          <div className="prop-step-label">③ Sale Details</div>
+          <div className="prop-zone-grid">
+            <div className="prop-field">
+              <label>Sell at age</label>
+              <input type="number" value={prop.saleAge ?? ''} placeholder="—" onChange={(e) => { const val = +e.target.value || null; store.updateProperty(scenario.id, prop.id, { saleAge: val, saleProceeds: val ? equity : (prop.saleProceeds ?? 0) }); }} />
+            </div>
+            <div className="prop-field">
+              <label>Net proceeds after mortgage payoff</label>
+              <CurrencyCellInput value={prop.saleProceeds ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { saleProceeds: v })} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBuyFields && (
+        <div className="prop-step prop-step-conditional">
+          <div className="prop-step-label">④ New Home Purchase</div>
+          <div className="prop-zone-grid">
+            <div className="prop-field">
+              <label>Buy at age</label>
+              <input type="number" value={prop.purchaseAge ?? ''} placeholder="—" onChange={(e) => store.updateProperty(scenario.id, prop.id, { purchaseAge: +e.target.value || null })} />
+            </div>
+            <div className="prop-field">
+              <label>Purchase price</label>
+              <CurrencyCellInput value={prop.purchasePrice ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { purchasePrice: v })} />
+            </div>
+            <div className="prop-field">
+              <label>Down payment</label>
+              <CurrencyCellInput value={prop.downPayment ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { downPayment: v })} />
+            </div>
+            <div className="prop-field">
+              <label>New mortgage rate</label>
+              <PctCellInput value={prop.mortgageRate ?? 0.065} onChange={(v) => store.updateProperty(scenario.id, prop.id, { mortgageRate: v })} />
+            </div>
+            <div className="prop-field">
+              <label>Mortgage term (years)</label>
+              <input type="number" value={prop.mortgageTerm ?? 30} onChange={(e) => store.updateProperty(scenario.id, prop.id, { mortgageTerm: +e.target.value })} />
+            </div>
+          </div>
+          {estMortgage > 0 && (
+            <div className="prop-quick-metrics prop-quick-metrics-inline">
+              <span className="prop-quick-label">Estimated payment:</span>
+              <span className="prop-quick-value" style={{ fontSize: 'var(--text-sm)' }}>{formatCurrency(estMortgage)}/yr</span>
+              <span className="prop-metric-sub">({formatCurrency(estMortgage / 12)}/mo)</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* === Step Final: Retirement Impact (always visible) === */}
+      <div className="prop-step prop-step-impact">
+        <div className="prop-step-label">📊 Retirement Impact</div>
         <div className="prop-impact-grid">
           <div className="prop-impact-item">
             <span className="prop-impact-icon">🏠</span>
@@ -1463,26 +1589,92 @@ function PropertiesPanel({ scenario, store }: {
   );
 }
 
+const CATEGORY_ICONS: Record<string, string> = {
+  housing: '🏠',
+  food: '🍽️',
+  transportation: '🚗',
+  healthcare: '🏥',
+  insurance: '🛡️',
+  utilities: '💡',
+  entertainment: '🎬',
+  travel: '✈️',
+  debt_payment: '💳',
+  taxes: '🧾',
+  other: '📦',
+};
+
+function getExpensePhase(exp: { preRetirement: boolean; postRetirement: boolean }): { label: string; cls: string } {
+  if (exp.preRetirement && exp.postRetirement) return { label: 'Continues through retirement', cls: 'exp-phase-both' };
+  if (exp.preRetirement && !exp.postRetirement) return { label: 'Ends at retirement', cls: 'exp-phase-pre' };
+  if (!exp.preRetirement && exp.postRetirement) return { label: 'Starts in retirement', cls: 'exp-phase-post' };
+  return { label: 'Inactive', cls: 'exp-phase-none' };
+}
+
+function ExpenseRow({ exp, scenario, store }: {
+  exp: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]['expenses'][0];
+  scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
+  store: ReturnType<typeof usePlanStore.getState>;
+}) {
+  const phase = getExpensePhase(exp);
+  const monthly = Math.round(exp.annualAmount / 12);
+
+  return (
+    <div className="income-row exp-row">
+      <div className="income-row-main">
+        <span className="income-row-icon">{CATEGORY_ICONS[exp.category] ?? '📦'}</span>
+        <input
+          type="text"
+          className="income-row-name"
+          value={exp.name}
+          onChange={(e) => store.updateExpense(scenario.id, exp.id, { name: e.target.value })}
+        />
+        <select
+          className="table-select income-row-type"
+          value={exp.category}
+          onChange={(e) => store.updateExpense(scenario.id, exp.id, { category: e.target.value as ExpenseCategory })}
+        >
+          {EXPENSE_CATEGORIES.map((t) => <option key={t} value={t}>{prettify(t)}</option>)}
+        </select>
+      </div>
+      <div className="income-row-details">
+        <div className="income-row-amount">
+          <CurrencyCellInput value={monthly} onChange={(v) => store.updateExpense(scenario.id, exp.id, { annualAmount: v * 12 })} />
+          <span className="income-row-amount-unit">/mo</span>
+        </div>
+        <div className="income-row-flags">
+          <button
+            className={`income-flag ${exp.preRetirement ? 'active' : ''}`}
+            title="Applies before retirement"
+            onClick={() => store.updateExpense(scenario.id, exp.id, { preRetirement: !exp.preRetirement })}
+          >💼 Before</button>
+          <button
+            className={`income-flag ${exp.postRetirement ? 'active' : ''}`}
+            title="Applies after retirement"
+            onClick={() => store.updateExpense(scenario.id, exp.id, { postRetirement: !exp.postRetirement })}
+          >🏖️ After</button>
+        </div>
+        <ConfirmDelete title="Delete expense" onConfirm={() => store.deleteExpense(scenario.id, exp.id)} />
+      </div>
+      <div className="income-row-summary">
+        <span className={`income-phase-badge ${phase.cls}`}>{phase.label}</span>
+      </div>
+    </div>
+  );
+}
+
 function ExpensesPanel({ scenario, store }: {
   scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
   store: ReturnType<typeof usePlanStore.getState>;
 }) {
-  const dragIndex = useRef<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-
-  const handleDragStart = (idx: number) => { dragIndex.current = idx; };
-  const handleDragOver = (e: React.DragEvent, idx: number) => { e.preventDefault(); setDragOverIndex(idx); };
-  const handleDrop = (idx: number) => {
-    if (dragIndex.current !== null && dragIndex.current !== idx) {
-      store.reorderExpenses(scenario.id, dragIndex.current, idx);
-    }
-    dragIndex.current = null;
-    setDragOverIndex(null);
-  };
-  const handleDragEnd = () => { dragIndex.current = null; setDragOverIndex(null); };
-
   const preRetTotal = scenario.expenses.filter(e => e.preRetirement).reduce((s, e) => s + e.annualAmount, 0) / 12;
   const postRetTotal = scenario.expenses.filter(e => e.postRetirement).reduce((s, e) => s + e.annualAmount, 0) / 12;
+
+  // Group by category
+  const groups = EXPENSE_CATEGORIES.map((cat) => ({
+    category: cat,
+    icon: CATEGORY_ICONS[cat] ?? '📦',
+    expenses: scenario.expenses.filter((e) => e.category === cat),
+  })).filter((g) => g.expenses.length > 0);
 
   return (
     <div className="panel">
@@ -1493,9 +1685,24 @@ function ExpensesPanel({ scenario, store }: {
         })}>+ Add Expense</button>
       </div>
       <p className="section-help">
-        Enter your monthly costs for each category. Check <strong>Before retirement</strong> for expenses you pay while working,
-        and <strong>After retirement</strong> for those that continue into retirement. Drag rows by the handle to reorder.
+        Enter your monthly costs for each category. Toggle <strong>Before</strong> and/or <strong>After</strong> to control
+        when each expense applies in your retirement plan.
       </p>
+
+      {/* Quick add common expenses */}
+      <details className="quick-add-section">
+        <summary className="quick-add-label">⚡ Quick Add Common Expenses <span className="quick-add-toggle"></span></summary>
+        <div className="quick-add-grid">
+          {COMMON_EXPENSES.map((ce) => (
+            <button key={ce.name} className="quick-add-btn" onClick={() => store.addExpense(scenario.id, { ...ce })}>
+              <span className="quick-add-icon">{ce.icon}</span>
+              <span>{ce.name}</span>
+              <span className="quick-add-amount">{formatCurrency(ce.annualAmount / 12, { compact: true })}/mo</span>
+            </button>
+          ))}
+        </div>
+      </details>
+
       <div className="summary-strip">
         <div className="summary-strip-item">
           <span className="label">Before Retirement</span>
@@ -1510,46 +1717,131 @@ function ExpensesPanel({ scenario, store }: {
           <span className="value">{scenario.expenses.length}</span>
         </div>
       </div>
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th style={{ width: 28 }}></th>
-            <th>Name</th>
-            <th>Category</th>
-            <th className="text-right">Monthly</th>
-            <th className="checkbox-cell" title="Applies before retirement age">Before Retirement</th>
-            <th className="checkbox-cell" title="Applies after retirement age">After Retirement</th>
-            <th className="col-actions"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {scenario.expenses.map((exp, idx) => (
-            <tr
-              key={exp.id}
-              draggable
-              onDragStart={() => handleDragStart(idx)}
-              onDragOver={(e) => handleDragOver(e, idx)}
-              onDrop={() => handleDrop(idx)}
-              onDragEnd={handleDragEnd}
-              className={`${dragIndex.current === idx ? 'dragging' : ''} ${dragOverIndex === idx && dragIndex.current !== null ? 'drag-over' : ''}`}
-            >
-              <td className="drag-handle" title="Drag to reorder">⋮⋮</td>
-              <td className="col-name"><input className="table-input" value={exp.name} onChange={(e) => store.updateExpense(scenario.id, exp.id, { name: e.target.value })} /></td>
-              <td>
-                <select className="table-select" value={exp.category} onChange={(e) => store.updateExpense(scenario.id, exp.id, { category: e.target.value as ExpenseCategory })}>
-                  {EXPENSE_CATEGORIES.map((t) => <option key={t} value={t}>{prettify(t)}</option>)}
-                </select>
-              </td>
-              <td><CurrencyCellInput value={Math.round(exp.annualAmount / 12)} onChange={(v) => store.updateExpense(scenario.id, exp.id, { annualAmount: v * 12 })} /></td>
-              <td className="checkbox-cell"><input type="checkbox" checked={exp.preRetirement} onChange={(e) => store.updateExpense(scenario.id, exp.id, { preRetirement: e.target.checked })} /></td>
-              <td className="checkbox-cell"><input type="checkbox" checked={exp.postRetirement} onChange={(e) => store.updateExpense(scenario.id, exp.id, { postRetirement: e.target.checked })} /></td>
-              <td className="col-actions">
-                <ConfirmDelete title="Delete expense" onConfirm={() => store.deleteExpense(scenario.id, exp.id)} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+
+      {scenario.expenses.length === 0 ? (
+        <p className="muted" style={{ padding: '8px 0' }}>No expenses added yet. Use Quick Add above or click "Add Expense" to start.</p>
+      ) : (
+        <div className="income-groups">
+          {groups.map((g) => {
+            const groupTotal = g.expenses.reduce((s, e) => s + e.annualAmount, 0) / 12;
+            return (
+              <div key={g.category} className="income-group">
+                <div className="income-group-header">
+                  <span className="income-group-icon">{g.icon}</span>
+                  <span className="income-group-label">{prettify(g.category)}</span>
+                  <span className="income-group-count">{g.expenses.length}</span>
+                  <span className="income-group-total-muted">{formatCurrency(groupTotal, { compact: true })}/mo</span>
+                </div>
+                <div className="income-group-rows">
+                  {g.expenses.map((exp) => (
+                    <ExpenseRow key={exp.id} exp={exp} scenario={scenario} store={store} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Income type icons */
+const INCOME_ICONS: Record<string, string> = {
+  salary: '💼',
+  social_security: '🏛️',
+  pension: '🏢',
+  part_time: '🕐',
+  self_employment: '🔨',
+  rental: '🏠',
+  annuity: '📊',
+  dividends: '💰',
+  other: '📦',
+};
+
+/** Format timing as a compact summary */
+function formatTiming(startAge: number, endAge: number | null, retirementAge: number): { text: string; phase: 'pre' | 'post' | 'both' } {
+  const endsAt = endAge ?? 999;
+  const startsPre = startAge < retirementAge;
+  const endsPost = endsAt >= retirementAge;
+  let phase: 'pre' | 'post' | 'both' = 'both';
+  if (startsPre && !endsPost) phase = 'pre';
+  else if (!startsPre && endsPost) phase = 'post';
+
+  if (endAge === null) {
+    return { text: `Age ${startAge} → lifetime`, phase };
+  }
+  return { text: `Age ${startAge} → ${endAge}`, phase };
+}
+
+function IncomeRow({ inc, scenario, store }: {
+  inc: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]['incomeSources'][0];
+  scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
+  store: ReturnType<typeof usePlanStore.getState>;
+}) {
+  const timing = formatTiming(inc.startAge, inc.endAge, scenario.assumptions.retirementAge);
+  const monthly = Math.round(inc.annualAmount / 12);
+
+  return (
+    <div className="income-row">
+      <div className="income-row-main">
+        <span className="income-row-icon">{INCOME_ICONS[inc.type] ?? '📦'}</span>
+        <input
+          type="text"
+          className="income-row-name"
+          value={inc.name}
+          onChange={(e) => store.updateIncome(scenario.id, inc.id, { name: e.target.value })}
+        />
+        <select
+          className="table-select income-row-type"
+          value={inc.type}
+          onChange={(e) => store.updateIncome(scenario.id, inc.id, { type: e.target.value as IncomeType })}
+        >
+          {INCOME_TYPES.map((t) => <option key={t} value={t}>{prettify(t)}</option>)}
+        </select>
+      </div>
+      <div className="income-row-details">
+        <div className="income-row-amount">
+          <CurrencyCellInput value={monthly} onChange={(v) => store.updateIncome(scenario.id, inc.id, { annualAmount: v * 12 })} />
+          <span className="income-row-amount-unit">/mo</span>
+        </div>
+        <div className="income-row-timing">
+          <label>Start</label>
+          <NumCellInput value={inc.startAge} onChange={(v) => store.updateIncome(scenario.id, inc.id, { startAge: v })} />
+          <label>End</label>
+          {inc.endAge === null ? (
+            <button
+              className="income-lifetime-btn active"
+              onClick={() => store.updateIncome(scenario.id, inc.id, { endAge: inc.startAge })}
+            >Lifetime</button>
+          ) : (
+            <button
+              className="income-lifetime-btn"
+              onClick={() => store.updateIncome(scenario.id, inc.id, { endAge: null })}
+            >∞</button>
+          )}
+          {inc.endAge !== null && (
+            <NumCellInput value={inc.endAge} onChange={(v) => store.updateIncome(scenario.id, inc.id, { endAge: v || null })} />
+          )}
+        </div>
+        <div className="income-row-flags">
+          <button
+            className={`income-flag ${inc.cola ? 'active' : ''}`}
+            title="Inflation adjusted (COLA)"
+            onClick={() => store.updateIncome(scenario.id, inc.id, { cola: !inc.cola })}
+          >📈 COLA</button>
+          <button
+            className={`income-flag ${inc.taxable ? 'active' : ''}`}
+            title="Taxed as ordinary income"
+            onClick={() => store.updateIncome(scenario.id, inc.id, { taxable: !inc.taxable })}
+          >🧾 Tax</button>
+        </div>
+        <ConfirmDelete title="Delete income source" onConfirm={() => store.deleteIncome(scenario.id, inc.id)} />
+      </div>
+      <div className="income-row-summary">
+        <span className={`income-phase-badge income-phase-${timing.phase}`}>{timing.phase === 'pre' ? 'Pre-Retirement' : timing.phase === 'post' ? 'Retirement' : 'Both Phases'}</span>
+        <span className="income-timing-text">{timing.text}</span>
+      </div>
     </div>
   );
 }
@@ -1558,25 +1850,18 @@ function IncomePanel({ scenario, store }: {
   scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
   store: ReturnType<typeof usePlanStore.getState>;
 }) {
-  const dragIndex = useRef<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-
-  const handleDragStart = (idx: number) => { dragIndex.current = idx; };
-  const handleDragOver = (e: React.DragEvent, idx: number) => { e.preventDefault(); setDragOverIndex(idx); };
-  const handleDrop = (idx: number) => {
-    if (dragIndex.current !== null && dragIndex.current !== idx) {
-      store.reorderIncome(scenario.id, dragIndex.current, idx);
-    }
-    dragIndex.current = null;
-    setDragOverIndex(null);
-  };
-  const handleDragEnd = () => { dragIndex.current = null; setDragOverIndex(null); };
-
   const totalMonthly = scenario.incomeSources.reduce((s, i) => s + i.annualAmount, 0) / 12;
   const ssCount = scenario.incomeSources.filter(i => i.type === 'social_security').length;
-  const earliestStart = scenario.incomeSources.length > 0
-    ? Math.min(...scenario.incomeSources.map(i => i.startAge || 999))
-    : null;
+
+  // Group by phase
+  const preRet = scenario.incomeSources.filter(i => {
+    const t = formatTiming(i.startAge, i.endAge, scenario.assumptions.retirementAge);
+    return t.phase === 'pre' || t.phase === 'both';
+  });
+  const postRet = scenario.incomeSources.filter(i => {
+    const t = formatTiming(i.startAge, i.endAge, scenario.assumptions.retirementAge);
+    return t.phase === 'post' || t.phase === 'both';
+  });
 
   return (
     <div className="panel">
@@ -1587,94 +1872,60 @@ function IncomePanel({ scenario, store }: {
         })}>+ Add Income</button>
       </div>
       <p className="section-help">
-        Add <strong>any income source</strong> — pre-retirement (salary, side hustle, rental) or post-retirement (Social Security, pension, part-time).
-        Set the <strong>Start Age</strong> and <strong>End Age</strong> to control when each income source is active.
-        Check <strong>Inflation Adjusted</strong> if the income rises with cost-of-living. Check <strong>Taxable</strong> if it's taxed as ordinary income.
+        Add <strong>any income source</strong> — pre-retirement (salary, self-employment) or post-retirement (Social Security, pension).
+        Set Start/End ages to control when each source is active.
       </p>
       <div className="summary-strip">
         <div className="summary-strip-item">
-          <span className="label">Total Monthly Income</span>
+          <span className="label">Total Monthly</span>
           <span className="value">{formatCurrency(totalMonthly, { compact: true })}<span className="muted" style={{ fontSize: 12 }}> /mo</span></span>
         </div>
         <div className="summary-strip-item">
-          <span className="label">Income Sources</span>
+          <span className="label">Sources</span>
           <span className="value">{scenario.incomeSources.length}</span>
         </div>
-        {earliestStart !== null && (
-          <div className="summary-strip-item">
-            <span className="label">Earliest Starts</span>
-            <span className="value">Age {earliestStart}</span>
-          </div>
-        )}
         {ssCount > 0 && (
           <div className="summary-strip-item">
             <span className="label">Social Security</span>
-            <span className="value">{ssCount} {ssCount === 1 ? 'source' : 'sources'}</span>
+            <span className="value">{ssCount}</span>
           </div>
         )}
       </div>
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th style={{ width: 28 }}></th>
-            <th>Name</th>
-            <th>Type</th>
-            <th className="text-right">Monthly</th>
-            <th className="text-right" title="Age when this income source begins">Start Age</th>
-            <th className="text-right" title="Age when this income source ends (leave 0 for lifetime)">End Age</th>
-            <th className="checkbox-cell" title="Income rises with inflation (e.g., Social Security)">Inflation Adjusted</th>
-            <th className="checkbox-cell" title="Taxed as ordinary income">Taxable</th>
-            <th className="col-actions"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {scenario.incomeSources.map((inc, idx) => (
-            <tr
-              key={inc.id}
-              draggable
-              onDragStart={() => handleDragStart(idx)}
-              onDragOver={(e) => handleDragOver(e, idx)}
-              onDrop={() => handleDrop(idx)}
-              onDragEnd={handleDragEnd}
-              className={`${dragIndex.current === idx ? 'dragging' : ''} ${dragOverIndex === idx && dragIndex.current !== null ? 'drag-over' : ''}`}
-            >
-              <td className="drag-handle" title="Drag to reorder">⋮⋮</td>
-              <td className="col-name"><input className="table-input" value={inc.name} onChange={(e) => store.updateIncome(scenario.id, inc.id, { name: e.target.value })} /></td>
-              <td className="col-type">
-                <select className="table-select" value={inc.type} onChange={(e) => store.updateIncome(scenario.id, inc.id, { type: e.target.value as IncomeType })}>
-                  {INCOME_TYPES.map((t) => <option key={t} value={t}>{prettify(t)}</option>)}
-                </select>
-              </td>
-              <td><CurrencyCellInput value={Math.round(inc.annualAmount / 12)} onChange={(v) => store.updateIncome(scenario.id, inc.id, { annualAmount: v * 12 })} /></td>
-              <td><NumCellInput value={inc.startAge} onChange={(v) => store.updateIncome(scenario.id, inc.id, { startAge: v })} /></td>
-              <td>
-                {inc.endAge === null ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <label className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-                      <input
-                        type="checkbox"
-                        checked={true}
-                        onChange={(e) => store.updateIncome(scenario.id, inc.id, { endAge: e.target.checked ? null : inc.startAge })}
-                        style={{ marginRight: 4 }}
-                      />
-                      Lifetime
-                    </label>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <NumCellInput value={inc.endAge ?? 0} onChange={(v) => store.updateIncome(scenario.id, inc.id, { endAge: v || null })} />
-                  </div>
-                )}
-              </td>
-              <td className="checkbox-cell"><input type="checkbox" checked={inc.cola} onChange={(e) => store.updateIncome(scenario.id, inc.id, { cola: e.target.checked })} /></td>
-              <td className="checkbox-cell"><input type="checkbox" checked={inc.taxable} onChange={(e) => store.updateIncome(scenario.id, inc.id, { taxable: e.target.checked })} /></td>
-              <td className="col-actions">
-                <ConfirmDelete title="Delete income source" onConfirm={() => store.deleteIncome(scenario.id, inc.id)} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+
+      {scenario.incomeSources.length === 0 ? (
+        <p className="muted" style={{ padding: '8px 0' }}>No income sources added yet. Click "Add Income" to start tracking salary, Social Security, pensions, and more.</p>
+      ) : (
+        <div className="income-groups">
+          {preRet.length > 0 && (
+            <div className="income-group">
+              <div className="income-group-header">
+                <span className="income-group-icon">💼</span>
+                <span className="income-group-label">Pre-Retirement Income</span>
+                <span className="income-group-count">{preRet.length}</span>
+              </div>
+              <div className="income-group-rows">
+                {preRet.map((inc) => (
+                  <IncomeRow key={inc.id} inc={inc} scenario={scenario} store={store} />
+                ))}
+              </div>
+            </div>
+          )}
+          {postRet.length > 0 && (
+            <div className="income-group">
+              <div className="income-group-header">
+                <span className="income-group-icon">🏛️</span>
+                <span className="income-group-label">Retirement Income</span>
+                <span className="income-group-count">{postRet.length}</span>
+              </div>
+              <div className="income-group-rows">
+                {postRet.map((inc) => (
+                  <IncomeRow key={inc.id} inc={inc} scenario={scenario} store={store} />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1918,14 +2169,87 @@ function ResultsView({ scenario, result, readiness }: {
       </div>
 
       {/* Year-by-year table */}
-      <YearTable result={result} retirementAge={scenario.assumptions.retirementAge} />
+      <YearTable result={result} retirementAge={scenario.assumptions.retirementAge} scenario={scenario} />
     </div>
   );
 }
 
-function YearTable({ result, retirementAge }: { result: NonNullable<ReturnType<typeof runProjection>>; retirementAge: number }) {
+/** Compute per-source income breakdown for a given age */
+function getIncomeBreakdown(scenario: NonNullable<ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]>, age: number) {
+  const a = scenario.assumptions;
+  const yearsFromNow = age - a.currentAge;
+  const inflationFactor = Math.pow(1 + a.inflationRate, yearsFromNow);
+  const items: { name: string; amount: number; type: string }[] = [];
+
+  for (const inc of scenario.incomeSources) {
+    if (age >= inc.startAge && (inc.endAge === null || age <= inc.endAge)) {
+      const colaFactor = inc.cola ? Math.pow(1 + a.socialSecurityCola, age - inc.startAge) : 1;
+      const nominalGross = inc.annualAmount * inflationFactor * colaFactor;
+      const nominalNet = inc.taxable ? nominalGross * (1 - a.retirementTaxRate) : nominalGross;
+      items.push({ name: inc.name, amount: nominalNet, type: inc.type });
+    }
+  }
+  return items;
+}
+
+/** Compute per-source expense breakdown for a given age */
+function getExpenseBreakdown(scenario: NonNullable<ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]>, age: number) {
+  const a = scenario.assumptions;
+  const yearsFromNow = age - a.currentAge;
+  const inflationFactor = Math.pow(1 + a.inflationRate, yearsFromNow);
+  const isRetired = age >= a.retirementAge;
+  const items: { name: string; amount: number; category: string }[] = [];
+
+  // Regular expenses
+  for (const exp of scenario.expenses) {
+    const activePre = exp.preRetirement && !isRetired;
+    const activePost = exp.postRetirement && isRetired;
+    if (!activePre && !activePost) continue;
+    if (exp.startAge !== null && age < exp.startAge) continue;
+    if (exp.endAge !== null && age > exp.endAge) continue;
+    items.push({ name: exp.name, amount: exp.annualAmount * inflationFactor, category: exp.category });
+  }
+
+  // Property expenses
+  if (scenario.properties) {
+    for (const prop of scenario.properties) {
+      if (prop.saleAge && age >= prop.saleAge) continue;
+      if (prop.purchaseAge && age < prop.purchaseAge) continue;
+
+      const propTax = prop.annualPropertyTax * inflationFactor;
+      if (propTax > 0) items.push({ name: `${prop.name} — Property Tax`, amount: propTax, category: 'housing' });
+
+      const insurance = prop.annualInsurance * inflationFactor;
+      if (insurance > 0) items.push({ name: `${prop.name} — Insurance`, amount: insurance, category: 'insurance' });
+
+      // Existing mortgage
+      if (!prop.purchaseAge && prop.mortgageBalance > 0) {
+        const yearsLeft = prop.mortgageYearsLeft ?? 30;
+        if (yearsFromNow < yearsLeft) {
+          const payment = (prop.mortgagePayment ?? prop.mortgageBalance / 30) * inflationFactor;
+          if (payment > 0) items.push({ name: `${prop.name} — Mortgage`, amount: payment, category: 'housing' });
+        }
+      }
+    }
+  }
+
+  // Life events ongoing
+  for (const ev of scenario.events) {
+    if (age >= ev.age && ev.ongoingAnnualImpact !== 0) {
+      const dur = ev.ongoingDurationYears;
+      if (dur === null || age < ev.age + dur) {
+        items.push({ name: `${ev.name} — Ongoing`, amount: ev.ongoingAnnualImpact * inflationFactor, category: 'other' });
+      }
+    }
+  }
+
+  return items;
+}
+
+function YearTable({ result, retirementAge, scenario }: { result: NonNullable<ReturnType<typeof runProjection>>; retirementAge: number; scenario: NonNullable<ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]> }) {
   const [showAll, setShowAll] = useState(false);
-  const data = showAll ? result.years : result.years.filter((y) => y.age >= retirementAge - 2 && y.age <= retirementAge + 15);
+  const [expandedAge, setExpandedAge] = useState<number | null>(null);
+  const data = showAll ? result.years : result.years.filter((y) => y.age >= retirementAge - 5 && y.age <= retirementAge + 15);
 
   return (
     <div className="panel">
@@ -1937,6 +2261,7 @@ function YearTable({ result, retirementAge }: { result: NonNullable<ReturnType<t
         <table className="data-table">
           <thead>
             <tr>
+              <th style={{ width: 28 }}></th>
               <th>Age</th>
               <th className="text-right">Start Assets</th>
               <th className="text-right">Contrib.</th>
@@ -1950,17 +2275,71 @@ function YearTable({ result, retirementAge }: { result: NonNullable<ReturnType<t
           </thead>
           <tbody>
             {data.map((y) => (
-              <tr key={y.age} style={y.depleted ? { color: 'var(--red)' } : {}}>
-                <td>{y.age}</td>
-                <td className="text-right">{formatCurrency(y.beginningAssets, { compact: true })}</td>
-                <td className="text-right">{y.contributions > 0 ? formatCurrency(y.contributions, { compact: true }) : '—'}</td>
-                <td className="text-right" style={{ color: 'var(--green)' }}>{y.growth > 0 ? '+' + formatCurrency(y.growth, { compact: true }) : '—'}</td>
-                <td className="text-right">{y.income > 0 ? formatCurrency(y.income, { compact: true }) : '—'}</td>
-                <td className="text-right" style={{ color: y.withdrawals > 0 ? 'var(--red)' : undefined }}>{y.withdrawals > 0 ? '-' + formatCurrency(y.withdrawals, { compact: true }) : '—'}</td>
-                <td className="text-right">{y.expenses > 0 ? formatCurrency(y.expenses, { compact: true }) : '—'}</td>
-                <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(y.endingAssets, { compact: true })}</td>
-                <td className="text-right muted">{formatCurrency(y.realAssets, { compact: true })}</td>
-              </tr>
+              <>
+                <tr
+                  key={y.age}
+                  style={y.depleted ? { color: 'var(--red)' } : {}}
+                  className="year-row"
+                  onClick={() => setExpandedAge(expandedAge === y.age ? null : y.age)}
+                >
+                  <td className="drag-handle" style={{ cursor: 'pointer', opacity: 1 }}>{expandedAge === y.age ? '▼' : '▶'}</td>
+                  <td style={{ cursor: 'pointer' }}>{y.age}</td>
+                  <td className="text-right">{formatCurrency(y.beginningAssets, { compact: true })}</td>
+                  <td className="text-right">{y.contributions > 0 ? formatCurrency(y.contributions, { compact: true }) : '—'}</td>
+                  <td className="text-right" style={{ color: 'var(--green)' }}>{y.growth > 0 ? '+' + formatCurrency(y.growth, { compact: true }) : '—'}</td>
+                  <td className="text-right">{y.income > 0 ? formatCurrency(y.income, { compact: true }) : '—'}</td>
+                  <td className="text-right" style={{ color: y.withdrawals > 0 ? 'var(--red)' : undefined }}>{y.withdrawals > 0 ? '-' + formatCurrency(y.withdrawals, { compact: true }) : '—'}</td>
+                  <td className="text-right">{y.expenses > 0 ? formatCurrency(y.expenses, { compact: true }) : '—'}</td>
+                  <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(y.endingAssets, { compact: true })}</td>
+                  <td className="text-right muted">{formatCurrency(y.realAssets, { compact: true })}</td>
+                </tr>
+                {expandedAge === y.age && (
+                  <tr key={`${y.age}-detail`} className="year-detail-row">
+                    <td colSpan={10} style={{ padding: 0 }}>
+                      <div className="year-detail">
+                        <div className="year-detail-grid">
+                          <div className="year-detail-section">
+                            <div className="year-detail-title">💵 Income Sources</div>
+                            <table className="data-table year-detail-table">
+                              <tbody>
+                                {(() => {
+                                  const items = getIncomeBreakdown(scenario, y.age);
+                                  if (items.length === 0) return <tr><td className="muted">No income this year</td></tr>;
+                                  return items.map((item, i) => (
+                                    <tr key={i}>
+                                      <td>{item.name}</td>
+                                      <td className="muted" style={{ fontSize: 11 }}>{prettify(item.type)}</td>
+                                      <td className="text-right" style={{ color: 'var(--green)' }}>{formatCurrency(item.amount)}</td>
+                                    </tr>
+                                  ));
+                                })()}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div className="year-detail-section">
+                            <div className="year-detail-title">📋 Expenses</div>
+                            <table className="data-table year-detail-table">
+                              <tbody>
+                                {(() => {
+                                  const items = getExpenseBreakdown(scenario, y.age);
+                                  if (items.length === 0) return <tr><td className="muted">No expenses this year</td></tr>;
+                                  return items.map((item, i) => (
+                                    <tr key={i}>
+                                      <td>{item.name}</td>
+                                      <td className="muted" style={{ fontSize: 11 }}>{prettify(item.category)}</td>
+                                      <td className="text-right" style={{ color: 'var(--red)' }}>{formatCurrency(item.amount)}</td>
+                                    </tr>
+                                  ));
+                                })()}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </>
             ))}
           </tbody>
         </table>
