@@ -298,7 +298,15 @@ export async function callAI(
 
   const choices = data.choices;
   if (choices && Array.isArray(choices) && choices.length > 0) {
-    return choices[0]?.message?.content ?? choices[0]?.text ?? '';
+    const first = choices[0];
+    const content = first?.message?.content ?? first?.text ?? first?.delta?.content ?? '';
+    if (content) return content;
+    // Choice exists but content is empty — inspect why
+    const finishReason = first?.finish_reason ?? 'unknown';
+    throw new Error(
+      `Model returned no content. finish_reason: ${finishReason}. ` +
+      `Try a different model or increase max_tokens.`,
+    );
   }
 
   const fallbackContent = data.content ?? data.text ?? data.output ?? data.result;
