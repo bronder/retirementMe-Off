@@ -82,7 +82,12 @@ export function getDefaultModel(providerId: string): string {
 /** Chat message types for the UI */
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
+  /** Display content (scenario blocks and think blocks stripped) */
   content: string;
+  /** Original raw assistant response before stripping. Used so prior
+   *  turns in the API payload carry full context (including the scenario
+   *  JSON the model previously emitted). */
+  rawContent?: string;
   timestamp: number;
   /** Optional scenario suggestion attached to an assistant message */
   suggestion?: ScenarioSuggestion;

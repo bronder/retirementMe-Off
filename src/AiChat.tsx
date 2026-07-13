@@ -72,8 +72,7 @@ export function AiChat() {
         timestamp: Date.now(),
       };
 
-      const newMessages = [...messages, userMsg];
-      setMessages(newMessages);
+      setMessages((prev) => [...prev, userMsg]);
       setInput('');
       setLoading(true);
       setError(null);
@@ -82,10 +81,18 @@ export function AiChat() {
         const results = store.plan.scenarios.map((s) => runProjection(s));
         const planContext = buildPlanContext(store.plan, results, store.activeScenarioId);
 
+        // Send prior turns with their ORIGINAL raw content (not the
+        // stripped display version) so the model keeps full context.
+        const historyForApi = messages.map((m) => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.rawContent ?? m.content,
+        }));
+        historyForApi.push({ role: 'user', content: text.trim() });
+
         const apiMessages = [
           { role: 'system' as const, content: SYSTEM_PROMPT },
           { role: 'system' as const, content: `Here is the user's current plan data:\n\n${planContext}` },
-          ...newMessages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+          ...historyForApi,
         ];
 
         const response = await callAI(store.aiProvider, store.aiApiKey, store.aiModel, apiMessages);
@@ -96,6 +103,7 @@ export function AiChat() {
         const assistantMsg: ChatMessage = {
           role: 'assistant',
           content: displayContent,
+          rawContent: response,
           timestamp: Date.now(),
           suggestion,
         };
