@@ -97,6 +97,10 @@ export interface Expense {
   startAge: number | null;
   /** Age at which this expense ends (null = continues to end of plan). */
   endAge: number | null;
+  /** Internal: links this expense to a property so it auto-syncs when
+   *  the property is updated. Format: "{propertyId}:{kind}" where kind
+   *  is "tax", "insurance", or "mortgage". */
+  _propertyId?: string;
 }
 
 export type PropertyType = 'primary_residence' | 'vacation' | 'investment' | 'land' | 'other';

@@ -209,11 +209,53 @@ export const usePlanStore = create<PlanStore>()(
         set((state) => ({
           plan: {
             ...state.plan,
-            scenarios: state.plan.scenarios.map((s) =>
-              s.id === scenarioId
-                ? { ...s, properties: [...(s.properties ?? []), { ...property, id: createId() }] }
-                : s,
-            ),
+            scenarios: state.plan.scenarios.map((s) => {
+              if (s.id !== scenarioId) return s;
+              const newId = createId();
+              const prop = { ...property, id: newId };
+              // Auto-create linked expense entries for housing costs so the
+              // Expenses section is the single source of truth.
+              const linkedExpenses: Expense[] = [
+                {
+                  id: createId(),
+                  name: `${prop.name} — Property Tax`,
+                  category: 'housing',
+                  annualAmount: prop.annualPropertyTax,
+                  preRetirement: false,
+                  postRetirement: true,
+                  startAge: null,
+                  endAge: null,
+                  _propertyId: `${newId}:tax`,
+                },
+                {
+                  id: createId(),
+                  name: `${prop.name} — Insurance`,
+                  category: 'insurance',
+                  annualAmount: prop.annualInsurance,
+                  preRetirement: false,
+                  postRetirement: true,
+                  startAge: null,
+                  endAge: null,
+                  _propertyId: `${newId}:insurance`,
+                },
+                {
+                  id: createId(),
+                  name: `${prop.name} — Mortgage`,
+                  category: 'housing',
+                  annualAmount: prop.mortgagePayment ?? Math.round(prop.mortgageBalance / 30),
+                  preRetirement: false,
+                  postRetirement: true,
+                  startAge: null,
+                  endAge: null,
+                  _propertyId: `${newId}:mortgage`,
+                },
+              ];
+              return {
+                ...s,
+                properties: [...(s.properties ?? []), prop],
+                expenses: [...s.expenses, ...linkedExpenses],
+              };
+            }),
           },
         })),
 
@@ -221,16 +263,33 @@ export const usePlanStore = create<PlanStore>()(
         set((state) => ({
           plan: {
             ...state.plan,
-            scenarios: state.plan.scenarios.map((s) =>
-              s.id === scenarioId
-                ? {
-                    ...s,
-                    properties: (s.properties ?? []).map((p) =>
-                      p.id === propertyId ? { ...p, ...patch } : p,
-                    ),
-                  }
-                : s,
-            ),
+            scenarios: state.plan.scenarios.map((s) => {
+              if (s.id !== scenarioId) return s;
+              const prop = s.properties?.find((p) => p.id === propertyId);
+              if (!prop) return s;
+              const updated = { ...prop, ...patch };
+              const updatedExpenses = s.expenses.map((e) => {
+                if (e._propertyId === `${propertyId}:tax`) {
+                  return { ...e, name: `${updated.name} — Property Tax`, annualAmount: updated.annualPropertyTax };
+                }
+                if (e._propertyId === `${propertyId}:insurance`) {
+                  return { ...e, name: `${updated.name} — Insurance`, annualAmount: updated.annualInsurance };
+                }
+                if (e._propertyId === `${propertyId}:mortgage`) {
+                  return {
+                    ...e,
+                    name: `${updated.name} — Mortgage`,
+                    annualAmount: updated.mortgagePayment ?? Math.round(updated.mortgageBalance / 30),
+                  };
+                }
+                return e;
+              });
+              return {
+                ...s,
+                properties: s.properties!.map((p) => (p.id === propertyId ? updated : p)),
+                expenses: updatedExpenses,
+              };
+            }),
           },
         })),
 
@@ -240,7 +299,12 @@ export const usePlanStore = create<PlanStore>()(
             ...state.plan,
             scenarios: state.plan.scenarios.map((s) =>
               s.id === scenarioId
-                ? { ...s, properties: (s.properties ?? []).filter((p) => p.id !== propertyId) }
+                ? {
+                    ...s,
+                    properties: (s.properties ?? []).filter((p) => p.id !== propertyId),
+                    // Remove any expenses linked to this property
+                    expenses: s.expenses.filter((e) => !e._propertyId?.startsWith(propertyId + ':')),
+                  }
                 : s,
             ),
           },
@@ -426,7 +490,7 @@ export const usePlanStore = create<PlanStore>()(
     }),
     {
       name: 'retirement-planner',
-      version: 4,
+      version: 5,
       partialize: (state) => ({
         plan: state.plan,
         activeScenarioId: state.activeScenarioId,
@@ -460,6 +524,58 @@ export const usePlanStore = create<PlanStore>()(
           for (const scenario of state.plan.scenarios) {
             if (!scenario.properties) {
               scenario.properties = [];
+            }
+          }
+        }
+        // v4→v5: housing costs are now sourced from the Expenses section.
+        // For every existing property, create linked expense entries for tax,
+        // insurance, and mortgage. Skips properties that already have linked
+        // expenses (idempotent).
+        if (version < 5 && state?.plan) {
+          for (const scenario of state.plan.scenarios) {
+            if (!scenario.properties) continue;
+            const existingLinked = new Set(
+              scenario.expenses
+                .map((e) => e._propertyId?.split(':')[0])
+                .filter((id): id is string => !!id),
+            );
+            for (const prop of scenario.properties) {
+              if (existingLinked.has(prop.id)) continue;
+              scenario.expenses.push(
+                {
+                  id: `mig-${prop.id}-tax`,
+                  name: `${prop.name} — Property Tax`,
+                  category: 'housing',
+                  annualAmount: prop.annualPropertyTax,
+                  preRetirement: false,
+                  postRetirement: true,
+                  startAge: null,
+                  endAge: null,
+                  _propertyId: `${prop.id}:tax`,
+                } as Expense,
+                {
+                  id: `mig-${prop.id}-insurance`,
+                  name: `${prop.name} — Insurance`,
+                  category: 'insurance',
+                  annualAmount: prop.annualInsurance,
+                  preRetirement: false,
+                  postRetirement: true,
+                  startAge: null,
+                  endAge: null,
+                  _propertyId: `${prop.id}:insurance`,
+                } as Expense,
+                {
+                  id: `mig-${prop.id}-mortgage`,
+                  name: `${prop.name} — Mortgage`,
+                  category: 'housing',
+                  annualAmount: prop.mortgagePayment ?? Math.round(prop.mortgageBalance / 30),
+                  preRetirement: false,
+                  postRetirement: true,
+                  startAge: null,
+                  endAge: null,
+                  _propertyId: `${prop.id}:mortgage`,
+                } as Expense,
+              );
             }
           }
         }

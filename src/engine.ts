@@ -42,8 +42,6 @@ export function runProjection(scenario: Scenario): ProjectionResult {
       ? Math.max(assumptions.endAge, assumptions.spouse.endAge)
       : assumptions.endAge;
 
-  // Track computed mortgage payments per property across years (persists outside loop)
-  const computedMortgages: Record<string, number> = {};
 
   for (let age = assumptions.currentAge; age <= planEndAge; age++) {
     const year = birthYear + age;
@@ -113,49 +111,22 @@ export function runProjection(scenario: Scenario): ProjectionResult {
     // --- Life events (initialize first) ---
     let eventCashFlow = 0;
 
-    // --- Properties (tax, insurance, mortgage, purchase, sale) ---
+    // --- Properties (purchase, sale events only) ---
+    // Housing costs (property tax, insurance, mortgage) are now sourced from the
+    // Expenses section — each property auto-creates linked expense entries on
+    // add/update, so the engine no longer reads them from the Property fields.
+    // The Property section only tracks net worth and one-time purchase/sale events.
     if (scenario.properties) {
       for (const prop of scenario.properties) {
         // One-time purchase: down payment deducted from savings
         if (prop.purchaseAge && age === prop.purchaseAge) {
           const dp = (prop.downPayment ?? 0) * inflationFactor;
           eventCashFlow -= dp; // reduces net worth
-          // Compute new mortgage payment amount (annual, in today's $)
-          const loanAmount = (prop.purchasePrice ?? 0) - (prop.downPayment ?? 0);
-          if (loanAmount > 0 && prop.mortgageRate !== undefined && prop.mortgageTerm) {
-            const r = prop.mortgageRate;
-            const n = prop.mortgageTerm;
-            const monthlyPayment = loanAmount * (r / 12) * Math.pow(1 + r / 12, n * 12) / (Math.pow(1 + r / 12, n * 12) - 1);
-            computedMortgages[prop.id] = monthlyPayment * 12; // annual
-          }
         }
 
-        // One-time sale: proceeds added to savings, stop recurring costs
+        // One-time sale: proceeds added to savings
         if (prop.saleAge && age === prop.saleAge) {
           eventCashFlow += (prop.saleProceeds ?? 0) * inflationFactor;
-          continue; // skip tax/insurance/mortgage for this property after sale
-        }
-
-        // Skip expenses before purchase age (future purchase not yet happened)
-        if (prop.purchaseAge && age < prop.purchaseAge) continue;
-
-        // Property tax + insurance
-        expenses += (prop.annualPropertyTax + prop.annualInsurance) * inflationFactor;
-
-        // New mortgage payment (after a future purchase)
-        if (computedMortgages[prop.id]) {
-          expenses += computedMortgages[prop.id] * inflationFactor;
-        }
-
-        // Existing mortgage — use actual payment if provided, otherwise estimate
-        if (!prop.purchaseAge && prop.mortgageBalance > 0) {
-          const yearsLeft = prop.mortgageYearsLeft ?? 30;
-          // Only charge mortgage payment if years haven't expired
-          const yearsFromPurchase = age - assumptions.currentAge;
-          if (yearsFromPurchase < yearsLeft) {
-            const annualPayment = prop.mortgagePayment ?? (prop.mortgageBalance / 30);
-            expenses += annualPayment * inflationFactor;
-          }
         }
       }
     }
