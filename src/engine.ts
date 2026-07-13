@@ -73,13 +73,25 @@ export function runProjection(scenario: Scenario): ProjectionResult {
     }
 
     // --- Income (any active income source, pre- or post-retirement) ---
+    // All income amounts are entered in today's dollars (same as expenses).
     let income = 0;
     for (const inc of scenario.incomeSources) {
       if (age >= inc.startAge && (inc.endAge === null || age <= inc.endAge)) {
-        const colaFactor = inc.cola
-          ? Math.pow(1 + assumptions.socialSecurityCola, age - inc.startAge)
-          : 1;
-        const nominalGross = inc.annualAmount * inflationFactor * colaFactor;
+        let nominalGross: number;
+        if (inc.cola) {
+          // COLA income (e.g. Social Security): grows with inflation from
+          // today's dollars. inflationFactor already captures this growth —
+          // a separate COLA factor would double-count inflation.
+          nominalGross = inc.annualAmount * inflationFactor;
+        } else {
+          // Non-COLA income (e.g. fixed pension): the nominal amount is set
+          // at startAge (inflated from today's dollars) and stays fixed.
+          const startAgeInflation = Math.pow(
+            1 + assumptions.inflationRate,
+            inc.startAge - assumptions.currentAge,
+          );
+          nominalGross = inc.annualAmount * startAgeInflation;
+        }
         const nominalNet = inc.taxable
           ? nominalGross * (1 - assumptions.retirementTaxRate)
           : nominalGross;

@@ -163,6 +163,58 @@ describe('runProjection', () => {
     expect(lateYear.expenses).toBe(12000);
   });
 
+  it('does not double-inflate COLA income (Social Security)', () => {
+    // Social Security entered as $34,800/yr ($2,900/mo), starts at 67.
+    // With 3% inflation, at age 67 (7 years from now): nominal should be
+    // 34800 * 1.03^7 ≈ 42799. In today's dollars it should still be 34800.
+    // The old code multiplied by an additional COLA factor, inflating too fast.
+    const scenario = makeScenario({
+      assumptions: { ...makeScenario().assumptions, currentAge: 60, retirementAge: 67, endAge: 75, inflationRate: 0.03, socialSecurityCola: 0.025 },
+      accounts: [
+        { id: 'a1', name: 'Savings', type: 'taxable_brokerage', balance: 10000000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+      ],
+      incomeSources: [
+        { id: 'i1', name: 'SS', type: 'social_security', annualAmount: 34800, startAge: 67, endAge: null, cola: true, taxable: false },
+      ],
+    });
+    const result = runProjection(scenario);
+
+    // At age 67 (start): 34800 * 1.03^7 ≈ 42799
+    const age67 = result.years.find((y) => y.age === 67)!;
+    expect(age67.income).toBeCloseTo(42799, -1);
+
+    // At age 68: 34800 * 1.03^8 ≈ 44083 (NOT 34800 * 1.03^8 * 1.025^1)
+    const age68 = result.years.find((y) => y.age === 68)!;
+    expect(age68.income).toBeCloseTo(44083, -1);
+
+    // Verify real (today's $) income is still ~34800 at age 67
+    const realIncome67 = age67.income / Math.pow(1.03, 7);
+    expect(realIncome67).toBeCloseTo(34800, -1);
+  });
+
+  it('keeps non-COLA income at a fixed nominal amount', () => {
+    // Fixed pension: $20,000/yr starting at 65. With 3% inflation,
+    // the nominal amount is set at startAge and stays fixed thereafter.
+    const scenario = makeScenario({
+      assumptions: { ...makeScenario().assumptions, currentAge: 60, retirementAge: 65, endAge: 75, inflationRate: 0.03 },
+      accounts: [
+        { id: 'a1', name: 'Savings', type: 'taxable_brokerage', balance: 10000000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+      ],
+      incomeSources: [
+        { id: 'i1', name: 'Pension', type: 'pension', annualAmount: 20000, startAge: 65, endAge: null, cola: false, taxable: false },
+      ],
+    });
+    const result = runProjection(scenario);
+
+    // At age 65 (start): 20000 * 1.03^5 = 23186
+    const age65 = result.years.find((y) => y.age === 65)!;
+    expect(age65.income).toBeCloseTo(23186, -1);
+
+    // At age 70: still 23186 (fixed nominal, NOT grown by inflation each year)
+    const age70 = result.years.find((y) => y.age === 70)!;
+    expect(age70.income).toBeCloseTo(23186, -1);
+  });
+
   it('applies inflation to expenses', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 40, retirementAge: 41, endAge: 45, inflationRate: 0.03 },

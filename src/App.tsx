@@ -2183,8 +2183,15 @@ function getIncomeBreakdown(scenario: NonNullable<ReturnType<typeof usePlanStore
 
   for (const inc of scenario.incomeSources) {
     if (age >= inc.startAge && (inc.endAge === null || age <= inc.endAge)) {
-      const colaFactor = inc.cola ? Math.pow(1 + a.socialSecurityCola, age - inc.startAge) : 1;
-      const nominalGross = inc.annualAmount * inflationFactor * colaFactor;
+      let nominalGross: number;
+      if (inc.cola) {
+        // COLA income grows with inflation — inflationFactor alone captures this.
+        nominalGross = inc.annualAmount * inflationFactor;
+      } else {
+        // Non-COLA income: nominal amount is fixed at startAge (inflated from today's $).
+        const startAgeInflation = Math.pow(1 + a.inflationRate, inc.startAge - a.currentAge);
+        nominalGross = inc.annualAmount * startAgeInflation;
+      }
       const nominalNet = inc.taxable ? nominalGross * (1 - a.retirementTaxRate) : nominalGross;
       items.push({ name: inc.name, amount: nominalNet, type: inc.type });
     }
