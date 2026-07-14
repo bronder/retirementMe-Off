@@ -246,6 +246,20 @@ export interface ProjectionYear {
   realAssets: number;
   /** Whether the plan ran out of money at or before this year. */
   depleted: boolean;
+
+  // --- Property net-worth components ---
+  /** Sum of all properties' market values at this year (nominal $). Always ≥ 0. */
+  propertyValue: number;
+  /**
+   * Sum of all properties' equity (market value minus outstanding mortgage
+   * balance) at this year (nominal $). Always ≥ 0. The mortgage balance is
+   * currently static (no amortization modeled), so equity grows purely
+   * through property appreciation. Always ≥ 0. */
+  propertyEquity: number;
+  /** Same as `propertyValue` but expressed in today's dollars (real $). */
+  realPropertyValue: number;
+  /** Same as `propertyEquity` but expressed in today's dollars (real $). */
+  realPropertyEquity: number;
 }
 
 export interface ProjectionResult {

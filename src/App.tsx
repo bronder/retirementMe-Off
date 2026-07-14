@@ -885,6 +885,16 @@ function OverviewPanel({ scenario, store }: {
   const currentNetWorth = scenario.accounts.reduce((s, a) => s + a.balance, 0);
   const totalContributions = scenario.accounts.reduce((s, a) => s + a.annualContribution + a.employerMatch, 0);
 
+  // Net worth includes both financial-account balances AND home equity
+  // (property market value minus outstanding mortgage). The mortgage
+  // balance is treated as static here — see propertyValueAtAge in engine.ts
+  // for the matching treatment in the year-by-year chart.
+  const propertyEquityNow = (scenario.properties ?? []).reduce(
+    (s, p) => s + Math.max(0, (p.currentValue ?? 0) - (p.mortgageBalance ?? 0)),
+    0,
+  );
+  const totalNetWorth = currentNetWorth + propertyEquityNow;
+
   const checks = [
     { label: 'Has at least 1 account', pass: scenario.accounts.length > 0, weight: 8 },
     { label: 'Account balances > $0', pass: scenario.accounts.some(a => a.balance > 0), weight: 7 },
@@ -910,25 +920,52 @@ function OverviewPanel({ scenario, store }: {
   const wellnessLabel = wellnessScore >= 80 ? 'Well Populated' : wellnessScore >= 50 ? 'Needs Attention' : 'Incomplete';
   const gaugeDeg = Math.min(180, (wellnessScore / 100) * 180);
 
-  const miniChartData = result.years.map((y) => ({ age: y.age, netWorth: Math.round(y.realAssets) }));
+  // Mini-chart series: stacked liquid + property equity so users see both
+  // the financial-account trajectory and how much of their wealth is tied
+  // up in real estate. `total` is the convenience top-line sum.
+  const miniChartData = result.years.map((y) => ({
+    age: y.age,
+    liquid: Math.round(y.realAssets),
+    propertyEquity: Math.round(y.realPropertyEquity),
+    total: Math.round(y.realAssets + y.realPropertyEquity),
+  }));
+
+  // Build the sub-line under "Current Net Worth" — distinguishes liquid
+  // accounts vs. home equity so users understand what the total includes.
+  const accountCount = scenario.accounts.length;
+  const netWorthSub = propertyEquityNow > 0
+    ? `${formatCurrency(currentNetWorth, { compact: true })} liquid · ${formatCurrency(propertyEquityNow, { compact: true })} equity`
+    : `${accountCount} ${accountCount === 1 ? 'account' : 'accounts'}`;
 
   return (
     <div>
       <div className="summary-grid">
         <div className="summary-card">
           <div className="label">Current Net Worth</div>
-          <div className="value">{formatCurrency(currentNetWorth, { compact: true })}</div>
-          <div className="sub">{scenario.accounts.length} {scenario.accounts.length === 1 ? 'account' : 'accounts'}</div>
+          <div className="value">{formatCurrency(totalNetWorth, { compact: true })}</div>
+          <div className="sub">{netWorthSub}</div>
         </div>
         <div className="summary-card">
           <div className="label">Projected at Retirement</div>
-          <div className="value">{formatCurrency(readiness.nestEggAtRetirement, { compact: true })}</div>
-          <div className="sub">{formatCurrency(readiness.nestEggAtRetirementReal, { compact: true })} in today's $</div>
+          <div className="value">
+            {formatCurrency(
+              readiness.nestEggAtRetirement +
+                (result.years.find((y) => y.age === scenario.assumptions.retirementAge)?.propertyEquity ?? 0),
+              { compact: true },
+            )}
+          </div>
+          <div className="sub">
+            {formatCurrency(
+              readiness.nestEggAtRetirementReal +
+                (result.years.find((y) => y.age === scenario.assumptions.retirementAge)?.realPropertyEquity ?? 0),
+              { compact: true },
+            )} in today's $
+          </div>
         </div>
         <div className="summary-card">
           <div className="label">Annual Savings Rate</div>
           <div className="value">{formatCurrency(totalContributions, { compact: true })}</div>
-          <div className="sub">{totalContributions > 0 && currentNetWorth > 0 ? `${formatPercent(totalContributions / currentNetWorth)} of net worth` : '—'}</div>
+          <div className="sub">{totalContributions > 0 && totalNetWorth > 0 ? `${formatPercent(totalContributions / totalNetWorth)} of net worth` : '—'}</div>
         </div>
         <div className="summary-card">
           <div className="label">Plan Outcome</div>
@@ -968,16 +1005,25 @@ function OverviewPanel({ scenario, store }: {
         <ResponsiveContainer width="100%" height={240}>
           <AreaChart data={miniChartData}>
             <defs>
-              <linearGradient id="overviewGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={tc.chart} stopOpacity={0.3} />
+              <linearGradient id="overviewGradientLiquid" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={tc.chart} stopOpacity={0.35} />
                 <stop offset="100%" stopColor={tc.chart} stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="overviewGradientProperty" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={tc.chart3} stopOpacity={0.35} />
+                <stop offset="100%" stopColor={tc.chart3} stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
             <XAxis dataKey="age" stroke={tc.textDim} />
             <YAxis stroke={tc.textDim} tickFormatter={(v) => formatCurrency(v, { compact: true })} />
             <Tooltip contentStyle={{ background: tc.panel, border: `1px solid ${tc.border}`, borderRadius: 8 }} formatter={(v: number) => formatCurrency(v)} labelFormatter={(l) => `Age ${l}`} labelStyle={{ color: tc.text }} itemStyle={{ color: tc.text }} />
-            <Area type="monotone" dataKey="netWorth" stroke={tc.chart} strokeWidth={2} fill="url(#overviewGradient)" />
+            <Legend />
+            {/* Stacked: liquid assets on the bottom, property equity on top. */}
+            <Area type="monotone" dataKey="liquid" stackId="networth" name="Liquid Assets" stroke={tc.chart} strokeWidth={2} fill="url(#overviewGradientLiquid)" />
+            <Area type="monotone" dataKey="propertyEquity" stackId="networth" name="Home Equity" stroke={tc.chart3} strokeWidth={2} fill="url(#overviewGradientProperty)" />
+            {/* Top-line overlay showing total net worth so the user can read it directly. */}
+            <Area type="monotone" dataKey="total" name="Total Net Worth" stroke={tc.text} strokeWidth={1.5} fill="none" strokeDasharray="0" />
             <ReferenceLine x={scenario.assumptions.retirementAge} stroke={tc.yellow} strokeDasharray="5 5" label={{ value: 'Retire', fill: tc.yellow, fontSize: 11 }} />
             {scenario.events.filter((ev) => ev.proceeds > 0 || ev.cost > 0).map((ev) => (
               <ReferenceLine
@@ -2221,10 +2267,18 @@ function ResultsView({ scenario, result, readiness }: {
 
   const tooltipStyle = { background: tc.panel, border: `1px solid ${tc.border}`, borderRadius: 8 };
 
+  // Net worth chart: liquid (financial accounts) + home equity, stacked.
+  // `nominal` and `real` are summed totals so the user can read total net
+  // worth directly from the legend. The property-component series
+  // (`homeNominal`, `homeReal`) is computed per-year from the engine.
   const chartData = result.years.map((y) => ({
     age: y.age,
-    'Nominal Assets': Math.round(y.endingAssets),
-    'Today\'s Dollars': Math.round(y.realAssets),
+    'Liquid (Nominal)': Math.round(y.endingAssets),
+    'Home Equity (Nominal)': Math.round(y.propertyEquity),
+    'Total (Nominal)': Math.round(y.endingAssets + y.propertyEquity),
+    'Liquid (Today\u2019s $)': Math.round(y.realAssets),
+    'Home Equity (Today\u2019s $)': Math.round(y.realPropertyEquity),
+    'Total (Today\u2019s $)': Math.round(y.realAssets + y.realPropertyEquity),
   }));
 
   const cashFlowData = result.years.filter((y) => y.age >= scenario.assumptions.retirementAge).map((y) => ({
@@ -2329,11 +2383,29 @@ function ResultsView({ scenario, result, readiness }: {
 
           {section === 'deterministic' && (
             <>
-              {/* Net worth chart */}
+              {/* Net worth chart — stacked liquid + home equity, nominal and real $ */}
               <div className="chart-container">
                 <h3>Projected Net Worth Over Time</h3>
                 <ResponsiveContainer width="100%" height={320}>
                   <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="detGradientLiquidNom" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={tc.chart} stopOpacity={0.25} />
+                        <stop offset="100%" stopColor={tc.chart} stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="detGradientLiquidReal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={tc.chart2} stopOpacity={0.2} />
+                        <stop offset="100%" stopColor={tc.chart2} stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="detGradientHomeNom" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={tc.chart3} stopOpacity={0.25} />
+                        <stop offset="100%" stopColor={tc.chart3} stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="detGradientHomeReal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={tc.chart4} stopOpacity={0.2} />
+                        <stop offset="100%" stopColor={tc.chart4} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
                     <XAxis dataKey="age" stroke={tc.textDim} />
                     <YAxis stroke={tc.textDim} tickFormatter={(v) => formatCurrency(v, { compact: true })} />
@@ -2345,8 +2417,12 @@ function ResultsView({ scenario, result, readiness }: {
                       itemStyle={{ color: tc.text }}
                     />
                     <Legend />
-                    <Area type="monotone" dataKey="Nominal Assets" stroke={tc.chart} fill={tc.chart} fillOpacity={0.15} />
-                    <Area type="monotone" dataKey="Today's Dollars" stroke={tc.chart2} fill={tc.chart2} fillOpacity={0.1} />
+                    {/* Nominal — stacked liquid (bottom) + home equity (top) */}
+                    <Area type="monotone" dataKey="Liquid (Nominal)" stackId="nom" stroke={tc.chart} fill="url(#detGradientLiquidNom)" strokeWidth={1.5} />
+                    <Area type="monotone" dataKey="Home Equity (Nominal)" stackId="nom" stroke={tc.chart3} fill="url(#detGradientHomeNom)" strokeWidth={1.5} />
+                    {/* Today's $ — stacked liquid + home equity */}
+                    <Area type="monotone" dataKey="Liquid (Today\u2019s $)" stackId="real" stroke={tc.chart2} fill="url(#detGradientLiquidReal)" strokeWidth={1.5} />
+                    <Area type="monotone" dataKey="Home Equity (Today\u2019s $)" stackId="real" stroke={tc.chart4} fill="url(#detGradientHomeReal)" strokeWidth={1.5} />
                     <ReferenceLine x={scenario.assumptions.retirementAge} stroke={tc.yellow} strokeDasharray="5 5" label={{ value: 'Retire', fill: tc.yellow, fontSize: 11 }} />
                     {scenario.events.filter((ev) => ev.proceeds > 0 || ev.cost > 0).map((ev) => (
                       <ReferenceLine
@@ -2588,6 +2664,9 @@ function YearTable({ result, retirementAge, scenario }: { result: NonNullable<Re
 function CompareView({ results }: { results: NonNullable<ReturnType<typeof runProjection>>[] }) {
   const tc = useThemeColors();
   const tooltipStyle = { background: tc.panel, border: `1px solid ${tc.border}`, borderRadius: 8 };
+  // Each scenario gets two parallel lines: liquid and total (incl. home equity).
+  // Total - Liquid === Home Equity at that age, so the gap between the lines
+  // visually communicates how much of each scenario's wealth is real estate.
   const compareData = useMemo(() => {
     const maxAge = Math.max(...results.map((r) => r.years[r.years.length - 1]?.age ?? 0));
     const data: Record<string, number | string>[] = [];
@@ -2595,7 +2674,9 @@ function CompareView({ results }: { results: NonNullable<ReturnType<typeof runPr
       const row: Record<string, number | string> = { age };
       results.forEach((r) => {
         const y = r.years.find((y) => y.age === age);
-        row[r.scenarioName] = y ? Math.round(y.realAssets) : 0;
+        if (!y) return;
+        row[`${r.scenarioName} (Liquid)`] = Math.round(y.realAssets);
+        row[`${r.scenarioName} (Total)`] = Math.round(y.realAssets + y.realPropertyEquity);
       });
       data.push(row);
     }
@@ -2635,9 +2716,18 @@ function CompareView({ results }: { results: NonNullable<ReturnType<typeof runPr
               itemStyle={{ color: tc.text }}
             />
             <Legend />
-            {results.map((r, i) => (
-              <Line key={r.scenarioId} type="monotone" dataKey={r.scenarioName} stroke={colors[i % colors.length]} strokeWidth={2} dot={false} />
-            ))}
+            {results.map((r, i) => {
+              const c = colors[i % colors.length];
+              // Liquid line: solid. Total line (incl. home equity): same
+              // color, dashed, slightly thinner — the gap between them is
+              // the home equity contribution at each age.
+              return (
+                <g key={r.scenarioId}>
+                  <Line type="monotone" dataKey={`${r.scenarioName} (Liquid)`} name={r.scenarioName} stroke={c} strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey={`${r.scenarioName} (Total)`} name={`${r.scenarioName} (+ home)`} stroke={c} strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
+                </g>
+              );
+            })}
           </LineChart>
         </ResponsiveContainer>
       </div>

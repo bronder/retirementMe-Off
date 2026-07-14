@@ -459,3 +459,204 @@ describe('runMonteCarloProjection', () => {
     expect(checkedDepleted).toBeGreaterThan(0);
   });
 });
+
+/* ============================================================
+   PROPERTY NET-WORTH TESTS
+   ============================================================
+   Property values are now part of net worth (see ProjectionYear).
+   These tests pin down the appreciation / sale / future-purchase
+   semantics so future engine changes don't silently regress them. */
+
+describe('runProjection property net worth', () => {
+  it('reports zero propertyValue when no properties exist', () => {
+    const scenario = makeScenario({
+      accounts: [
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.05, annualContribution: 0, employerMatch: 0 },
+      ],
+    });
+    const result = runProjection(scenario);
+    for (const y of result.years) {
+      expect(y.propertyValue).toBe(0);
+      expect(y.propertyEquity).toBe(0);
+      expect(y.realPropertyValue).toBe(0);
+      expect(y.realPropertyEquity).toBe(0);
+    }
+  });
+
+  it('appraises an owned property each year using annualAppreciation', () => {
+    // $500k home, 3% annual appreciation. At age 40, value=500k. At 50,
+    // value = 500k * 1.03^10 ≈ 671,958.
+    const scenario = makeScenario({
+      accounts: [],
+      properties: [
+        {
+          id: 'p1',
+          name: 'Family Home',
+          type: 'primary_residence',
+          currentValue: 500000,
+          mortgageBalance: 200000,
+          mortgagePayment: 12000,
+          mortgageYearsLeft: 25,
+          annualAppreciation: 0.03,
+          annualPropertyTax: 6000,
+          annualInsurance: 1800,
+        },
+      ],
+    });
+    const result = runProjection(scenario);
+    const yr40 = result.years.find((y) => y.age === 40)!;
+    const yr50 = result.years.find((y) => y.age === 50)!;
+    expect(yr40.propertyValue).toBeCloseTo(500000, 0);
+    expect(yr50.propertyValue).toBeCloseTo(500000 * Math.pow(1.03, 10), 0);
+  });
+
+  it('subtracts mortgage balance to give propertyEquity (mortgage held static)', () => {
+    // The engine doesn't amortize the mortgage — equity grows purely
+    // through appreciation. Equity at age 50:
+    //   value - balance = 500000 * 1.03^10 - 200000.
+    const scenario = makeScenario({
+      accounts: [],
+      properties: [
+        {
+          id: 'p1',
+          name: 'Family Home',
+          type: 'primary_residence',
+          currentValue: 500000,
+          mortgageBalance: 200000,
+          mortgagePayment: 12000,
+          mortgageYearsLeft: 25,
+          annualAppreciation: 0.03,
+          annualPropertyTax: 6000,
+          annualInsurance: 1800,
+        },
+      ],
+    });
+    const result = runProjection(scenario);
+    const yr50 = result.years.find((y) => y.age === 50)!;
+    expect(yr50.propertyEquity).toBeCloseTo(500000 * Math.pow(1.03, 10) - 200000, 0);
+  });
+
+  it('returns 0 property value after saleAge', () => {
+    const scenario = makeScenario({
+      accounts: [],
+      properties: [
+        {
+          id: 'p1',
+          name: 'Family Home',
+          type: 'primary_residence',
+          currentValue: 500000,
+          mortgageBalance: 200000,
+          annualAppreciation: 0.03,
+          annualPropertyTax: 6000,
+          annualInsurance: 1800,
+          saleAge: 65,
+          saleProceeds: 350000,
+        },
+      ],
+    });
+    const result = runProjection(scenario);
+    // At age 64 (just before sale), value is still positive.
+    const yr64 = result.years.find((y) => y.age === 64)!;
+    expect(yr64.propertyValue).toBeGreaterThan(0);
+    // At age 65 (sale year), value drops to 0.
+    const yr65 = result.years.find((y) => y.age === 65)!;
+    expect(yr65.propertyValue).toBe(0);
+    expect(yr65.propertyEquity).toBe(0);
+    // And stays 0 forever after.
+    const yr80 = result.years.find((y) => y.age === 80)!;
+    expect(yr80.propertyValue).toBe(0);
+  });
+
+  it('returns 0 property value before purchaseAge for future purchases', () => {
+    // Property bought at age 55 with $400k purchase price and 3% appreciation.
+    // Before 55: value = 0. From 55 onward: value = 400000 * 1.03^(age-55).
+    const scenario = makeScenario({
+      accounts: [],
+      properties: [
+        {
+          id: 'p1',
+          name: 'Vacation Home',
+          type: 'vacation',
+          currentValue: 0,
+          mortgageBalance: 0,
+          annualAppreciation: 0.03,
+          annualPropertyTax: 0,
+          annualInsurance: 0,
+          purchaseAge: 55,
+          purchasePrice: 400000,
+          downPayment: 80000,
+          mortgageRate: 0.06,
+          mortgageTerm: 30,
+        },
+      ],
+    });
+    const result = runProjection(scenario);
+    const yr54 = result.years.find((y) => y.age === 54)!;
+    const yr55 = result.years.find((y) => y.age === 55)!;
+    const yr60 = result.years.find((y) => y.age === 60)!;
+    expect(yr54.propertyValue).toBe(0);
+    expect(yr55.propertyValue).toBeCloseTo(400000, 0);
+    expect(yr60.propertyValue).toBeCloseTo(400000 * Math.pow(1.03, 5), 0);
+  });
+
+  it('exposes propertyValue and propertyEquity in nominal and real ($today) terms', () => {
+    const scenario = makeScenario({
+      accounts: [],
+      properties: [
+        {
+          id: 'p1',
+          name: 'Family Home',
+          type: 'primary_residence',
+          currentValue: 500000,
+          mortgageBalance: 100000,
+          annualAppreciation: 0.03,
+          annualPropertyTax: 6000,
+          annualInsurance: 1800,
+        },
+      ],
+    });
+    const result = runProjection(scenario);
+    // At age 40 (currentAge), nominal === real for value (inflationFactor=1).
+    const yr40 = result.years.find((y) => y.age === 40)!;
+    expect(yr40.realPropertyValue).toBeCloseTo(yr40.propertyValue, 0);
+    expect(yr40.realPropertyEquity).toBeCloseTo(yr40.propertyEquity, 0);
+    // At age 50 (10 years out), inflation reduces real values relative to nominal.
+    const yr50 = result.years.find((y) => y.age === 50)!;
+    expect(yr50.realPropertyValue).toBeLessThan(yr50.propertyValue);
+    // realPropertyValue = nominal / (1 + inflation)^10
+    const inflationFactor = Math.pow(1 + 0.03, 10);
+    expect(yr50.realPropertyValue).toBeCloseTo(yr50.propertyValue / inflationFactor, 0);
+  });
+
+  it('lets getReadinessSummary combine accounts and home equity for "nest egg at retirement"', () => {
+    // At retirement, the net worth should be account balance + property equity.
+    const scenario = makeScenario({
+      accounts: [
+        { id: 'a1', name: '401k', type: 'traditional_401k', balance: 600000, annualReturn: 0.07, annualContribution: 15000, employerMatch: 5000 },
+      ],
+      properties: [
+        {
+          id: 'p1',
+          name: 'Family Home',
+          type: 'primary_residence',
+          currentValue: 500000,
+          mortgageBalance: 100000,
+          annualAppreciation: 0.03,
+          annualPropertyTax: 6000,
+          annualInsurance: 1800,
+        },
+      ],
+    });
+    const result = runProjection(scenario);
+    const retYear = result.years.find((y) => y.age === scenario.assumptions.retirementAge)!;
+    // Total net worth at retirement = endingAssets (accounts) + propertyEquity.
+    const totalNetWorth = retYear.endingAssets + retYear.propertyEquity;
+    // Home equity at retirement: 500k * 1.03^25 - 100k ≈ $1,047,347 - 100k ≈ $947,347
+    expect(retYear.propertyEquity).toBeCloseTo(500000 * Math.pow(1.03, 25) - 100000, 0);
+    // Sanity: propertyEquity should be a large positive contribution.
+    expect(retYear.propertyEquity).toBeGreaterThan(500000);
+    // The summary's nestEggAtRetirement uses the accounts-only beginningAssets;
+    // net worth including property lives in the year row directly.
+    expect(totalNetWorth).toBeGreaterThan(retYear.endingAssets);
+  });
+});

@@ -45,6 +45,46 @@ export function runProjection(scenario: Scenario): ProjectionResult {
 }
 
 /**
+ * Compute the nominal market value of a single property at a given age,
+ * accounting for:
+ *   - already-owned properties: value grows from currentValue at currentAge
+ *   - future purchases: value is 0 before purchaseAge, then grows from
+ *     purchasePrice at purchaseAge
+ *   - sales: value drops to 0 at saleAge
+ *
+ * Appreciation uses the property's `annualAppreciation` rate.
+ *
+ * Note: the engine does not currently model mortgage amortization, so
+ * `mortgageBalance` is treated as a static liability (paid down implicitly
+ * via the auto-created mortgage expense). This function returns only the
+ * market value; subtracting the (static) balance to get equity is the
+ * caller's job.
+ */
+function propertyValueAtAge(
+  prop: {
+    currentValue: number;
+    annualAppreciation: number;
+    purchaseAge?: number | null;
+    purchasePrice?: number;
+    saleAge?: number | null;
+  },
+  age: number,
+  currentAge: number,
+): number {
+  // After a sale, the property is gone.
+  if (prop.saleAge && age >= prop.saleAge) return 0;
+
+  // Future purchase: no value before the purchase year.
+  if (prop.purchaseAge && age < prop.purchaseAge) return 0;
+
+  // Determine the base age and base value for the appreciation calculation.
+  const baseAge = prop.purchaseAge ?? currentAge;
+  const baseValue = prop.purchaseAge ? (prop.purchasePrice ?? 0) : prop.currentValue;
+  const years = age - baseAge;
+  return baseValue * Math.pow(1 + prop.annualAppreciation, years);
+}
+
+/**
  * Core projection loop. Identical to `runProjection` but takes a return
  * sampler so Monte Carlo can inject randomness without changing the
  * single-run semantics.
@@ -162,7 +202,7 @@ export function runProjectionCore(
     // Housing costs (property tax, insurance, mortgage) are now sourced from the
     // Expenses section — each property auto-creates linked expense entries on
     // add/update, so the engine no longer reads them from the Property fields.
-    // The Property section only tracks net worth and one-time purchase/sale events.
+    // The Property section tracks net worth and one-time purchase/sale events.
     if (scenario.properties) {
       for (const prop of scenario.properties) {
         // One-time purchase: down payment deducted from savings
@@ -190,6 +230,30 @@ export function runProjectionCore(
         }
       }
     }
+
+    // --- Property values (for net worth) ---
+    // Sum the market value of every property the user owns at this age.
+    // We exclude any liability still owed on the property (the mortgage
+    // balance) — true net worth = assets − liabilities = value − mortgage.
+    // The mortgage balance is treated as static for now (no amortization);
+    // see propertyValueAtAge for details.
+    let propertyValue = 0;
+    let propertyMortgage = 0;
+    if (scenario.properties) {
+      for (const prop of scenario.properties) {
+        propertyValue += propertyValueAtAge(prop, age, assumptions.currentAge);
+        // Only count the mortgage while the property is still owned
+        // (before saleAge). For future purchases, the mortgage doesn't
+        // exist yet (the auto-created mortgage expense starts at
+        // purchaseAge).
+        if (!prop.saleAge || age < prop.saleAge) {
+          if (!prop.purchaseAge || age >= prop.purchaseAge) {
+            propertyMortgage += prop.mortgageBalance ?? 0;
+          }
+        }
+      }
+    }
+    const propertyEquity = Math.max(0, propertyValue - propertyMortgage);
 
     // --- Withdrawals / Deposits ---
     // Determine the net cash needed from (or surplus to deposit into) assets.
@@ -235,6 +299,12 @@ export function runProjectionCore(
       eventCashFlow,
       realAssets: Math.max(0, endingAssets) / inflationFactor,
       depleted: endingAssets <= 0,
+      // Property net-worth components (nominal at this year, plus today's-
+      // dollar versions for the chart that shows real purchasing power).
+      propertyValue: Math.max(0, propertyValue),
+      propertyEquity: Math.max(0, propertyEquity),
+      realPropertyValue: Math.max(0, propertyValue) / inflationFactor,
+      realPropertyEquity: Math.max(0, propertyEquity) / inflationFactor,
     });
   }
 
