@@ -314,6 +314,10 @@ export interface MonteCarloResult {
   /** Raw depletion ages from each run (null = did not deplete).
    *  Used by the depletion histogram UI. */
   depletionAges: (number | null)[];
+  /** Final assets (in today's dollars) per run, parallel to `depletionAges`.
+   *  Lets the histogram drill-down show the distribution of outcomes
+   *  at a given depletion age, not just a count. */
+  trialFinalAssets: number[];
   /** Total computation time in ms. */
   elapsedMs: number;
 }

@@ -73,6 +73,9 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
   const [numRuns, setNumRuns] = useState<number>(DEFAULT_RUNS);
   const [returnStdDev, setReturnStdDev] = useState<number>(DEFAULT_SIGMA);
   const [run, setRun] = useState<RunState>({ status: 'idle', result: null, error: null });
+  // Depletion histogram drill-down: when the user clicks a bar, we surface
+  // the per-run final-asset values for that depletion age in a small table.
+  const [selectedBin, setSelectedBin] = useState<number | null>(null);
 
   const handleRun = () => {
     setRun({ status: 'running', result: null, error: null });
@@ -125,6 +128,38 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
       .sort(([a], [b]) => a - b)
       .map(([age, count]) => ({ age, count }));
   }, [run.result]);
+
+  // Drill-down details for the currently-selected histogram bar. Lists every
+  // trial that depleted at that exact age (1-indexed), plus summary stats.
+  const selectedBinDetails = useMemo(() => {
+    if (!run.result || selectedBin === null) return null;
+    const { depletionAges, trialFinalAssets, depletionCount } = run.result;
+    // Enumerate the index of every trial that depleted at this age.
+    const matchingIndices: number[] = [];
+    for (let i = 0; i < depletionAges.length; i++) {
+      if (depletionAges[i] === selectedBin) matchingIndices.push(i);
+    }
+    if (matchingIndices.length === 0) return null;
+    const finalAssets = matchingIndices.map((i) => trialFinalAssets[i]);
+    const sorted = [...finalAssets].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    const min = sorted[0];
+    const max = sorted[sorted.length - 1];
+    return {
+      age: selectedBin,
+      count: matchingIndices.length,
+      shareOfFailures: depletionCount > 0 ? matchingIndices.length / depletionCount : 0,
+      medianFinalAssets: median,
+      minFinalAssets: min,
+      maxFinalAssets: max,
+      runs: matchingIndices.map((trialIndex, positionInBin) => ({
+        trialIndex: trialIndex + 1, // 1-indexed for display
+        positionInBin: positionInBin + 1,
+        depletionAge: selectedBin,
+        finalAssets: trialFinalAssets[trialIndex],
+      })),
+    };
+  }, [run.result, selectedBin]);
 
   return (
     <div className="monte-carlo-panel">
@@ -307,7 +342,10 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
             </div>
           </div>
 
-          {/* Depletion histogram — only if any runs depleted */}
+          {/* Depletion histogram — only if any runs depleted. Bars are
+              clickable: selecting one surfaces a per-bin run breakdown
+              beneath the chart (count, share of failures, median & range
+              of final assets, plus a per-run table). */}
           {depletionHistogram.length > 0 && (
             <div className="chart-container">
               <h3>When do failed runs run out of money?</h3>
@@ -326,14 +364,93 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
                   />
                   <Tooltip
                     contentStyle={{ background: colors.panel, border: `1px solid ${colors.border}`, borderRadius: 8 }}
-                    formatter={(v: number) => [`${v} run${v === 1 ? '' : 's'}`, 'Depleted at this age']}
+                    formatter={(v: number) => [`${v} run${v === 1 ? '' : 's'} — click for details`, 'Depleted at this age']}
                     labelFormatter={(l) => `Age ${l}`}
                     labelStyle={{ color: colors.text }}
                     itemStyle={{ color: colors.text }}
                   />
-                  <Bar dataKey="count" fill={colors.red} />
+                  <Bar
+                    dataKey="count"
+                    fill={colors.red}
+                    cursor="pointer"
+                    onClick={(d: { age: number; count: number }) =>
+                      setSelectedBin((prev) => (prev === d.age ? null : d.age))
+                    }
+                  />
                 </BarChart>
               </ResponsiveContainer>
+
+              {/* Drill-down: per-bin run table when a bar is selected. */}
+              {selectedBinDetails && (
+                <div className="mc-drilldown">
+                  <div className="mc-drilldown-header">
+                    <div>
+                      <div className="mc-drilldown-title">
+                        Runs that depleted at age <strong>{selectedBinDetails.age}</strong>
+                      </div>
+                      <div className="mc-drilldown-sub muted">
+                        {selectedBinDetails.count.toLocaleString()} run
+                        {selectedBinDetails.count === 1 ? '' : 's'}
+                        {' '}({(selectedBinDetails.shareOfFailures * 100).toFixed(1)}% of all failures)
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => setSelectedBin(null)}
+                      title="Close drill-down"
+                    >
+                      ✕ Close
+                    </button>
+                  </div>
+
+                  {/* Summary stats grid */}
+                  <div className="mc-drilldown-stats">
+                    <div>
+                      <div className="mc-summary-label">Median final assets</div>
+                      <div className="mc-drilldown-value">{formatCurrency(selectedBinDetails.medianFinalAssets, { compact: true })}</div>
+                    </div>
+                    <div>
+                      <div className="mc-summary-label">Min (best of these)</div>
+                      <div className="mc-drilldown-value" style={{ color: colors.green }}>
+                        {formatCurrency(selectedBinDetails.minFinalAssets, { compact: true })}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="mc-summary-label">Max (worst of these)</div>
+                      <div className="mc-drilldown-value" style={{ color: colors.red }}>
+                        {formatCurrency(selectedBinDetails.maxFinalAssets, { compact: true })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Per-run table */}
+                  <div className="mc-drilldown-table-wrap">
+                    <table className="data-table mc-drilldown-table">
+                      <thead>
+                        <tr>
+                          <th>Run #</th>
+                          <th>Depletion age</th>
+                          <th className="text-right">Final assets (today's $)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedBinDetails.runs.map((r) => (
+                          <tr key={r.trialIndex}>
+                            <td>#{r.trialIndex}</td>
+                            <td>{r.depletionAge}</td>
+                            <td
+                              className="text-right"
+                              style={{ color: r.finalAssets < 100 ? colors.red : colors.text }}
+                            >
+                              {formatCurrency(r.finalAssets, { compact: true })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </>

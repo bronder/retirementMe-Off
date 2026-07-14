@@ -385,4 +385,22 @@ describe('runMonteCarloProjection', () => {
     expect(mc.medianDepletionAge).not.toBeNull();
     expect(mc.medianDepletionAge!).toBeGreaterThanOrEqual(65);
   });
+
+  it('exposes trialFinalAssets parallel to depletionAges for histogram drill-down', () => {
+    const scenario = makeScenario({
+      accounts: [
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 200000, annualReturn: 0.07, annualContribution: 0, employerMatch: 0 },
+      ],
+    });
+    const mc = runMonteCarloProjection(scenario, { numRuns: 50, returnStdDev: 0.15, seed: 11 });
+    expect(mc.trialFinalAssets).toHaveLength(50);
+    expect(mc.depletionAges).toHaveLength(50);
+    // Both arrays share the same ordering — per-trial index lines up.
+    for (let i = 0; i < 50; i++) {
+      const age = mc.depletionAges[i];
+      const assets = mc.trialFinalAssets[i];
+      if (age === null) continue; // successful run
+      expect(assets).toBeLessThan(1000); // depleted run should be ~zero
+    }
+  });
 });

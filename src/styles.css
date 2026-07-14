@@ -560,6 +560,82 @@ body {
   border-radius: 0;
 }
 
+/* === Depletion histogram drill-down === */
+
+.mc-drilldown {
+  margin-top: 18px;
+  padding: 14px 16px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--red);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mc-drilldown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.mc-drilldown-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.mc-drilldown-sub {
+  font-size: var(--text-xs);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.mc-drilldown-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+@media (max-width: 600px) {
+  .mc-drilldown-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mc-drilldown-value {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.mc-drilldown-table-wrap {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.mc-drilldown-table {
+  font-size: var(--text-xs);
+}
+
+.mc-drilldown-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-subtle);
+  z-index: 1;
+}
+
 @media (max-width: 900px) {
   .main-grid {
     grid-template-columns: 1fr;

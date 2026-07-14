@@ -456,6 +456,10 @@ export function runMonteCarloProjection(
   const finalReals = trialResults.map((r) => r.finalAssetsReal);
   const successCount = trialResults.filter((r) => r.success).length;
   const depletionAges: (number | null)[] = trialResults.map((r) => r.depletionAge);
+  // Per-trial final assets in today's dollars, parallel to depletionAges so the
+  // histogram drill-down table can show stats (count, median, range) for runs
+  // that depleted at a given age, not just the count.
+  const trialFinalAssets = finalReals.slice();
   const depletionNumbersOnly = depletionAges.filter((a): a is number => a !== null);
   const sortedDepletions = [...depletionNumbersOnly].sort((a, b) => a - b);
   const medianDepletionAge =
@@ -474,6 +478,7 @@ export function runMonteCarloProjection(
     medianDepletionAge,
     percentilePaths,
     depletionAges,
+    trialFinalAssets,
     elapsedMs: performance.now() - start,
   };
 }
