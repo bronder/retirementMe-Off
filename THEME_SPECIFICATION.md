@@ -102,7 +102,7 @@ Soft, layered shadows — never harsh or heavy.
 
 | Token | Usage |
 |-------|-------|
-| `--shadow-sm` | Subtle elevation — scenario tabs, small buttons |
+| `--shadow-sm` | Subtle elevation — top bar, small buttons |
 | `--shadow` | Default cards and panels |
 | `--shadow-md` | Hover lifts, emphasized cards |
 | `--shadow-lg` | Dropdowns, overlays, menus |
@@ -151,9 +151,22 @@ Uses consistent multiples:
 - Semantic colors with tinted backgrounds
 - Used for status indicators and category markers
 
+### Top Bar (sticky)
+- Full-bleed within the content container, sticks to the top on scroll
+- Translucent `--panel` surface with `backdrop-filter: blur` for legibility over content
+- Houses the logo, **scenario switcher**, theme picker, and menu in one row
+- Orange accent is reserved for the active-scenario trigger only
+
+### Scenario Switcher
+- A labeled toolbar group (`.scenario-group`): `Scenarios │ [ Scenario: <name> ▾ ] [ ＋ New ]`
+- Primary trigger is accent-filled, showing the current scenario with a "Scenario" kicker
+- Dropdown popover lists scenarios with `●/○` status dots and two-step inline delete
+- Secondary "＋ New" create action sits adjacent inside the shared group
+
 ### Tabs
 - Underline-style tabs with orange active indicator
 - Muted text in inactive state, full color when active
+- Share a row with compact inline context stats (per-tab summary metrics)
 
 ### Charts
 - White card containers with subtle border
@@ -168,4 +181,6 @@ Uses consistent multiples:
 1. **Light** (default) — Warm off-white, premium feel
 2. **Dark** — Warm charcoal, not pure black; brighter orange for contrast
 3. **Sepia** — Warm parchment tones for extended reading
-4. **Nord** — Cool blue-gray palette (Nord color scheme)
+4. **Warm Gray** — Dark, warm graphite with a terracotta accent distinct from Dark's orange
+5. **Nord** — Cool blue-gray palette (Nord color scheme)
+6. **Dracula** — Official Dracula palette; signature purple accent, vivid chart colors

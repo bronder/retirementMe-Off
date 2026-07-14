@@ -35,10 +35,12 @@ A privacy-first retirement planning web app. All data stays in your browser — 
   - Partial scoring for account balance and expense category coverage
 - **Charts**: net worth over time (nominal + real dollars), retirement cash flow, multi-scenario comparison
 - **Expandable Year-by-Year table**: click any year to see detailed income and expense breakdowns
-- **4 themes**: light, dark, sepia, and Nord
+- **6 themes**: light, dark, sepia, Nord, Warm Gray, and Dracula
+- **Compact, sticky header**: logo, scenario switcher, theme picker, and menu stay accessible while scrolling; inline context stats replace a tall hero card
+- **Scenario switcher**: a labeled dropdown makes the active scenario obvious and offers quick switching/creation at a glance
 - **Inline delete confirmations**: no intrusive browser popups
 - **Dismissible contextual warnings**: smart guidance for risky assumptions
-- **Persistence**: auto-saves to localStorage; remembers your active tab and section
+- **Persistence**: auto-saves to localStorage; remembers your active tab, input section, theme, and scenario
 - **Export/import**: JSON backup and Obsidian-friendly Markdown export
 
 ## Quick Start
@@ -49,6 +51,22 @@ npm run dev
 ```
 
 Open the URL shown in terminal (typically `http://localhost:5173`).
+
+## The Header
+
+The top of the app is intentionally compact so working content is visible immediately:
+
+- **Sticky top bar** — logo, the **scenario switcher** (a labeled dropdown showing the current scenario, plus a "＋ New" create action), the theme picker, and a menu (import/export/reset). It stays in view while scrolling.
+- **Tab + context row** — the Inputs / Results & Charts / Compare tabs share a single row with compact, tab-specific summary stats (e.g. *Retire at · Through · Withdrawal* on Inputs; *Monthly · Status* on Results), replacing a large hero banner.
+
+### Scenarios
+
+Use the scenario switcher to manage "what-if" plans:
+
+- Click the orange **scenario trigger** to open a dropdown listing all scenarios; click one to switch.
+- Each scenario row shows a status dot and offers a two-step inline delete (hover the row).
+- Click **＋ New** (or **＋ New Scenario** inside the dropdown) to create a new scenario.
+- Rename a scenario on the Assumptions tab.
 
 ## Usage
 
