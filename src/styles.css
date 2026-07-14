@@ -618,7 +618,7 @@ body {
 }
 
 .mc-drilldown-table-wrap {
-  max-height: 260px;
+  max-height: 280px;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -629,26 +629,8 @@ body {
   font-size: var(--text-xs);
   width: 100%;
   table-layout: auto;
-  /* Tighten the default .data-table padding for the compact drill-down view. */
-}
-
-.mc-drilldown-table th,
-.mc-drilldown-table td {
-  /* Right-align everything by default — numeric columns feel cleaner. */
-  text-align: right;
-  vertical-align: middle;
-  /* Don't let numbers wrap mid-digit. */
-  white-space: nowrap;
-  /* Consistent row height even with the stacked Drawdown content. */
-  padding: 9px 12px;
-}
-
-/* First column is the trial index — keep it narrow and centered. */
-.mc-drilldown-table th:first-child,
-.mc-drilldown-table td:first-child {
-  text-align: center;
-  width: 56px;
-  color: var(--text-dim);
+  border-collapse: collapse;
+  /* All numbers use tabular figures so digits align vertically across rows. */
   font-variant-numeric: tabular-nums;
 }
 
@@ -659,24 +641,78 @@ body {
   z-index: 1;
   color: var(--text-dim);
   font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+/* Strict alignment system:
+   - Run # (1st col) is left-aligned, narrow, dim — it's an identifier, not data.
+   - Age (2nd col) is centered, narrow, tabular-nums — also an index.
+   - All currency columns (3rd+) are right-aligned, tabular-nums.
+   No mix-and-match alignment. */
+.mc-drilldown-table th,
+.mc-drilldown-table td {
+  text-align: right;
+  vertical-align: middle;
+  white-space: nowrap;
+  padding: 7px 10px;
   border-bottom: 1px solid var(--border);
 }
 
-/* Stacked drop cell — amount on top, %-of-peak sub-line below.
-   Inline-flex keeps the two lines aligned at the right edge of the cell. */
-.mc-drawdown-cell {
+.mc-drilldown-table tr:last-child td {
+  border-bottom: none;
+}
+
+.mc-drilldown-table thead th {
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+}
+
+.mc-drilldown-table th:first-child,
+.mc-drilldown-table td:first-child {
+  text-align: left;
+  width: 64px;
+  color: var(--text-dim);
+}
+
+.mc-drilldown-table th:nth-child(2),
+.mc-drilldown-table td:nth-child(2) {
+  text-align: center;
+  width: 48px;
+  color: var(--text-dim);
+}
+
+.mc-drilldown-table tbody tr:hover {
+  background: var(--bg-subtle);
+}
+
+/* Peak column — soft green tint marks the "high water" reference, the
+   anchor against which the loss is measured. Weight 500 so the eye
+   reads it as data, not as decoration. */
+.mc-drilldown-peak {
+  color: var(--green);
+  font-weight: 500;
+}
+
+/* "Lost" amount: single-line, standard text, with the % of peak as a
+   tiny muted annotation to the right. Inline-flex keeps the two glyphs
+   pinned to the cell's right edge so the row rhythm doesn't break. */
+.mc-drilldown-lost {
   display: inline-flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 1px;
-  line-height: 1.25;
+  align-items: baseline;
+  gap: 6px;
+  justify-content: flex-end;
+  color: var(--text);
+  font-weight: 500;
 }
 
-.mc-drawdown-amount {
-  font-weight: 600;
-}
-
-.mc-drawdown-pct {
+.mc-drilldown-lost-pct {
+  color: var(--text-dim);
+  font-weight: 400;
   font-size: 10px;
 }
 

@@ -464,19 +464,23 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
                     </div>
                   </div>
 
-                  {/* Per-run table — shows the run's full journey: started with
-                      a nest egg at retirement, climbed to a peak, then collapsed
-                      to ~0 at the depletion age. Each run is identified by
+                  {/* Per-run table — strict alignment: Run # (left, dim) and Age
+                      (centered, dim) as identifiers; At retirement / Peak / Lost
+                      right-aligned, tabular-nums for digit alignment. "Final"
+                      is omitted because every row here depleted to ~$0 and the
+                      Peak → Lost story already conveys it. Peak is tinted green
+                      as the "good" reference; Lost is standard text with a tiny
+                      muted "% of peak" annotation. Each run is identified by
                       its global trial number. */}
                   <div className="mc-drilldown-table-wrap">
                     <table className="data-table mc-drilldown-table">
                       <thead>
                         <tr>
                           <th>Run #</th>
-                          <th className="text-right">At retirement</th>
-                          <th className="text-right">Peak (high water)</th>
-                          <th className="text-right">Final (depleted)</th>
-                          <th className="text-right">Drawdown</th>
+                          <th>Age</th>
+                          <th>At retirement</th>
+                          <th>Peak</th>
+                          <th>Lost (peak → depleted)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -487,25 +491,16 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
                           return (
                             <tr key={r.trialIndex}>
                               <td>#{r.trialIndex}</td>
-                              <td className="text-right">
-                                {formatCurrency(r.retirementAssets, { compact: true })}
-                              </td>
-                              <td className="text-right" style={{ color: colors.green }}>
+                              <td>{r.depletionAge}</td>
+                              <td>{formatCurrency(r.retirementAssets, { compact: true })}</td>
+                              <td className="mc-drilldown-peak">
                                 {formatCurrency(r.peakAssets, { compact: true })}
                               </td>
-                              <td
-                                className="text-right"
-                                style={{ color: r.finalAssets < 100 ? colors.red : colors.text }}
-                              >
-                                {formatCurrency(r.finalAssets, { compact: true })}
-                              </td>
-                              <td className="text-right">
-                                <span className="mc-drawdown-cell">
-                                  <span className="mc-drawdown-amount" style={{ color: colors.red }}>
-                                    −{formatCurrency(drop, { compact: true })}
-                                  </span>
-                                  <span className="mc-drawdown-pct muted">
-                                    {dropPct > 0 ? `${dropPct.toFixed(0)}% of peak left` : '0%'}
+                              <td>
+                                <span className="mc-drilldown-lost">
+                                  <span>−{formatCurrency(drop, { compact: true })}</span>
+                                  <span className="mc-drilldown-lost-pct">
+                                    {dropPct > 0 ? `${dropPct.toFixed(0)}% of peak` : '0%'}
                                   </span>
                                 </span>
                               </td>
