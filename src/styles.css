@@ -1740,15 +1740,32 @@ tr.drag-over {
   text-transform: none;
 }
 
-/* Subtotal is visually attached to the section header — calm, right-aligned,
-   but with enough weight to scan quickly across the page. */
+/* Subtotal is the focal element of the section header — a soft tinted
+   pill that ties into the section's left-border color, with a clear
+   "TOTAL" label so the number is unambiguous and easy to scan. */
 .income-group-total-muted {
   margin-left: auto;
-  font-size: var(--text-base);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--text-lg);
   color: var(--text);
   font-weight: 700;
   letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
+  padding: 6px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.income-group-total-muted::before {
+  content: 'Total';
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
 }
 
 .income-group-count {
