@@ -389,6 +389,177 @@ body {
   gap: 18px;
 }
 
+/* ============================================================
+   MONTE CARLO PANEL
+   Stress-test the projection by sampling randomized returns across
+   many trials. Layout: controls row → headline summary grid → filled
+   confidence-band chart → optional depletion histogram.
+   ============================================================ */
+
+.monte-carlo-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.mc-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 16px;
+  align-items: end;
+  padding: 14px 16px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+@media (max-width: 700px) {
+  .mc-controls {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mc-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mc-control label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.mc-help {
+  font-size: var(--text-xs);
+  margin: 0;
+}
+
+.mc-idle,
+.mc-running {
+  padding: 18px 16px;
+  text-align: center;
+  background: var(--bg-subtle);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.mc-error {
+  padding: 12px 16px;
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid var(--red);
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+}
+
+/* === Headline summary cards === */
+
+.mc-summary-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1.4fr 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 900px) {
+  .mc-summary-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 540px) {
+  .mc-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mc-summary-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+}
+
+.mc-summary-card.mc-summary-hero {
+  background: var(--bg-subtle);
+  border-left: 3px solid var(--accent);
+}
+
+.mc-summary-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.mc-summary-value {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1.1;
+  margin: 2px 0;
+}
+
+.mc-summary-sub {
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.mc-tone-pill {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #ffffff;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+@media (max-width: 540px) {
+  .mc-tone-pill {
+    position: static;
+    align-self: flex-start;
+    margin-top: 4px;
+  }
+}
+
+/* === Legend below the confidence band chart === */
+
+.mc-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 12px;
+  font-size: var(--text-xs);
+}
+
+.mc-legend-swatch {
+  width: 28px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.mc-legend-swatch.mc-legend-line {
+  width: 28px;
+  height: 3px;
+  border-radius: 0;
+}
+
 @media (max-width: 900px) {
   .main-grid {
     grid-template-columns: 1fr;

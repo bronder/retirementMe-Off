@@ -259,3 +259,61 @@ export interface ProjectionResult {
   /** Whether the plan succeeded (didn't deplete). */
   success: boolean;
 }
+
+/* ============================================================
+   MONTE CARLO TYPES
+   ============================================================
+   Monte Carlo runs the deterministic projection many times,
+   each time sampling annual investment returns from a
+   log-normal distribution around the account's expected return.
+   The aggregated results give a probability distribution of
+   outcomes (success rate, percentile paths, depletion ages)
+   instead of a single best-guess trajectory.
+*/
+
+export interface MonteCarloOptions {
+  /** Number of independent trials to run. Default 1000. */
+  numRuns: number;
+  /** Standard deviation of annual returns (decimal). Default 0.15 (15%).
+   *  Single global value applied to all accounts; log-normal distribution. */
+  returnStdDev: number;
+  /** Optional seed for the random number generator. With a fixed seed, the
+   *  output is fully deterministic — useful for tests and reproducible runs. */
+  seed?: number;
+}
+
+/** Per-age percentile of total real (today's dollars) assets across all runs. */
+export interface MonteCarloPercentileYear {
+  age: number;
+  /** 10th percentile — worst-case-ish outcome. */
+  p10: number;
+  /** 50th percentile — median outcome. */
+  p50: number;
+  /** 90th percentile — best-case-ish outcome. */
+  p90: number;
+}
+
+export interface MonteCarloResult {
+  numRuns: number;
+  /** Number of runs that did NOT deplete within the plan horizon. */
+  successCount: number;
+  /** Number of runs that depleted within the plan horizon. */
+  depletionCount: number;
+  /** Fraction of runs that did NOT deplete (0..1). Convenience = successCount/numRuns. */
+  successRate: number;
+  /** Median final assets in today's dollars across all runs. */
+  medianFinalAssets: number;
+  /** 10th percentile of final assets in today's dollars. */
+  p10FinalAssets: number;
+  /** 90th percentile of final assets in today's dollars. */
+  p90FinalAssets: number;
+  /** Median age at which runs depleted (null if no runs depleted). */
+  medianDepletionAge: number | null;
+  /** Per-age percentile bands across the plan. */
+  percentilePaths: MonteCarloPercentileYear[];
+  /** Raw depletion ages from each run (null = did not deplete).
+   *  Used by the depletion histogram UI. */
+  depletionAges: (number | null)[];
+  /** Total computation time in ms. */
+  elapsedMs: number;
+}

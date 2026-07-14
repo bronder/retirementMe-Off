@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { runProjection } from './engine';
+import {
+  runProjection,
+  runMonteCarloProjection,
+  createRng,
+} from './engine';
 import type { Scenario } from './types';
 
 function makeScenario(overrides: Partial<Scenario> = {}): Scenario {
@@ -230,5 +234,155 @@ describe('runProjection', () => {
     expect(result.years[1].expenses).toBeCloseTo(51500, 0);
     // Age 42: 2 years. 50000 * 1.03^2 = 53045
     expect(result.years[2].expenses).toBeCloseTo(53045, -1);
+  });
+});
+
+/* ============================================================
+   MONTE CARLO TESTS
+   ============================================================
+   These verify the Monte Carlo runner behaves correctly under seeded
+   RNG conditions so the test outcomes are deterministic regardless of
+   platform or node version.
+   ============================================================ */
+
+describe('createRng (mulberry32)', () => {
+  it('returns the same sequence for the same seed', () => {
+    const r1 = createRng(42);
+    const r2 = createRng(42);
+    for (let i = 0; i < 100; i++) {
+      expect(r1.next()).toBe(r2.next());
+    }
+  });
+
+  it('returns values in [0, 1)', () => {
+    const r = createRng(123);
+    for (let i = 0; i < 1000; i++) {
+      const v = r.next();
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThan(1);
+    }
+  });
+
+  it('produces a different sequence for a different seed', () => {
+    const r1 = createRng(1);
+    const r2 = createRng(2);
+    let mismatches = 0;
+    for (let i = 0; i < 20; i++) {
+      if (r1.next() !== r2.next()) mismatches++;
+    }
+    // With overwhelming probability, *every* pair should differ.
+    expect(mismatches).toBeGreaterThan(15);
+  });
+});
+
+describe('runMonteCarloProjection', () => {
+  it('is fully deterministic given the same seed', () => {
+    const scenario = makeScenario({
+      accounts: [
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 500000, annualReturn: 0.07, annualContribution: 12000, employerMatch: 0 },
+      ],
+    });
+    const a = runMonteCarloProjection(scenario, { numRuns: 200, returnStdDev: 0.15, seed: 42 });
+    const b = runMonteCarloProjection(scenario, { numRuns: 200, returnStdDev: 0.15, seed: 42 });
+    expect(a.successRate).toBe(b.successRate);
+    expect(a.medianFinalAssets).toBe(b.medianFinalAssets);
+    expect(a.p10FinalAssets).toBe(b.p10FinalAssets);
+    expect(a.p90FinalAssets).toBe(b.p90FinalAssets);
+    expect(a.depletionAges).toEqual(b.depletionAges);
+    // Percentile paths should also match exactly.
+    expect(a.percentilePaths.length).toBe(b.percentilePaths.length);
+    expect(a.percentilePaths[0].p10).toBe(b.percentilePaths[0].p10);
+    expect(a.percentilePaths[a.percentilePaths.length - 1].p90).toBe(b.percentilePaths[b.percentilePaths.length - 1].p90);
+  });
+
+  it('returns a bounded successRate in [0, 1]', () => {
+    const scenario = makeScenario({
+      accounts: [
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.05, annualContribution: 0, employerMatch: 0 },
+      ],
+      expenses: [
+        { id: 'e1', name: 'Living', category: 'housing', annualAmount: 60000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
+      ],
+    });
+    const mc = runMonteCarloProjection(scenario, { numRuns: 200, returnStdDev: 0.15, seed: 7 });
+    expect(mc.successRate).toBeGreaterThanOrEqual(0);
+    expect(mc.successRate).toBeLessThanOrEqual(1);
+    expect(mc.successCount).toBe(mc.numRuns - mc.depletionCount);
+  });
+
+  it('achieves a high success rate with a healthy nest egg', () => {
+    const scenario = makeScenario({
+      // Realistic early-career plan with steady contributions.
+      accounts: [
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 250000, annualReturn: 0.07, annualContribution: 24000, employerMatch: 0 },
+        { id: 'a2', name: '401k', type: 'traditional_401k', balance: 400000, annualReturn: 0.07, annualContribution: 23000, employerMatch: 7000 },
+      ],
+      expenses: [
+        { id: 'e1', name: 'Living', category: 'housing', annualAmount: 60000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
+      ],
+      incomeSources: [
+        { id: 'i1', name: 'SS', type: 'social_security', annualAmount: 36000, startAge: 67, endAge: null, cola: true, taxable: true },
+      ],
+    });
+    const mc = runMonteCarloProjection(scenario, { numRuns: 500, returnStdDev: 0.15, seed: 1 });
+    // With ample savings + SS, almost every run should make it.
+    expect(mc.successRate).toBeGreaterThan(0.85);
+  });
+
+  it('has a very low success rate when the nest egg is tiny', () => {
+    const scenario = makeScenario({
+      accounts: [
+        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 10000, annualReturn: 0.02, annualContribution: 0, employerMatch: 0 },
+      ],
+      expenses: [
+        { id: 'e1', name: 'Living', category: 'housing', annualAmount: 60000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
+      ],
+    });
+    const mc = runMonteCarloProjection(scenario, { numRuns: 200, returnStdDev: 0.15, seed: 99 });
+    // A $10k nest egg against $60k/yr of expenses will almost certainly fail.
+    expect(mc.successRate).toBeLessThan(0.1);
+    expect(mc.depletionCount).toBeGreaterThan(0);
+  });
+
+  it('produces monotone percentile paths (P10 ≤ P50 ≤ P90 at every age)', () => {
+    const scenario = makeScenario({
+      accounts: [
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 200000, annualReturn: 0.07, annualContribution: 12000, employerMatch: 0 },
+      ],
+    });
+    const mc = runMonteCarloProjection(scenario, { numRuns: 200, returnStdDev: 0.15, seed: 5 });
+    for (const p of mc.percentilePaths) {
+      expect(p.p10).toBeLessThanOrEqual(p.p50);
+      expect(p.p50).toBeLessThanOrEqual(p.p90);
+    }
+  });
+
+  it('returns one percentile path entry per age in the plan', () => {
+    const scenario = makeScenario({
+      accounts: [
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.07, annualContribution: 0, employerMatch: 0 },
+      ],
+    });
+    const mc = runMonteCarloProjection(scenario, { numRuns: 50, returnStdDev: 0.15, seed: 11 });
+    // Plan runs from currentAge=40 to endAge=95, so 56 years.
+    expect(mc.percentilePaths.length).toBe(56);
+    expect(mc.percentilePaths[0].age).toBe(40);
+    expect(mc.percentilePaths[mc.percentilePaths.length - 1].age).toBe(95);
+  });
+
+  it('produces a usable medianDepletionAge only when at least one run depleted', () => {
+    // Tiny nest egg -> many depletions -> medianDepletionAge must be a number.
+    const scenario = makeScenario({
+      accounts: [
+        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 5000, annualReturn: 0.02, annualContribution: 0, employerMatch: 0 },
+      ],
+      expenses: [
+        { id: 'e1', name: 'Living', category: 'housing', annualAmount: 60000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
+      ],
+    });
+    const mc = runMonteCarloProjection(scenario, { numRuns: 200, returnStdDev: 0.15, seed: 33 });
+    expect(mc.depletionCount).toBeGreaterThan(0);
+    expect(mc.medianDepletionAge).not.toBeNull();
+    expect(mc.medianDepletionAge!).toBeGreaterThanOrEqual(65);
   });
 });

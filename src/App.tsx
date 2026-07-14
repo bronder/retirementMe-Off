@@ -21,6 +21,7 @@ import type { AccountType, IncomeType, ExpenseCategory, EventType, PropertyType 
 import { formatCurrency, formatPercent, formatAge } from './format';
 import { exportMarkdown } from './markdown';
 import { AiChat } from './AiChat';
+import { MonteCarloPanel } from './MonteCarloPanel';
 
 const ACCOUNT_TYPES: AccountType[] = [
   'checking_savings',
@@ -95,21 +96,42 @@ const EVENT_TYPES: EventType[] = [
 const prettify = (s: string): string =>
   s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
+/**
+ * Theme-aware chart color set, read once from CSS custom properties.
+ * Returned shape is exported via `ThemeColors` so other panels (e.g.
+ * MonteCarloPanel) can type their props against it.
+ */
+export interface ThemeColors {
+  panel: string;
+  border: string;
+  textDim: string;
+  text: string;
+  chart: string;
+  chart2: string;
+  chart3: string;
+  chart4: string;
+  green: string;
+  red: string;
+  yellow: string;
+}
+
+const DEFAULT_THEME_COLORS: ThemeColors = {
+  panel: '#ffffff',
+  border: '#e6e2da',
+  textDim: '#6e6a60',
+  text: '#1c1b19',
+  chart: '#0d9488',
+  chart2: '#0e7490',
+  chart3: '#7c3aed',
+  chart4: '#ca8a04',
+  green: '#15803d',
+  red: '#dc2626',
+  yellow: '#b45309',
+};
+
 /** Read CSS variable values for theme-aware chart styling */
-function useThemeColors() {
-  const [colors, setColors] = useState<Record<string, string>>({
-    panel: '#ffffff',
-    border: '#e6e2da',
-    textDim: '#6e6a60',
-    text: '#1c1b19',
-    chart: '#0d9488',
-    chart2: '#0e7490',
-    chart3: '#7c3aed',
-    chart4: '#ca8a04',
-    green: '#15803d',
-    red: '#dc2626',
-    yellow: '#b45309',
-  });
+function useThemeColors(): ThemeColors {
+  const [colors, setColors] = useState<ThemeColors>(DEFAULT_THEME_COLORS);
 
   useEffect(() => {
     const readColors = () => {
@@ -2240,6 +2262,20 @@ function ResultsView({ scenario, result, readiness }: {
 
       {/* Year-by-year table */}
       <YearTable result={result} retirementAge={scenario.assumptions.retirementAge} scenario={scenario} />
+
+      {/* Monte Carlo stress test — runs the projection many times with
+          randomized returns to surface success-rate + percentile outcomes. */}
+      <div className="panel">
+        <div className="panel-header">
+          <h2>🎲 Monte Carlo Stress Test</h2>
+        </div>
+        <p className="section-help">
+          The deterministic projection above assumes your exact expected return. Real markets
+          vary year to year. This panel runs the plan many times with randomized returns to
+          estimate the <strong>probability of success</strong> across thousands of possible futures.
+        </p>
+        <MonteCarloPanel scenario={scenario} colors={tc} />
+      </div>
     </div>
   );
 }
