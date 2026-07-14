@@ -301,6 +301,10 @@ export interface MonteCarloResult {
   depletionCount: number;
   /** Fraction of runs that did NOT deplete (0..1). Convenience = successCount/numRuns. */
   successRate: number;
+  /** 95% Wilson confidence interval for the success rate. Lets users see the
+   *  sampling noise floor — at 1,000 trials a 99% success rate has ±~1% noise,
+   *  which the CI makes explicit. */
+  successRateCI: { lower: number; upper: number };
   /** Median final assets in today's dollars across all runs. */
   medianFinalAssets: number;
   /** 10th percentile of final assets in today's dollars. */

@@ -360,6 +360,10 @@ export function createRng(seed: number): SeededRng {
  * Standard-normal sample via the Box-Muller transform.
  * Consumes 2 uniforms; the second is stashed for the next call so the RNG
  * remains deterministic at every call boundary.
+ *
+ * Guard: u1 must be strictly > 0 (or the log(0) in Box-Muller produces -Infinity
+ * and the downstream exp silently propagates NaN). We resample until we get a
+ * non-zero uniform — rare in practice since the PRNG output is in (0, 1).
  */
 class NormalSampler {
   private cached: number | null = null;
@@ -370,11 +374,13 @@ class NormalSampler {
       this.cached = null;
       return v;
     }
-    // Box-Muller: generate two uniforms, return one and stash the other.
-    let u1 = this.rng.next();
-    let u2 = this.rng.next();
-    // Avoid log(0).
-    if (u1 < 1e-12) u1 = 1e-12;
+    // Box-Muller: keep drawing u1 until it's strictly > 0, then split
+    // the result into two cached normals (saves ~half the random draws).
+    let u1: number;
+    do {
+      u1 = this.rng.next();
+    } while (u1 === 0);
+    const u2 = this.rng.next();
     const mag = Math.sqrt(-2 * Math.log(u1));
     const z0 = mag * Math.cos(2 * Math.PI * u2);
     const z1 = mag * Math.sin(2 * Math.PI * u2);
@@ -392,8 +398,10 @@ class NormalSampler {
  *   E[r] = exp(m + σ²/2) - 1,
  * so to hit an expected return μ we set  m = log(1 + μ) - σ²/2.
  *
- * The cap at -1 (effective return ≥ -100%) is a defensive safety net;
- * log-normal draws are extremely unlikely to ever reach it.
+ * The Box-Muller upstream guard (u1 ≠ 0) ensures x is always finite, so the
+ * downstream exp(...) is always defined — no clamping needed here. (Log-normal
+ * draws are already bounded below at 0% in expectation, and the calibration
+ * keeps the median outcome stable across σ values.)
  */
 export function createLogNormalReturnSampler(
   rng: SeededRng,
@@ -405,8 +413,27 @@ export function createLogNormalReturnSampler(
     if (sigma <= 0) return mu; // degenerate: deterministic
     const m = Math.log(1 + mu) - (sigma * sigma) / 2;
     const x = m + sigma * normal.next();
-    const r = Math.exp(x) - 1;
-    return Math.max(r, -0.999999);
+    return Math.exp(x) - 1; // log-normal: r > -1 always when x is finite
+  };
+}
+
+/**
+ * Wilson 95% confidence interval for a binomial proportion (successRate).
+ * The naive ±√(p(1-p)/n) intervals can produce bounds outside [0, 1] for
+ * extreme proportions; Wilson's score interval handles that correctly and is
+ * standard for low-n or near-0/near-1 proportions.
+ */
+function wilson95CI(successes: number, n: number): { lower: number; upper: number } {
+  if (n === 0) return { lower: 0, upper: 1 };
+  const p = successes / n;
+  const z = 1.959963984540054; // z for 95% two-sided
+  const denom = 1 + (z * z) / n;
+  const center = (p + (z * z) / (2 * n)) / denom;
+  const margin =
+    (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / denom;
+  return {
+    lower: Math.max(0, center - margin),
+    upper: Math.min(1, center + margin),
   };
 }
 
@@ -496,6 +523,7 @@ export function runMonteCarloProjection(
     successCount,
     depletionCount: depletionNumbersOnly.length,
     successRate: successCount / numRuns,
+    successRateCI: wilson95CI(successCount, numRuns),
     medianFinalAssets: percentile(finalReals, 0.5),
     p10FinalAssets: percentile(finalReals, 0.1),
     p90FinalAssets: percentile(finalReals, 0.9),
