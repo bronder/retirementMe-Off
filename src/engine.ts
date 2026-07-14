@@ -16,6 +16,7 @@ import type {
   MonteCarloPercentileYear,
 } from './types';
 import { ACCOUNT_TAX_TREATMENT } from './types';
+import type { AccountTaxTreatment } from './types';
 
 interface AccountState {
   account: Account;
@@ -176,19 +177,29 @@ export function runProjectionCore(
       }
     }
 
-    // --- Withdrawals ---
-    // Determine the net cash needed from assets.
-    let netNeed = 0;
-    if (isRetired) {
-      netNeed = expenses - income - eventCashFlow;
-    } else {
-      netNeed = expenses + eventCashFlow - income;
-    }
+    // --- Withdrawals / Deposits ---
+    // Determine the net cash needed from (or surplus to deposit into) assets.
+    // eventCashFlow is net cash IN from events: positive = proceeds exceed
+    // costs (e.g. a home sale), negative = costs exceed proceeds (e.g. a
+    // down payment). The formula is the same for pre- and post-retirement:
+    //   netNeed = expenses - income - eventCashFlow
+    // When positive, we must withdraw from savings to cover the gap.
+    // When negative, the surplus (e.g. sale proceeds) is deposited into
+    // accounts so it actually grows your net worth.
+    const netNeed = expenses - income - eventCashFlow;
 
     // Withdraw returns the GROSS amount pulled from accounts (incl. tax gross-up).
     let withdrawals = 0;
     if (netNeed > 0) {
       withdrawals = withdrawFromAccounts(accountStates, netNeed, assumptions.retirementTaxRate);
+    }
+
+    // Deposit surplus cash flow (event proceeds beyond what's needed) into
+    // accounts so it compounds rather than vanishing. Deposit into taxable
+    // first (most flexible), then tax-deferred, then tax-free.
+    let deposits = 0;
+    if (netNeed < 0) {
+      deposits = depositToAccounts(accountStates, -netNeed);
     }
 
     const endingAssets = sumBalances(accountStates);
@@ -203,6 +214,7 @@ export function runProjectionCore(
       contributions,
       growth,
       withdrawals,
+      deposits,
       endingAssets: Math.max(0, endingAssets),
       income,
       expenses,
@@ -231,6 +243,30 @@ export function runProjectionCore(
 
 function sumBalances(states: AccountState[]): number {
   return states.reduce((sum, s) => sum + s.balance, 0);
+}
+
+/**
+ * Deposit surplus cash flow (e.g. home-sale proceeds) into accounts so it
+ * compounds rather than vanishing. Fill order mirrors the withdrawal order
+ * (taxable → tax-deferred → tax-free) for symmetry: taxable accounts are
+ * the most flexible destination for lump sums, and deposits are untaxed
+ * regardless of bucket (no gross-up needed).
+ *
+ * Returns the total amount deposited.
+ */
+function depositToAccounts(states: AccountState[], amount: number): number {
+  let remaining = amount;
+  const buckets: AccountTaxTreatment[] = ['taxable', 'tax_deferred', 'tax_free'];
+  for (const treatment of buckets) {
+    if (remaining <= 0) break;
+    for (const s of states) {
+      if (ACCOUNT_TAX_TREATMENT[s.account.type] !== treatment) continue;
+      if (remaining <= 0) break;
+      s.balance += remaining;
+      remaining = 0;
+    }
+  }
+  return amount - remaining;
 }
 
 /**

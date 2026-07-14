@@ -232,6 +232,8 @@ export interface ProjectionYear {
   growth: number;
   /** Total withdrawals this year (nominal). */
   withdrawals: number;
+  /** Total deposits from surplus event cash flow this year (nominal). */
+  deposits: number;
   /** End-of-year total assets (nominal). */
   endingAssets: number;
   /** Total income (SS, pension, etc.) this year (nominal). */

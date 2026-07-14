@@ -145,6 +145,28 @@ describe('runProjection', () => {
     expect(ongoingYear.expenses).toBeGreaterThanOrEqual(15000);
   });
 
+  it('deposits event proceeds into accounts (home sale grows savings)', () => {
+    // A $300k home-sale windfall at age 52 (pre-retirement) should be deposited
+    // into the taxable brokerage account, not vanish.
+    const scenario = makeScenario({
+      assumptions: { ...makeScenario().assumptions, currentAge: 50, retirementAge: 65, endAge: 70, inflationRate: 0 },
+      accounts: [
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 100000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+      ],
+      events: [
+        { id: 'ev1', name: 'Sell house', type: 'home_sale', age: 52, cost: 0, proceeds: 300000, ongoingAnnualImpact: 0, ongoingDurationYears: null, notes: '' },
+      ],
+    });
+    const result = runProjection(scenario);
+    // At age 52: eventCashFlow = +300000, no expenses/income, so netNeed = -300000.
+    // The full $300k should be deposited into the brokerage.
+    const eventYear = result.years.find((y) => y.age === 52)!;
+    expect(eventYear.eventCashFlow).toBe(300000);
+    expect(eventYear.deposits).toBe(300000);
+    // End-of-year assets should be beginning + deposit = 100000 + 300000 = 400000
+    expect(eventYear.endingAssets).toBeCloseTo(400000, -1);
+  });
+
   it('counts expenses with both pre and post retirement checked', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 62, retirementAge: 65, endAge: 70, inflationRate: 0 },
