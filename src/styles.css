@@ -1691,60 +1691,81 @@ tr.drag-over {
 .income-groups {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
 }
 
 .income-group {
-  margin-bottom: 4px;
+  margin-bottom: 0;
 }
 
+/* Section header — strengthened: own band with subtle background, clear
+   divider, larger label, prominent count badge, and attached total. */
 .income-group-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
+  gap: 10px;
+  padding: 10px 14px;
+  margin: 0 0 2px 0;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 
 .income-group-icon {
-  font-size: 18px;
+  font-size: 20px;
+  flex-shrink: 0;
 }
 
 .income-group-label {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 700;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: var(--text);
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+/* Subtotal is visually attached to the section header: large, calm, right-aligned,
+   but with enough weight to scan quickly across the page. */
+.income-group-total-muted {
+  margin-left: auto;
+  font-size: var(--text-base);
+  color: var(--text);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
 }
 
 .income-group-count {
-  font-size: var(--text-xs);
-  color: var(--text-faint);
-  background: var(--bg-subtle);
-  padding: 1px 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 2px 10px;
   border-radius: 20px;
   font-weight: 600;
 }
 
+/* Tighter within-section spacing, so cards feel like they belong to the
+   section above (small gap) but each section is clearly separate. */
 .income-group-rows {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
+/* Quieter item cards inside sections so the section header leads the group. */
 .income-row {
-  background: var(--panel-light);
+  background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  padding: 9px 14px;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .income-row:hover {
   border-color: var(--border-strong);
   box-shadow: var(--shadow-sm);
+  background: var(--bg-subtle);
 }
 
 .income-row-main {
