@@ -2163,12 +2163,28 @@ function EventsPanel({ scenario, store }: {
 
 /* ============ RESULTS VIEW ============ */
 
+/**
+ * Results tab sub-sections. Monte Carlo is the default landing — it's
+ * the higher-information view (real markets vary; "on track with 7%
+ * returns" tells you much less than "82% of random futures survive").
+ */
+type ResultSection = 'monte-carlo' | 'deterministic';
+const DEFAULT_RESULT_SECTION: ResultSection = 'monte-carlo';
+
 function ResultsView({ scenario, result, readiness }: {
   scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
   result: NonNullable<ReturnType<typeof runProjection>>;
   readiness: NonNullable<ReturnType<typeof getReadinessSummary>>;
 }) {
   const tc = useThemeColors();
+
+  const [section, setSection] = useState<ResultSection>(
+    () => (localStorage.getItem('retirement-result-section') as ResultSection) || DEFAULT_RESULT_SECTION,
+  );
+  useEffect(() => {
+    localStorage.setItem('retirement-result-section', section);
+  }, [section]);
+
   const tooltipStyle = { background: tc.panel, border: `1px solid ${tc.border}`, borderRadius: 8 };
 
   const chartData = result.years.map((y) => ({
@@ -2184,9 +2200,24 @@ function ResultsView({ scenario, result, readiness }: {
     Expenses: Math.round(y.expenses),
   }));
 
+  const navItems: { id: ResultSection; label: string; icon: string; help: string }[] = [
+    {
+      id: 'monte-carlo',
+      label: 'Monte Carlo Stress Test',
+      icon: '🎲',
+      help: 'Probability of success across thousands of random futures.',
+    },
+    {
+      id: 'deterministic',
+      label: 'Deterministic Projection',
+      icon: '📊',
+      help: 'Single-trajectory view at your expected returns.',
+    },
+  ];
+
   return (
     <div>
-      {/* Summary cards */}
+      {/* === Headline summary cards — always visible across sections === */}
       <div className="summary-grid">
         <div className="summary-card">
           <div className="label">Nest Egg at Retirement</div>
@@ -2214,67 +2245,107 @@ function ResultsView({ scenario, result, readiness }: {
         </div>
       </div>
 
-      {/* Net worth chart */}
-      <div className="chart-container">
-        <h3>Projected Net Worth Over Time</h3>
-        <ResponsiveContainer width="100%" height={320}>
-          <AreaChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
-            <XAxis dataKey="age" stroke={tc.textDim} />
-            <YAxis stroke={tc.textDim} tickFormatter={(v) => formatCurrency(v, { compact: true })} />
-            <Tooltip
-              contentStyle={tooltipStyle}
-              formatter={(v: number) => formatCurrency(v)}
-              labelFormatter={(l) => `Age ${l}`}
-              labelStyle={{ color: tc.text }}
-              itemStyle={{ color: tc.text }}
-            />
-            <Legend />
-            <Area type="monotone" dataKey="Nominal Assets" stroke={tc.chart} fill={tc.chart} fillOpacity={0.15} />
-            <Area type="monotone" dataKey="Today's Dollars" stroke={tc.chart2} fill={tc.chart2} fillOpacity={0.1} />
-            <ReferenceLine x={scenario.assumptions.retirementAge} stroke={tc.yellow} strokeDasharray="5 5" label={{ value: 'Retire', fill: tc.yellow, fontSize: 11 }} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
+      {/* === Sidebar layout: chart panels live behind a left rail === */}
+      <div className="results-layout">
+        <aside className="results-sidebar">
+          <ul className="results-nav">
+            {navItems.map((item) => (
+              <li key={item.id}>
+                <button
+                  className={`results-nav-item ${section === item.id ? 'active' : ''}`}
+                  onClick={() => setSection(item.id)}
+                  title={item.help}
+                >
+                  <span className="results-nav-icon">{item.icon}</span>
+                  {item.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="sidebar-divider" />
+          <div className="sidebar-resources-label">About</div>
+          <p className="muted" style={{ fontSize: 'var(--text-xs)', padding: '0 16px', lineHeight: 1.5 }}>
+            {section === 'monte-carlo'
+              ? 'Monte Carlo runs the plan many times with randomized returns to surface the probability of success across random futures.'
+              : 'Deterministic view projects the plan at your exact expected return — one possible future.'}
+          </p>
+        </aside>
 
-      {/* Cash flow chart */}
-      <div className="chart-container">
-        <h3>Retirement Cash Flow (Income vs Expenses vs Withdrawals)</h3>
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={cashFlowData}>
-            <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
-            <XAxis dataKey="age" stroke={tc.textDim} />
-            <YAxis stroke={tc.textDim} tickFormatter={(v) => formatCurrency(v, { compact: true })} />
-            <Tooltip
-              contentStyle={tooltipStyle}
-              formatter={(v: number) => formatCurrency(v)}
-              labelFormatter={(l) => `Age ${l}`}
-              labelStyle={{ color: tc.text }}
-              itemStyle={{ color: tc.text }}
-            />
-            <Legend />
-            <Bar dataKey="Income" fill={tc.green} />
-            <Bar dataKey="Withdrawals" fill={tc.chart} />
-            <Bar dataKey="Expenses" fill={tc.red} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+        <div className="results-content">
+          {section === 'monte-carlo' && (
+            <div className="panel">
+              <div className="panel-header">
+                <h2>🎲 Monte Carlo Stress Test</h2>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => setSection('deterministic')}
+                  title="Jump to the deterministic single-trajectory charts"
+                >
+                  Compare to deterministic →
+                </button>
+              </div>
+              <p className="section-help">
+                The deterministic projection above assumes your exact expected return. Real markets
+                vary year to year. This panel runs the plan many times with randomized returns to
+                estimate the <strong>probability of success</strong> across thousands of possible futures.
+              </p>
+              <MonteCarloPanel scenario={scenario} colors={tc} />
+            </div>
+          )}
 
-      {/* Year-by-year table */}
-      <YearTable result={result} retirementAge={scenario.assumptions.retirementAge} scenario={scenario} />
+          {section === 'deterministic' && (
+            <>
+              {/* Net worth chart */}
+              <div className="chart-container">
+                <h3>Projected Net Worth Over Time</h3>
+                <ResponsiveContainer width="100%" height={320}>
+                  <AreaChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
+                    <XAxis dataKey="age" stroke={tc.textDim} />
+                    <YAxis stroke={tc.textDim} tickFormatter={(v) => formatCurrency(v, { compact: true })} />
+                    <Tooltip
+                      contentStyle={tooltipStyle}
+                      formatter={(v: number) => formatCurrency(v)}
+                      labelFormatter={(l) => `Age ${l}`}
+                      labelStyle={{ color: tc.text }}
+                      itemStyle={{ color: tc.text }}
+                    />
+                    <Legend />
+                    <Area type="monotone" dataKey="Nominal Assets" stroke={tc.chart} fill={tc.chart} fillOpacity={0.15} />
+                    <Area type="monotone" dataKey="Today's Dollars" stroke={tc.chart2} fill={tc.chart2} fillOpacity={0.1} />
+                    <ReferenceLine x={scenario.assumptions.retirementAge} stroke={tc.yellow} strokeDasharray="5 5" label={{ value: 'Retire', fill: tc.yellow, fontSize: 11 }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
 
-      {/* Monte Carlo stress test — runs the projection many times with
-          randomized returns to surface success-rate + percentile outcomes. */}
-      <div className="panel">
-        <div className="panel-header">
-          <h2>🎲 Monte Carlo Stress Test</h2>
+              {/* Cash flow chart */}
+              <div className="chart-container">
+                <h3>Retirement Cash Flow (Income vs Expenses vs Withdrawals)</h3>
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={cashFlowData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
+                    <XAxis dataKey="age" stroke={tc.textDim} />
+                    <YAxis stroke={tc.textDim} tickFormatter={(v) => formatCurrency(v, { compact: true })} />
+                    <Tooltip
+                      contentStyle={tooltipStyle}
+                      formatter={(v: number) => formatCurrency(v)}
+                      labelFormatter={(l) => `Age ${l}`}
+                      labelStyle={{ color: tc.text }}
+                itemStyle={{ color: tc.text }}
+                    />
+                    <Legend />
+                    <Bar dataKey="Income" fill={tc.green} />
+                    <Bar dataKey="Withdrawals" fill={tc.chart} />
+                    <Bar dataKey="Expenses" fill={tc.red} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Year-by-year table */}
+              <YearTable result={result} retirementAge={scenario.assumptions.retirementAge} scenario={scenario} />
+            </>
+          )}
         </div>
-        <p className="section-help">
-          The deterministic projection above assumes your exact expected return. Real markets
-          vary year to year. This panel runs the plan many times with randomized returns to
-          estimate the <strong>probability of success</strong> across thousands of possible futures.
-        </p>
-        <MonteCarloPanel scenario={scenario} colors={tc} />
       </div>
     </div>
   );

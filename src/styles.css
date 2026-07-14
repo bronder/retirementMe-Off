@@ -1597,26 +1597,30 @@ tr.drag-over {
    INPUTS SIDEBAR
    ============================================================ */
 
-.inputs-layout {
+.inputs-layout,
+.results-layout {
   display: grid;
   grid-template-columns: 220px 1fr;
   gap: 18px;
   align-items: start;
 }
 
-.inputs-sidebar {
+.inputs-sidebar,
+.results-sidebar {
   position: sticky;
   top: 20px;
 }
 
-.inputs-nav {
+.inputs-nav,
+.results-nav {
   list-style: none;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.inputs-nav-item {
+.inputs-nav-item,
+.results-nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1634,34 +1638,41 @@ tr.drag-over {
   font-family: var(--font-sans);
 }
 
-.inputs-nav-item:hover {
+.inputs-nav-item:hover,
+.results-nav-item:hover {
   color: var(--text);
   background: var(--bg-subtle);
 }
 
-.inputs-nav-item.active {
+.inputs-nav-item.active,
+.results-nav-item.active {
   background: var(--accent-dim);
   color: var(--accent);
   border-color: var(--accent);
   font-weight: 600;
 }
 
-.inputs-nav-icon {
+.inputs-nav-icon,
+.results-nav-icon {
   font-size: 18px;
 }
 
-.inputs-content {
+.inputs-content,
+.results-content {
   min-width: 0;
 }
 
 @media (max-width: 700px) {
-  .inputs-layout {
+  .inputs-layout,
+  .results-layout {
     grid-template-columns: 1fr;
   }
-  .inputs-sidebar {
+  .inputs-sidebar,
+  .results-sidebar {
     position: static;
   }
-  .inputs-nav {
+  .inputs-nav,
+  .results-nav {
     flex-direction: row;
     flex-wrap: wrap;
     overflow-x: auto;
