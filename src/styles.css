@@ -268,115 +268,332 @@ body {
 .app {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 28px 24px;
+  padding: 14px 20px 24px;
 }
 
 /* ============================================================
-   APP HEADER
+   APP TOP BAR — single compact row: logo · scenarios · actions
+   Sticky so scenario tabs + menu stay reachable while scrolling.
    ============================================================ */
 
-.header {
+.app-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  justify-content: space-between;
+  gap: 12px;
   flex-wrap: wrap;
-  gap: 16px;
+  /* Bleed to the edges of the .app padding box for a full-width sticky bar,
+     then re-pad internally so contents align with the page content below. */
+  margin: -14px -20px 10px;
+  padding: 8px 20px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  backdrop-filter: saturate(140%) blur(8px);
+  -webkit-backdrop-filter: saturate(140%) blur(8px);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
 }
 
-.header h1 {
-  font-size: var(--text-2xl);
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--text);
+.app-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
+
+.app-logo {
+  height: 40px;
+  width: auto;
+  flex-shrink: 0;
+  display: block;
+}
+
 
 .header-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
+  flex-shrink: 0;
 }
 
 /* ============================================================
-   SCENARIO TABS
+   SCENARIO SWITCHER — labeled group: primary dropdown + create action
+   One control that clearly communicates scenario selection & creation.
+     Scenarios │ [ Scenario: 62 ▾ ]  [ ＋ New ]
    ============================================================ */
 
-.scenario-bar {
-  display: flex;
+.scenario-group {
+  position: relative;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
-.scenario-tab {
-  padding: 8px 16px;
-  background: var(--panel);
+  /* Subtle toolbar grouping: shared border + recessed surface so the
+     switcher + create action read as one unit. */
+  padding: 3px;
+  background: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  cursor: pointer;
-  color: var(--text-dim);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  transition: all 0.15s ease;
-  box-shadow: var(--shadow-sm);
 }
 
-.scenario-tab:hover {
-  color: var(--text);
-  border-color: var(--border-strong);
-}
-
-.scenario-tab.active {
-  background: var(--accent);
-  color: var(--accent-text);
-  border-color: var(--accent);
-  box-shadow: var(--shadow);
-}
-
-.scenario-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.scenario-tab-name {
-  pointer-events: none;
-}
-
-.scenario-tab-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  line-height: 1;
-  font-size: 16px;
-  font-weight: 600;
-  border-radius: 50%;
-  cursor: pointer;
-  opacity: 0.6;
-  transition: all 0.15s ease;
+.scenario-group-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-faint);
+  padding: 0 6px 0 8px;
+  white-space: nowrap;
   user-select: none;
 }
 
-.scenario-tab-close:hover {
-  opacity: 1;
-  background: rgba(255, 255, 255, 0.25);
+/* === Primary trigger: accent-filled, shows the CURRENT scenario === */
+.scenario-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 10px;
+  background: var(--accent);
+  color: var(--accent-text);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  transition: all 0.15s ease;
+  box-shadow: var(--shadow-sm);
+  max-width: 220px;
 }
 
-.scenario-tab:not(.active) .scenario-tab-close {
+.scenario-trigger:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.scenario-trigger.open {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow: var(--shadow);
+}
+
+.scenario-trigger-kicker {
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.75;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+.scenario-trigger-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scenario-trigger-caret {
+  font-size: 9px;
+  opacity: 0.8;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.scenario-trigger.open .scenario-trigger-caret {
+  transform: rotate(180deg);
+}
+
+/* === Secondary create action === */
+.scenario-add-btn {
+  background: var(--panel);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* === Dropdown popover (mirrors .theme-picker-menu) === */
+.scenario-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 240px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  z-index: 100;
+}
+
+.scenario-menu-item-row {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+}
+
+.scenario-menu-item-row + .scenario-menu-item-row {
+  margin-top: 2px;
+}
+
+.scenario-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.scenario-menu-item:hover {
+  background: var(--bg-subtle);
+}
+
+.scenario-menu-item.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.scenario-menu-dot {
+  font-size: 8px;
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.scenario-menu-item.active .scenario-menu-dot {
+  color: var(--accent);
+}
+
+.scenario-menu-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scenario-menu-item-check {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.scenario-menu-item-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s;
+}
+
+.scenario-menu-item-delete:hover {
+  color: var(--red);
+  background: var(--red-dim);
+}
+
+/* === Two-step inline delete confirmation (in-menu) === */
+.scenario-confirm-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--red-dim);
+  border-radius: var(--radius-sm);
+}
+
+.scenario-confirm-text {
+  flex: 1;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--red);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scenario-confirm-actions {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.scenario-confirm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.scenario-confirm-btn.yes {
+  background: var(--red);
+  color: #ffffff;
+}
+
+.scenario-confirm-btn.yes:hover {
+  opacity: 0.85;
+}
+
+.scenario-confirm-btn.no {
+  background: var(--panel);
   color: var(--text-dim);
 }
 
-.scenario-tab:not(.active) .scenario-tab-close:hover {
-  background: var(--red-dim);
-  color: var(--red);
+.scenario-confirm-btn.no:hover {
+  background: var(--panel-hover);
+  color: var(--text);
 }
 
-.scenario-tab.active .scenario-tab-close {
-  color: var(--accent-text);
+/* === Divider + New Scenario entry === */
+.scenario-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.scenario-menu-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.scenario-menu-add:hover {
+  background: var(--accent-dim);
+}
+
+.scenario-menu-add-icon {
+  font-size: 13px;
+  font-weight: 700;
 }
 
 /* ============================================================
@@ -1517,7 +1734,7 @@ tr.drag-over {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 
 .summary-card {
@@ -1555,145 +1772,6 @@ tr.drag-over {
 .value-warn { color: var(--yellow) !important; }
 
 /* ============================================================
-   PLANNER HERO — context banner with faded illustration
-   ============================================================ */
-
-.planner-hero {
-  position: relative;
-  display: flex;
-  align-items: center;
-  min-height: 180px;
-  border-radius: 20px;
-  padding: 28px 32px;
-  /* Three layered backgrounds, painted bottom→top:
-     1. The illustration (right-aligned, only its cleanest arc/horizon shows).
-     2. A low-weight tint over the whole image (~15–25% panel overlay) so the
-        graphic stays at low visual weight per the design brief.
-     3. A left-to-right fade: opaque on the left for text readability, clearing
-        toward the right, then a final right-edge fade into the page background
-        so the asset feels built-in rather than pasted on. */
-  background-color: var(--panel);
-  background-image:
-    /* Left→right fade: opaque on the left for text, clears rightward
-       so the ` icons remain visible. */
-    linear-gradient(
-      90deg,
-      var(--panel) 0%,
-      var(--panel) 30%,
-      color-mix(in srgb, var(--panel), transparent 85%) 60%,
-      transparent 100%
-    ),
-    /* Subtle tint so icons read as background, not foreground. */
-    linear-gradient(180deg, color-mix(in srgb, var(--panel), transparent 45%), color-mix(in srgb, var(--panel), transparent 45%)),
-    url('/images/header01.png');
-  background-position: right center, right 70%, right 70%;
-  background-size: cover, cover, cover;
-  background-repeat: no-repeat;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-  overflow: hidden;
-  margin-bottom: 20px;
-}
-
-/* Compact variant — shorter, for input landing states */
-.planner-hero--compact {
-  min-height: 120px;
-  padding: 20px 26px;
-}
-
-.planner-hero__content {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  /* Keep text on the left so it never sits on the detailed part of the graphic */
-  max-width: 62%;
-}
-
-.planner-hero__title {
-  font-size: var(--text-2xl);
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--text);
-  line-height: 1.2;
-  margin: 0;
-}
-
-.planner-hero__subtitle {
-  font-size: var(--text-base);
-  color: var(--text-dim);
-  line-height: 1.5;
-  margin: 0 0 8px 0;
-  max-width: 52ch;
-}
-
-.planner-hero__stats {
-  display: flex;
-  gap: 32px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-
-.planner-hero__stat {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.planner-hero__stat-label {
-  font-size: var(--text-xs);
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 600;
-}
-
-.planner-hero__stat-value {
-  font-size: var(--text-xl);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.3;
-}
-
-.planner-hero__stat-unit {
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--text-dim);
-  margin-left: 2px;
-}
-
-/* Responsive — shorter on mobile, full-width content */
-@media (max-width: 768px) {
-  .planner-hero {
-    min-height: auto;
-    padding: 20px;
-  }
-
-  .planner-hero--compact {
-    padding: 16px 18px;
-  }
-
-  .planner-hero__content {
-    max-width: 100%;
-  }
-
-  .planner-hero__title {
-    font-size: var(--text-xl);
-  }
-
-  .planner-hero__stats {
-    gap: 20px;
-  }
-
-  .planner-hero__stat-value {
-    font-size: var(--text-lg);
-  }
-}
-
-/* ============================================================
    CHARTS
    ============================================================ */
 
@@ -1716,18 +1794,27 @@ tr.drag-over {
 }
 
 /* ============================================================
-   NAVIGATION TABS
+   NAVIGATION TABS — tab row + inline context stats (one line)
    ============================================================ */
+
+.app-tabbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
 
 .tab-bar {
   display: flex;
   gap: 2px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: none;
 }
 
 .tab {
-  padding: 10px 20px;
+  padding: 7px 16px;
   background: none;
   border: none;
   color: var(--text-dim);
@@ -1749,6 +1836,38 @@ tr.drag-over {
   font-weight: 600;
 }
 
+/* Inline context stats — replaces the old tall hero card.
+   Quiet label + bold value, readable as a single glance. */
+.tabbar-stats {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.tabbar-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.tabbar-stat-label {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.tabbar-stat-value {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ============================================================
    INPUTS SIDEBAR
    ============================================================ */
@@ -1764,7 +1883,8 @@ tr.drag-over {
 .inputs-sidebar,
 .results-sidebar {
   position: sticky;
-  top: 20px;
+  /* Clear the sticky top bar (~50px) + a little breathing room */
+  top: 64px;
 }
 
 .inputs-nav,
@@ -3458,17 +3578,6 @@ tr.drag-over {
 .confirm-delete-no:hover {
   background: var(--panel-hover);
   color: var(--text);
-}
-
-/* Scenario tab confirming state */
-.scenario-tab.confirming {
-  border-color: var(--red);
-  background: var(--red-dim);
-}
-
-.scenario-confirm-label {
-  font-size: var(--text-xs);
-  font-weight: 600;
 }
 
 /* Reset plan inline confirmation */

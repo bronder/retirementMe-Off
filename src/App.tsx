@@ -327,9 +327,18 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* Header */}
-      <div className="header">
-        <h1><img src="./images/retirementmeoff-dark.png" alt="retirementMe-Off" style={{ height: '96px', width: 'auto', verticalAlign: 'middle' }} /></h1>
+      {/* Compact top bar — logo, scenario tabs, and actions in a single row */}
+      <div className="app-topbar">
+        <div className="app-topbar-left">
+          <img className="app-logo" src="./images/retirementmeoff-dark.png" alt="retirementMe-Off" />
+          <ScenarioSwitcher
+            scenarios={store.plan.scenarios}
+            activeScenarioId={activeScenario.id}
+            onSelect={(id) => store.setActiveScenario(id)}
+            onAdd={() => store.addScenario()}
+            onDelete={(id) => store.deleteScenario(id)}
+          />
+        </div>
         <div className="header-actions">
           <ThemePicker theme={theme} setTheme={setTheme} />
           <div className="menu-wrapper" ref={menuRef}>
@@ -354,83 +363,35 @@ export default function App() {
         </div>
       </div>
 
-      {/* Scenario bar */}
-      <div className="scenario-bar">
-        {store.plan.scenarios.map((s) => (
-          <ScenarioTab
-            key={s.id}
-            scenario={s}
-            isActive={s.id === activeScenario.id}
-            canDelete={store.plan.scenarios.length > 1}
-            onSelect={() => store.setActiveScenario(s.id)}
-            onDelete={() => store.deleteScenario(s.id)}
-          />
-        ))}
-        <button className="btn btn-sm" onClick={() => store.addScenario()}>+ Add Scenario</button>
+      {/* Tab bar with inline context stats — replaces the tall hero card */}
+      <div className="app-tabbar">
+        <div className="tab-bar">
+          <button className={`tab ${tab === 'inputs' ? 'active' : ''}`} onClick={() => setTab('inputs')}>Inputs</button>
+          <button className={`tab ${tab === 'results' ? 'active' : ''}`} onClick={() => setTab('results')}>Results & Charts</button>
+          <button className={`tab ${tab === 'compare' ? 'active' : ''}`} onClick={() => setTab('compare')}>Compare</button>
+        </div>
+        {tab === 'inputs' && (
+          <div className="tabbar-stats">
+            <span className="tabbar-stat"><span className="tabbar-stat-label">Retire at</span><span className="tabbar-stat-value">{activeScenario.assumptions.retirementAge}</span></span>
+            <span className="tabbar-stat"><span className="tabbar-stat-label">Through</span><span className="tabbar-stat-value">{activeScenario.assumptions.endAge}</span></span>
+            <span className="tabbar-stat"><span className="tabbar-stat-label">Withdrawal</span><span className="tabbar-stat-value">{formatPercent(activeScenario.assumptions.safeWithdrawalRate)}</span></span>
+          </div>
+        )}
+        {tab === 'results' && (
+          <div className="tabbar-stats">
+            <span className="tabbar-stat"><span className="tabbar-stat-label">Retire at</span><span className="tabbar-stat-value">{activeScenario.assumptions.retirementAge}</span></span>
+            <span className="tabbar-stat"><span className="tabbar-stat-label">Monthly</span><span className="tabbar-stat-value">{formatCurrency((readiness.firstYearIncome + readiness.firstYearWithdrawal) / 12, { compact: true })}</span></span>
+            <span className="tabbar-stat"><span className="tabbar-stat-label">Status</span><span className="tabbar-stat-value" style={{ color: readiness.onTrack ? 'var(--green)' : 'var(--yellow)' }}>{readiness.onTrack ? '✓ On track' : '⚠ Review'}</span></span>
+          </div>
+        )}
+        {tab === 'compare' && (
+          <div className="tabbar-stats">
+            <span className="tabbar-stat"><span className="tabbar-stat-label">Scenarios</span><span className="tabbar-stat-value">{allResults.length}</span></span>
+            <span className="tabbar-stat"><span className="tabbar-stat-label">Sustainable</span><span className="tabbar-stat-value">{allResults.filter((r) => r.success).length}/{allResults.length}</span></span>
+            <span className="tabbar-stat"><span className="tabbar-stat-label">Best final</span><span className="tabbar-stat-value">{formatCurrency(Math.max(...allResults.map((r) => r.finalAssetsReal)), { compact: true })}</span></span>
+          </div>
+        )}
       </div>
-
-      {/* Tabs */}
-      <div className="tab-bar mb-16">
-        <button className={`tab ${tab === 'inputs' ? 'active' : ''}`} onClick={() => setTab('inputs')}>Inputs</button>
-        <button className={`tab ${tab === 'results' ? 'active' : ''}`} onClick={() => setTab('results')}>Results & Charts</button>
-        <button className={`tab ${tab === 'compare' ? 'active' : ''}`} onClick={() => setTab('compare')}>Compare Scenarios</button>
-      </div>
-
-      {/* Planner hero — single contextual banner directly under the header,
-          spanning the full content width. Content adapts per active tab so
-          the graphic stays useful rather than decorative. Dense input
-          sub-sections (Accounts, Expenses…) use the compact variant. */}
-      {tab === 'inputs' && (
-        <PlannerHero
-          compact
-          title={activeScenario.name}
-          subtitle="Track your path to retirement with flexible scenarios."
-          stats={[
-            { label: 'Retire at', value: String(activeScenario.assumptions.retirementAge) },
-            { label: 'Plan through', value: String(activeScenario.assumptions.endAge) },
-            { label: 'Withdrawal rate', value: formatPercent(activeScenario.assumptions.safeWithdrawalRate) },
-          ]}
-        />
-      )}
-
-      {tab === 'results' && (
-        <PlannerHero
-          title={activeScenario.name}
-          subtitle="Your retirement path at a glance, with assumptions, savings, and income working together."
-          stats={[
-            { label: 'Retire at', value: String(activeScenario.assumptions.retirementAge) },
-            {
-              label: 'Monthly available',
-              value: formatCurrency((readiness.firstYearIncome + readiness.firstYearWithdrawal) / 12, { compact: true }),
-              unit: '/mo',
-            },
-            {
-              label: 'Plan confidence',
-              value: readiness.onTrack ? 'On track' : 'Needs review',
-              tone: readiness.onTrack ? 'good' : 'warn',
-            },
-          ]}
-        />
-      )}
-
-      {tab === 'compare' && (
-        <PlannerHero
-          title="Compare Scenarios"
-          subtitle="See how different assumptions, timelines, and savings rates shape your outcomes side by side."
-          stats={[
-            { label: 'Scenarios', value: String(allResults.length) },
-            {
-              label: 'Sustainable',
-              value: `${allResults.filter((r) => r.success).length} of ${allResults.length}`,
-              tone: allResults.every((r) => r.success) ? 'good' : 'warn',
-            },
-            {
-              label: 'Best final assets',
-              value: formatCurrency(Math.max(...allResults.map((r) => r.finalAssetsReal)), { compact: true }),
-            },
-          ]}
-        />
-      )}
 
       {tab === 'inputs' && (
         <InputsView
@@ -528,10 +489,113 @@ function ConfirmDelete({ onConfirm, title }: { onConfirm: () => void; title: str
   );
 }
 
-/* ============ SCENARIO TAB ============ */
+/* ============ SCENARIO SWITCHER ============ */
 
-function ScenarioTab({ scenario, isActive, canDelete, onSelect, onDelete }: {
-  scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
+type Scenario = ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
+
+/**
+ * Header scenario control — labeled group with a primary accent dropdown
+ * (current scenario) and a secondary create action. Mirrors the ThemePicker
+ * popover language so the two header controls read as a family.
+ *
+ *   Scenarios │ [ Scenario: 62 ▾ ]  [ + New Scenario ]
+ */
+function ScenarioSwitcher({
+  scenarios,
+  activeScenarioId,
+  onSelect,
+  onAdd,
+  onDelete,
+}: {
+  scenarios: Scenario[];
+  activeScenarioId: string;
+  onSelect: (id: string) => void;
+  onAdd: () => void;
+  onDelete: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const active = scenarios.find((s) => s.id === activeScenarioId) ?? scenarios[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="scenario-group" ref={ref}>
+      <span className="scenario-group-label">Scenarios</span>
+
+      {/* Primary: accent dropdown showing the current scenario */}
+      <button
+        type="button"
+        className={`scenario-trigger${open ? ' open' : ''}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title="Switch scenario"
+      >
+        <span className="scenario-trigger-kicker">Scenario</span>
+        <span className="scenario-trigger-name">{active?.name ?? '—'}</span>
+        <span className="scenario-trigger-caret" aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <div className="scenario-menu" role="listbox">
+          {scenarios.map((s) => (
+            <ScenarioMenuItem
+              key={s.id}
+              scenario={s}
+              isActive={s.id === activeScenarioId}
+              canDelete={scenarios.length > 1}
+              onSelect={() => { onSelect(s.id); setOpen(false); }}
+              onDelete={() => onDelete(s.id)}
+            />
+          ))}
+          <div className="scenario-menu-divider" />
+          <button
+            type="button"
+            className="scenario-menu-item scenario-menu-add"
+            onClick={() => { onAdd(); setOpen(false); }}
+          >
+            <span className="scenario-menu-add-icon" aria-hidden="true">＋</span>
+            <span>New Scenario</span>
+          </button>
+        </div>
+      )}
+
+      {/* Secondary: create action, visually tied to the switcher by grouping */}
+      <button
+        type="button"
+        className="btn btn-sm scenario-add-btn"
+        onClick={() => onAdd()}
+        title="Create a new scenario"
+      >
+        ＋ New
+      </button>
+    </div>
+  );
+}
+
+/** One row in the scenario dropdown — selectable, with two-step delete confirm. */
+function ScenarioMenuItem({
+  scenario,
+  isActive,
+  canDelete,
+  onSelect,
+  onDelete,
+}: {
+  scenario: Scenario;
   isActive: boolean;
   canDelete: boolean;
   onSelect: () => void;
@@ -540,49 +604,52 @@ function ScenarioTab({ scenario, isActive, canDelete, onSelect, onDelete }: {
   const [armed, setArmed] = useState(false);
 
   return (
-    <button
-      className={`scenario-tab ${isActive ? 'active' : ''} ${armed ? 'confirming' : ''}`}
-      onClick={() => { if (!armed) onSelect(); }}
-    >
+    <div className={`scenario-menu-item-row${armed ? ' confirming' : ''}`}>
       {armed ? (
-        <>
-          <span className="scenario-confirm-label">Delete?</span>
-          <span
-            className="scenario-tab-close"
-            role="button"
-            tabIndex={-1}
-            title="Confirm delete"
-            onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          >
-            ✓
+        <div className="scenario-confirm-inline">
+          <span className="scenario-confirm-text">Delete “{scenario.name}”?</span>
+          <span className="scenario-confirm-actions">
+            <button
+              type="button"
+              className="scenario-confirm-btn yes"
+              title="Confirm delete"
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            >✓</button>
+            <button
+              type="button"
+              className="scenario-confirm-btn no"
+              title="Cancel"
+              onClick={(e) => { e.stopPropagation(); setArmed(false); }}
+            >✕</button>
           </span>
-          <span
-            className="scenario-tab-close"
-            role="button"
-            tabIndex={-1}
-            title="Cancel"
-            onClick={(e) => { e.stopPropagation(); setArmed(false); }}
-          >
-            ✕
-          </span>
-        </>
+        </div>
       ) : (
         <>
-          <span className="scenario-tab-name">{scenario.name}</span>
+          <button
+            type="button"
+            role="option"
+            aria-selected={isActive}
+            className={`scenario-menu-item${isActive ? ' active' : ''}`}
+            onClick={onSelect}
+          >
+            <span className="scenario-menu-dot" aria-hidden="true">{isActive ? '●' : '○'}</span>
+            <span className="scenario-menu-item-name">{scenario.name}</span>
+            {isActive && <span className="scenario-menu-item-check" aria-hidden="true">✓</span>}
+          </button>
           {canDelete && (
-            <span
-              className="scenario-tab-close"
-              role="button"
-              tabIndex={-1}
+            <button
+              type="button"
+              className="scenario-menu-item-delete"
               title="Delete scenario"
               onClick={(e) => { e.stopPropagation(); setArmed(true); }}
+              aria-label={`Delete scenario ${scenario.name}`}
             >
               ×
-            </span>
+            </button>
           )}
         </>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -793,59 +860,6 @@ function ContextWarning({ children, onDismiss }: { children: React.ReactNode; on
         <button className="cw-dismiss" title="Dismiss" onClick={onDismiss}>✕</button>
       )}
     </div>
-  );
-}
-
-/* ============ PLANNER HERO ============ */
-
-interface PlannerHeroStat {
-  label: string;
-  value: string;
-  unit?: string;
-  tone?: 'good' | 'bad' | 'warn';
-}
-
-/**
- * Context banner shown above the main card on overview/results pages.
- * Image sits on the right and fades into the panel; text + stats stay
- * on the left so the page remains finance-first and readable.
- */
-function PlannerHero({ title, subtitle, stats, compact }: {
-  title: string;
-  subtitle: string;
-  stats: PlannerHeroStat[];
-  compact?: boolean;
-}) {
-  const toneColor = (tone?: PlannerHeroStat['tone']) =>
-    tone === 'good'
-      ? 'var(--green)'
-      : tone === 'bad'
-        ? 'var(--red)'
-        : tone === 'warn'
-          ? 'var(--yellow)'
-          : undefined;
-
-  return (
-    <section className={`planner-hero ${compact ? 'planner-hero--compact' : ''}`}>
-      <div className="planner-hero__content">
-        <h1 className="planner-hero__title">{title}</h1>
-        <p className="planner-hero__subtitle">{subtitle}</p>
-        <div className="planner-hero__stats">
-          {stats.map((stat) => (
-            <div className="planner-hero__stat" key={stat.label}>
-              <span className="planner-hero__stat-label">{stat.label}</span>
-              <span
-                className="planner-hero__stat-value"
-                style={toneColor(stat.tone) ? { color: toneColor(stat.tone) } : undefined}
-              >
-                {stat.value}
-                {stat.unit && <span className="planner-hero__stat-unit">{stat.unit}</span>}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
   );
 }
 
