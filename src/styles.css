@@ -145,6 +145,40 @@
   --shadow-lg: 0 10px 30px rgba(61, 50, 33, 0.15);
 }
 
+/* ---------- WARM GRAY (dark, warm graphite) ---------- */
+[data-theme='warm-gray'] {
+  --bg: #2e2a26;            /* warm graphite */
+  --bg-subtle: #36322d;
+  --panel: #3a3631;         /* slightly lighter than bg */
+  --panel-light: #423d37;
+  --panel-hover: #4a443e;
+  --border: #4a443e;
+  --border-strong: #5a544d;
+  --text: #ece6dc;
+  --text-dim: #a8a094;
+  --text-faint: #75716a;
+  --accent: #d97757;        /* terracotta — distinct from dark's orange */
+  --accent-hover: #e89478;
+  --accent-dim: #3a2820;
+  --accent-text: #ffffff;
+  --chart: #c2956b;          /* muted tan (data) */
+  --chart-2: #8a9a8b;        /* sage */
+  --chart-3: #b08cb0;        /* dusty mauve */
+  --chart-4: #c4a861;        /* warm gold */
+  --green: #84a07a;
+  --green-dim: #2c332a;
+  --red: #c97171;
+  --red-dim: #3a2c2c;
+  --yellow: #d4a861;
+  --yellow-dim: #3a3328;
+  --purple: #b08cb0;
+  --gold: #c4a861;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
 /* ---------- NORD (kept for continuity) ---------- */
 [data-theme='nord'] {
   --bg: #2e3440;
@@ -177,6 +211,40 @@
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+/* ---------- DRACULA (official palette) ---------- */
+[data-theme='dracula'] {
+  --bg: #282a36;            /* Dracula background */
+  --bg-subtle: #343746;
+  --panel: #44475a;         /* current line — lifted panel */
+  --panel-light: #4d5163;
+  --panel-hover: #5a5f73;
+  --border: #44475a;
+  --border-strong: #6272a4;
+  --text: #f8f8f2;          /* Dracula foreground */
+  --text-dim: #c5c8d6;
+  --text-faint: #6272a4;    /* comment */
+  --accent: #bd93f9;        /* Dracula purple — signature accent */
+  --accent-hover: #d6a8ff;
+  --accent-dim: #2e2a47;
+  --accent-text: #282a36;
+  --chart: #8be9fd;          /* cyan */
+  --chart-2: #50fa7b;        /* green */
+  --chart-3: #ff79c6;        /* pink */
+  --chart-4: #ffb86c;        /* orange */
+  --green: #50fa7b;
+  --green-dim: #1f3a2a;
+  --red: #ff5555;
+  --red-dim: #3a1f1f;
+  --yellow: #f1fa8c;
+  --yellow-dim: #3a3a1f;
+  --purple: #ff79c6;        /* pink used for category markers */
+  --gold: #ffb86c;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.65);
 }
 
 /* ============================================================

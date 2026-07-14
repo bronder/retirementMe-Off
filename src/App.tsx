@@ -140,14 +140,18 @@ function useThemeColors() {
 
 type Tab = 'inputs' | 'results' | 'compare';
 type InputSection = 'overview' | 'assumptions' | 'accounts' | 'properties' | 'expenses' | 'income' | 'events';
-type Theme = 'dark' | 'light' | 'sepia' | 'nord';
+type Theme = 'dark' | 'light' | 'sepia' | 'nord' | 'warm-gray' | 'dracula';
 
 /** Theme picker config. Short labels for the popover, swatch for visual. */
-const THEMES: { id: Theme; label: string; icon: string; swatch: string }[] = [
-  { id: 'light', label: 'Light', icon: '☀', swatch: '#f7f6f3' },
-  { id: 'dark',  label: 'Dark',  icon: '☾', swatch: '#1a1816' },
-  { id: 'sepia', label: 'Sepia', icon: '☕', swatch: '#f4ecd8' },
-  { id: 'nord',  label: 'Nord',  icon: '❄', swatch: '#2e3440' },
+type ThemeId = 'light' | 'dark' | 'sepia' | 'nord' | 'warm-gray' | 'dracula';
+
+const THEMES: { id: ThemeId; label: string; icon: string; swatch: string }[] = [
+  { id: 'light',     label: 'Light',    icon: '☀',  swatch: '#f7f6f3' },
+  { id: 'dark',      label: 'Dark',     icon: '☾',  swatch: '#1a1816' },
+  { id: 'sepia',     label: 'Sepia',    icon: '☕', swatch: '#f4ecd8' },
+  { id: 'warm-gray', label: 'Warm Gray', icon: '◆',  swatch: '#3a3a3a' },
+  { id: 'nord',      label: 'Nord',     icon: '❄',  swatch: '#2e3440' },
+  { id: 'dracula',   label: 'Dracula',  icon: '🦇', swatch: '#282a36' },
 ];
 
 /* Compact popover theme picker — matches the Menu button styling. */
