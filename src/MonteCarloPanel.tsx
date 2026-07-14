@@ -129,11 +129,11 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
       .map(([age, count]) => ({ age, count }));
   }, [run.result]);
 
-  // Drill-down details for the currently-selected histogram bar. Lists every
-  // trial that depleted at that exact age (1-indexed), plus summary stats.
-  // Uses peak assets, retirement assets, and final assets so the table
-  // shows the dramatic drawdown (peak → retirement → depleted at 0)
-  // rather than a column of zeros.
+  // Drill-down details for the currently-selected depletion-age bar.
+  // Lists every trial that depleted at that exact age, plus summary stats.
+  // Uses peak, retirement, and final assets so the table shows the
+  // drawdown (peak → retirement → depleted at 0) rather than a column of
+  // zeros.
   const selectedBinDetails = useMemo(() => {
     if (!run.result || selectedBin === null) return null;
     const {
@@ -143,7 +143,6 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
       trialAssetsAtRetirement,
       depletionCount,
     } = run.result;
-    // Enumerate the index of every trial that depleted at this age.
     const matchingIndices: number[] = [];
     for (let i = 0; i < depletionAges.length; i++) {
       if (depletionAges[i] === selectedBin) matchingIndices.push(i);
@@ -160,10 +159,6 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
     const medianPeak = sortedPeak[Math.floor(sortedPeak.length / 2)];
     const sortedRet = [...retirementAssets].sort((a, b) => a - b);
     const medianRetirement = sortedRet[Math.floor(sortedRet.length / 2)];
-    // Median drawdown: how much value the median run lost from peak to depleted.
-    // The "% of peak left" is a related but different metric — it's the
-    // fraction of peak that survived to depletion. We expose both so the
-    // table can show "$X lost (Y% of peak left)".
     const medianDrawdown = medianPeak - median;
     const medianDrawdownPct =
       medianPeak > 0 ? Math.max(0, (median / medianPeak) * 100) : 0;
@@ -179,7 +174,7 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
       medianDrawdown,
       medianDrawdownPct,
       runs: matchingIndices.map((trialIndex, positionInBin) => ({
-        trialIndex: trialIndex + 1, // 1-indexed for display
+        trialIndex: trialIndex + 1,
         positionInBin: positionInBin + 1,
         depletionAge: selectedBin,
         retirementAssets: retirementAssets[positionInBin],
@@ -188,6 +183,104 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
       })),
     };
   }, [run.result, selectedBin]);
+
+  // Success histogram — bucket successful runs by their ending balance
+  // (today's $). Different lens from the depletion histogram (which bins
+  // by age of failure). This shows "what does a typical successful run
+  // look like" — i.e., how much money did the run end with?
+  const successHistogram = useMemo(() => {
+    const r = run.result;
+    if (!r || r.successCount === 0) return [];
+    // Use a fixed set of bins so the x-axis is stable across runs.
+    // Bin edges in dollars; midpoint + label pre-computed for readability.
+    const edges: [number, number, string][] = [
+      [0, 100_000, '$0–100K'],
+      [100_000, 250_000, '$100–250K'],
+      [250_000, 500_000, '$250–500K'],
+      [500_000, 1_000_000, '$500K–1M'],
+      [1_000_000, 2_000_000, '$1–2M'],
+      [2_000_000, Infinity, '$2M+'],
+    ];
+    const counts = edges.map(() => 0);
+    for (let i = 0; i < r.depletionAges.length; i++) {
+      if (r.depletionAges[i] !== null) continue; // skip depleted
+      const v = r.trialFinalAssets[i];
+      for (let j = 0; j < edges.length; j++) {
+        const [lo, hi] = edges[j];
+        if (v >= lo && v < hi) {
+          counts[j]++;
+          break;
+        }
+      }
+    }
+    return edges
+      .map(([_lo, _hi, label], j) => ({ label, count: counts[j] }))
+      .filter((b) => b.count > 0);
+  }, [run.result]);
+
+  // Drill-down details for the selected success-bin (final-balance band).
+  // Lists every successful run that ended in the chosen band, with peak and
+  // retirement values so the user sees the *growth* the run achieved from
+  // retirement to its peak. (Unlike the depletion drill-down, all the
+  // ending values here are positive — there's no "lost $X" story to tell.)
+  const [selectedSuccessBin, setSelectedSuccessBin] = useState<string | null>(
+    null,
+  );
+  const selectedSuccessBinDetails = useMemo(() => {
+    const r = run.result;
+    if (!r || selectedSuccessBin === null) return null;
+    // Re-derive the bin edges (must match the histogram exactly so the
+    // selected bin label lines up with a real bucket of trials).
+    const edges: [number, number, string][] = [
+      [0, 100_000, '$0–100K'],
+      [100_000, 250_000, '$100–250K'],
+      [250_000, 500_000, '$250–500K'],
+      [500_000, 1_000_000, '$500K–1M'],
+      [1_000_000, 2_000_000, '$1–2M'],
+      [2_000_000, Infinity, '$2M+'],
+    ];
+    const edge = edges.find((e) => e[2] === selectedSuccessBin);
+    if (!edge) return null;
+    const [lo, hi] = edge;
+    const matchingIndices: number[] = [];
+    for (let i = 0; i < r.depletionAges.length; i++) {
+      if (r.depletionAges[i] !== null) continue; // skip depleted
+      const v = r.trialFinalAssets[i];
+      if (v >= lo && v < hi) matchingIndices.push(i);
+    }
+    if (matchingIndices.length === 0) return null;
+    const finalAssets = matchingIndices.map((i) => r.trialFinalAssets[i]);
+    const peakAssets = matchingIndices.map((i) => r.trialPeakAssets[i]);
+    const retirementAssets = matchingIndices.map(
+      (i) => r.trialAssetsAtRetirement[i],
+    );
+    const sorted = [...finalAssets].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    const min = sorted[0];
+    const max = sorted[sorted.length - 1];
+    const sortedPeak = [...peakAssets].sort((a, b) => a - b);
+    const medianPeak = sortedPeak[Math.floor(sortedPeak.length / 2)];
+    const sortedRet = [...retirementAssets].sort((a, b) => a - b);
+    const medianRetirement = sortedRet[Math.floor(sortedRet.length / 2)];
+    return {
+      label: selectedSuccessBin,
+      count: matchingIndices.length,
+      shareOfSuccesses:
+        r.successCount > 0 ? matchingIndices.length / r.successCount : 0,
+      medianFinalAssets: median,
+      minFinalAssets: min,
+      maxFinalAssets: max,
+      medianPeakAssets: medianPeak,
+      medianRetirementAssets: medianRetirement,
+      runs: matchingIndices.map((trialIndex, positionInBin) => ({
+        trialIndex: trialIndex + 1,
+        positionInBin: positionInBin + 1,
+        retirementAssets: retirementAssets[positionInBin],
+        peakAssets: peakAssets[positionInBin],
+        finalAssets: r.trialFinalAssets[trialIndex],
+      })),
+    };
+  }, [run.result, selectedSuccessBin]);
 
   return (
     <div className="monte-carlo-panel">
@@ -502,6 +595,129 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
                                   <span className="mc-drilldown-lost-pct">
                                     {dropPct > 0 ? `${dropPct.toFixed(0)}% of peak` : '0%'}
                                   </span>
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Success runs — how much money did successful runs end with?
+              Mirror of the depletion block: histogram bins by final-balance
+              band, click reveals per-run table. Successful runs don't deplete
+              so the "story" is growth: nest egg → peak → final. We show all
+              three so the user can see how much the run grew from retirement. */}
+          {successHistogram.length > 0 && (
+            <div className="chart-container">
+              <h3>What does a typical successful run look like?</h3>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={successHistogram}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+                  <XAxis
+                    dataKey="label"
+                    stroke={colors.textDim}
+                    label={{ value: 'Final balance (today\'s $)', position: 'insideBottom', dy: 10, fill: colors.textDim, fontSize: 11 }}
+                  />
+                  <YAxis
+                    stroke={colors.textDim}
+                    allowDecimals={false}
+                    label={{ value: '# runs', angle: -90, position: 'insideLeft', fill: colors.textDim, fontSize: 11 }}
+                  />
+                  <Tooltip
+                    contentStyle={{ background: colors.panel, border: `1px solid ${colors.border}`, borderRadius: 8 }}
+                    formatter={(v: number) => [`${v} run${v === 1 ? '' : 's'} — click for details`, 'Ended in this band']}
+                  />
+                  <Bar
+                    dataKey="count"
+                    fill={colors.green}
+                    cursor="pointer"
+                    onClick={(d: { label: string; count: number }) =>
+                      setSelectedSuccessBin((prev) => (prev === d.label ? null : d.label))
+                    }
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+
+              {selectedSuccessBinDetails && (
+                <div className="mc-drilldown">
+                  <div className="mc-drilldown-header">
+                    <div>
+                      <div className="mc-drilldown-title">
+                        Successful runs that ended with <strong>{selectedSuccessBinDetails.label}</strong>
+                      </div>
+                      <div className="mc-drilldown-sub muted">
+                        {selectedSuccessBinDetails.count.toLocaleString()} run
+                        {selectedSuccessBinDetails.count === 1 ? '' : 's'}
+                        {' '}({(selectedSuccessBinDetails.shareOfSuccesses * 100).toFixed(1)}% of all successes)
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => setSelectedSuccessBin(null)}
+                      title="Close drill-down"
+                    >
+                      ✕ Close
+                    </button>
+                  </div>
+
+                  <div className="mc-drilldown-stats">
+                    <div>
+                      <div className="mc-summary-label">Median at retirement</div>
+                      <div className="mc-drilldown-value">
+                        {formatCurrency(selectedSuccessBinDetails.medianRetirementAssets, { compact: true })}
+                      </div>
+                      <div className="mc-drilldown-sub muted">Nest egg entering withdrawal</div>
+                    </div>
+                    <div>
+                      <div className="mc-summary-label">Median peak (high water)</div>
+                      <div className="mc-drilldown-value" style={{ color: colors.green }}>
+                        {formatCurrency(selectedSuccessBinDetails.medianPeakAssets, { compact: true })}
+                      </div>
+                      <div className="mc-drilldown-sub muted">Highest the plan reached</div>
+                    </div>
+                    <div>
+                      <div className="mc-summary-label">Median final</div>
+                      <div className="mc-drilldown-value" style={{ color: colors.green }}>
+                        {formatCurrency(selectedSuccessBinDetails.medianFinalAssets, { compact: true })}
+                      </div>
+                      <div className="mc-drilldown-sub muted">Plan finished with</div>
+                    </div>
+                  </div>
+
+                  {/* Per-run table — same alignment system as the depletion one. */}
+                  <div className="mc-drilldown-table-wrap">
+                    <table className="data-table mc-drilldown-table">
+                      <thead>
+                        <tr>
+                          <th>Run #</th>
+                          <th>At retirement</th>
+                          <th>Peak</th>
+                          <th>Final</th>
+                          <th>Growth (peak − retirement)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedSuccessBinDetails.runs.map((r) => {
+                          const growth = r.peakAssets - r.retirementAssets;
+                          return (
+                            <tr key={r.trialIndex}>
+                              <td>#{r.trialIndex}</td>
+                              <td>{formatCurrency(r.retirementAssets, { compact: true })}</td>
+                              <td className="mc-drilldown-peak">
+                                {formatCurrency(r.peakAssets, { compact: true })}
+                              </td>
+                              <td>
+                                {formatCurrency(r.finalAssets, { compact: true })}
+                              </td>
+                              <td className="mc-drilldown-lost">
+                                <span style={{ color: colors.green }}>
+                                  +{formatCurrency(growth, { compact: true })}
                                 </span>
                               </td>
                             </tr>
