@@ -979,6 +979,21 @@ function OverviewPanel({ scenario, store }: {
             <Tooltip contentStyle={{ background: tc.panel, border: `1px solid ${tc.border}`, borderRadius: 8 }} formatter={(v: number) => formatCurrency(v)} labelFormatter={(l) => `Age ${l}`} labelStyle={{ color: tc.text }} itemStyle={{ color: tc.text }} />
             <Area type="monotone" dataKey="netWorth" stroke={tc.chart} strokeWidth={2} fill="url(#overviewGradient)" />
             <ReferenceLine x={scenario.assumptions.retirementAge} stroke={tc.yellow} strokeDasharray="5 5" label={{ value: 'Retire', fill: tc.yellow, fontSize: 11 }} />
+            {scenario.events.filter((ev) => ev.proceeds > 0 || ev.cost > 0).map((ev) => (
+              <ReferenceLine
+                key={ev.id}
+                x={ev.age}
+                stroke={ev.proceeds >= ev.cost ? tc.green : tc.red}
+                strokeDasharray="3 3"
+                label={{ value: ev.name || (ev.proceeds >= ev.cost ? '▲' : '▼'), fill: ev.proceeds >= ev.cost ? tc.green : tc.red, fontSize: 10, position: 'top' }}
+              />
+            ))}
+            {scenario.properties?.filter((p) => p.saleAge || p.purchaseAge).flatMap((p) => {
+              const lines = [];
+              if (p.saleAge) lines.push(<ReferenceLine key={`${p.id}-sale`} x={p.saleAge} stroke={tc.green} strokeDasharray="3 3" label={{ value: '🏡 Sale', fill: tc.green, fontSize: 10, position: 'top' }} />);
+              if (p.purchaseAge) lines.push(<ReferenceLine key={`${p.id}-buy`} x={p.purchaseAge} stroke={tc.red} strokeDasharray="3 3" label={{ value: '🏠 Buy', fill: tc.red, fontSize: 10, position: 'top' }} />);
+              return lines;
+            })}
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -2333,6 +2348,21 @@ function ResultsView({ scenario, result, readiness }: {
                     <Area type="monotone" dataKey="Nominal Assets" stroke={tc.chart} fill={tc.chart} fillOpacity={0.15} />
                     <Area type="monotone" dataKey="Today's Dollars" stroke={tc.chart2} fill={tc.chart2} fillOpacity={0.1} />
                     <ReferenceLine x={scenario.assumptions.retirementAge} stroke={tc.yellow} strokeDasharray="5 5" label={{ value: 'Retire', fill: tc.yellow, fontSize: 11 }} />
+                    {scenario.events.filter((ev) => ev.proceeds > 0 || ev.cost > 0).map((ev) => (
+                      <ReferenceLine
+                        key={ev.id}
+                        x={ev.age}
+                        stroke={ev.proceeds >= ev.cost ? tc.green : tc.red}
+                        strokeDasharray="3 3"
+                        label={{ value: ev.name || (ev.proceeds >= ev.cost ? '▲' : '▼'), fill: ev.proceeds >= ev.cost ? tc.green : tc.red, fontSize: 10, position: 'top' }}
+                      />
+                    ))}
+                    {scenario.properties?.filter((p) => p.saleAge || p.purchaseAge).flatMap((p) => {
+                      const lines = [];
+                      if (p.saleAge) lines.push(<ReferenceLine key={`${p.id}-sale`} x={p.saleAge} stroke={tc.green} strokeDasharray="3 3" label={{ value: '🏡 Sale', fill: tc.green, fontSize: 10, position: 'top' }} />);
+                      if (p.purchaseAge) lines.push(<ReferenceLine key={`${p.id}-buy`} x={p.purchaseAge} stroke={tc.red} strokeDasharray="3 3" label={{ value: '🏠 Buy', fill: tc.red, fontSize: 10, position: 'top' }} />);
+                      return lines;
+                    })}
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
