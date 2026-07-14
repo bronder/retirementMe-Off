@@ -253,6 +253,11 @@ export default function App() {
     localStorage.setItem('retirement-theme', theme);
   }, [theme]);
 
+  // Persist active tab so a refresh (F5) returns to the same view
+  useEffect(() => {
+    localStorage.setItem('retirement-tab', tab);
+  }, [tab]);
+
   // Close menu on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
