@@ -142,12 +142,76 @@ type Tab = 'inputs' | 'results' | 'compare';
 type InputSection = 'overview' | 'assumptions' | 'accounts' | 'properties' | 'expenses' | 'income' | 'events';
 type Theme = 'dark' | 'light' | 'sepia' | 'nord';
 
-const THEMES: { id: Theme; label: string }[] = [
-  { id: 'dark', label: '🌙 Dark' },
-  { id: 'light', label: '☀️ Light' },
-  { id: 'sepia', label: '📜 Sepia' },
-  { id: 'nord', label: '❄️ Nord' },
+/** Theme picker config. Short labels for the popover, swatch for visual. */
+const THEMES: { id: Theme; label: string; icon: string; swatch: string }[] = [
+  { id: 'light', label: 'Light', icon: '☀', swatch: '#f7f6f3' },
+  { id: 'dark',  label: 'Dark',  icon: '☾', swatch: '#1a1816' },
+  { id: 'sepia', label: 'Sepia', icon: '☕', swatch: '#f4ecd8' },
+  { id: 'nord',  label: 'Nord',  icon: '❄', swatch: '#2e3440' },
 ];
+
+/* Compact popover theme picker — matches the Menu button styling. */
+function ThemePicker({ theme, setTheme }: { theme: Theme; setTheme: (t: Theme) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const current = THEMES.find((t) => t.id === theme) ?? THEMES[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="theme-picker" ref={ref}>
+      <button
+        type="button"
+        className={`btn btn-sm theme-picker-trigger${open ? ' open' : ''}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title={`Theme: ${current.label}`}
+      >
+        <span className="theme-picker-swatch" style={{ background: current.swatch }} />
+        <span className="theme-picker-label">{current.label}</span>
+        <span className="theme-picker-caret" aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <div className="theme-picker-menu" role="listbox">
+          {THEMES.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="option"
+              aria-selected={t.id === theme}
+              className={`theme-picker-item${t.id === theme ? ' active' : ''}`}
+              onClick={() => {
+                setTheme(t.id);
+                setOpen(false);
+              }}
+            >
+              <span className="theme-picker-swatch" style={{ background: t.swatch }} />
+              <span className="theme-picker-item-label">{t.label}</span>
+              {t.id === theme && (
+                <span className="theme-picker-check" aria-hidden="true">✓</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function App() {
   const store = usePlanStore();
@@ -241,9 +305,7 @@ export default function App() {
       <div className="header">
         <h1><img src="./images/retirementmeoff-dark.png" alt="retirementMe-Off" style={{ height: '96px', width: 'auto', verticalAlign: 'middle' }} /></h1>
         <div className="header-actions">
-          <select value={theme} onChange={(e) => setTheme(e.target.value as Theme)} style={{ width: 'auto' }}>
-            {THEMES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-          </select>
+          <ThemePicker theme={theme} setTheme={setTheme} />
           <div className="menu-wrapper" ref={menuRef}>
             <button className="btn btn-sm" onClick={() => setMenuOpen(!menuOpen)}>☰ Menu</button>
             {menuOpen && (
