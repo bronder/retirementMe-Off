@@ -138,6 +138,20 @@ export function runProjectionCore(
       if (!activePre && !activePost) continue;
       if (exp.startAge !== null && age < exp.startAge) continue;
       if (exp.endAge !== null && age > exp.endAge) continue;
+
+      // Skip property-linked expenses if the property has been sold (after
+      // saleAge) or not yet purchased (before purchaseAge). The store creates
+      // these with endAge: null, so without this check they'd keep accruing
+      // after a sale.
+      if (exp._propertyId) {
+        const propId = exp._propertyId.split(':')[0];
+        const prop = scenario.properties?.find((p) => p.id === propId);
+        if (prop) {
+          if (prop.saleAge && age >= prop.saleAge) continue;
+          if (prop.purchaseAge && age < prop.purchaseAge) continue;
+        }
+      }
+
       expenses += exp.annualAmount * inflationFactor;
     }
 
