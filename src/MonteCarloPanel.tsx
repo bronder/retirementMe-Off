@@ -500,12 +500,14 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
                                 {formatCurrency(r.finalAssets, { compact: true })}
                               </td>
                               <td className="text-right">
-                                <span style={{ color: colors.red, fontWeight: 600 }}>
-                                  −{formatCurrency(drop, { compact: true })}
+                                <span className="mc-drawdown-cell">
+                                  <span className="mc-drawdown-amount" style={{ color: colors.red }}>
+                                    −{formatCurrency(drop, { compact: true })}
+                                  </span>
+                                  <span className="mc-drawdown-pct muted">
+                                    {dropPct > 0 ? `${dropPct.toFixed(0)}% of peak left` : '0%'}
+                                  </span>
                                 </span>
-                                <div className="muted" style={{ fontSize: 10, marginTop: 1 }}>
-                                  {dropPct > 0 ? `${dropPct.toFixed(0)}% of peak left` : '0%'}
-                                </div>
                               </td>
                             </tr>
                           );

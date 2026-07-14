@@ -618,7 +618,7 @@ body {
 }
 
 .mc-drilldown-table-wrap {
-  max-height: 240px;
+  max-height: 260px;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -627,6 +627,29 @@ body {
 
 .mc-drilldown-table {
   font-size: var(--text-xs);
+  width: 100%;
+  table-layout: auto;
+  /* Tighten the default .data-table padding for the compact drill-down view. */
+}
+
+.mc-drilldown-table th,
+.mc-drilldown-table td {
+  /* Right-align everything by default — numeric columns feel cleaner. */
+  text-align: right;
+  vertical-align: middle;
+  /* Don't let numbers wrap mid-digit. */
+  white-space: nowrap;
+  /* Consistent row height even with the stacked Drawdown content. */
+  padding: 9px 12px;
+}
+
+/* First column is the trial index — keep it narrow and centered. */
+.mc-drilldown-table th:first-child,
+.mc-drilldown-table td:first-child {
+  text-align: center;
+  width: 56px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
 }
 
 .mc-drilldown-table th {
@@ -634,6 +657,27 @@ body {
   top: 0;
   background: var(--bg-subtle);
   z-index: 1;
+  color: var(--text-dim);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Stacked drop cell — amount on top, %-of-peak sub-line below.
+   Inline-flex keeps the two lines aligned at the right edge of the cell. */
+.mc-drawdown-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  line-height: 1.25;
+}
+
+.mc-drawdown-amount {
+  font-weight: 600;
+}
+
+.mc-drawdown-pct {
+  font-size: 10px;
 }
 
 @media (max-width: 900px) {
