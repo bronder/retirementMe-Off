@@ -38,6 +38,13 @@ interface PlanStore {
   updateProperty: (scenarioId: string, propertyId: string, patch: Partial<Property>) => void;
   deleteProperty: (scenarioId: string, propertyId: string) => void;
 
+  /**
+   * Manually sync housing costs from all properties to the Expenses section.
+   * Useful if a saved plan was loaded with properties but no linked expenses
+   * (e.g. migration didn't run, or localStorage was edited). Idempotent.
+   */
+  syncPropertiesToExpenses: (scenarioId: string) => void;
+
   // Income operations
   addIncome: (scenarioId: string, income: Omit<IncomeSource, 'id'>) => void;
   updateIncome: (scenarioId: string, incomeId: string, patch: Partial<IncomeSource>) => void;
@@ -307,6 +314,62 @@ export const usePlanStore = create<PlanStore>()(
                   }
                 : s,
             ),
+          },
+        })),
+
+      syncPropertiesToExpenses: (scenarioId) =>
+        set((state) => ({
+          plan: {
+            ...state.plan,
+            scenarios: state.plan.scenarios.map((s) => {
+              if (s.id !== scenarioId) return s;
+              if (!s.properties) return s;
+              const existingLinked = new Set(
+                s.expenses
+                  .map((e) => e._propertyId?.split(':')[0])
+                  .filter((id): id is string => !!id),
+              );
+              const newExpenses: Expense[] = [];
+              for (const prop of s.properties) {
+                if (existingLinked.has(prop.id)) continue;
+                newExpenses.push(
+                  {
+                    id: `sync-${prop.id}-tax`,
+                    name: `${prop.name} — Property Tax`,
+                    category: 'housing',
+                    annualAmount: prop.annualPropertyTax,
+                    preRetirement: false,
+                    postRetirement: true,
+                    startAge: null,
+                    endAge: null,
+                    _propertyId: `${prop.id}:tax`,
+                  } as Expense,
+                  {
+                    id: `sync-${prop.id}-insurance`,
+                    name: `${prop.name} — Insurance`,
+                    category: 'insurance',
+                    annualAmount: prop.annualInsurance,
+                    preRetirement: false,
+                    postRetirement: true,
+                    startAge: null,
+                    endAge: null,
+                    _propertyId: `${prop.id}:insurance`,
+                  } as Expense,
+                  {
+                    id: `sync-${prop.id}-mortgage`,
+                    name: `${prop.name} — Mortgage`,
+                    category: 'housing',
+                    annualAmount: prop.mortgagePayment ?? Math.round(prop.mortgageBalance / 30),
+                    preRetirement: false,
+                    postRetirement: true,
+                    startAge: null,
+                    endAge: null,
+                    _propertyId: `${prop.id}:mortgage`,
+                  } as Expense,
+                );
+              }
+              return { ...s, expenses: [...s.expenses, ...newExpenses] };
+            }),
           },
         })),
 
@@ -587,6 +650,14 @@ export const usePlanStore = create<PlanStore>()(
           const exists = state.plan.scenarios.some((s) => s.id === state.activeScenarioId);
           if (!exists) {
             state.activeScenarioId = state.plan.scenarios[0].id;
+          }
+        }
+        // Belt-and-braces: sync property housing costs to expenses on every load.
+        // The v4→v5 migration handles persisted plans, but this also covers
+        // edge cases where migration didn't run or localStorage was edited.
+        if (state && state.syncPropertiesToExpenses) {
+          for (const scenario of state.plan.scenarios) {
+            state.syncPropertiesToExpenses(scenario.id);
           }
         }
       },
