@@ -131,9 +131,18 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
 
   // Drill-down details for the currently-selected histogram bar. Lists every
   // trial that depleted at that exact age (1-indexed), plus summary stats.
+  // Uses peak assets, retirement assets, and final assets so the table
+  // shows the dramatic drawdown (peak → retirement → depleted at 0)
+  // rather than a column of zeros.
   const selectedBinDetails = useMemo(() => {
     if (!run.result || selectedBin === null) return null;
-    const { depletionAges, trialFinalAssets, depletionCount } = run.result;
+    const {
+      depletionAges,
+      trialFinalAssets,
+      trialPeakAssets,
+      trialAssetsAtRetirement,
+      depletionCount,
+    } = run.result;
     // Enumerate the index of every trial that depleted at this age.
     const matchingIndices: number[] = [];
     for (let i = 0; i < depletionAges.length; i++) {
@@ -141,10 +150,23 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
     }
     if (matchingIndices.length === 0) return null;
     const finalAssets = matchingIndices.map((i) => trialFinalAssets[i]);
+    const peakAssets = matchingIndices.map((i) => trialPeakAssets[i]);
+    const retirementAssets = matchingIndices.map((i) => trialAssetsAtRetirement[i]);
     const sorted = [...finalAssets].sort((a, b) => a - b);
     const median = sorted[Math.floor(sorted.length / 2)];
     const min = sorted[0];
     const max = sorted[sorted.length - 1];
+    const sortedPeak = [...peakAssets].sort((a, b) => a - b);
+    const medianPeak = sortedPeak[Math.floor(sortedPeak.length / 2)];
+    const sortedRet = [...retirementAssets].sort((a, b) => a - b);
+    const medianRetirement = sortedRet[Math.floor(sortedRet.length / 2)];
+    // Median drawdown: how much value the median run lost from peak to depleted.
+    // The "% of peak left" is a related but different metric — it's the
+    // fraction of peak that survived to depletion. We expose both so the
+    // table can show "$X lost (Y% of peak left)".
+    const medianDrawdown = medianPeak - median;
+    const medianDrawdownPct =
+      medianPeak > 0 ? Math.max(0, (median / medianPeak) * 100) : 0;
     return {
       age: selectedBin,
       count: matchingIndices.length,
@@ -152,10 +174,16 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
       medianFinalAssets: median,
       minFinalAssets: min,
       maxFinalAssets: max,
+      medianPeakAssets: medianPeak,
+      medianRetirementAssets: medianRetirement,
+      medianDrawdown,
+      medianDrawdownPct,
       runs: matchingIndices.map((trialIndex, positionInBin) => ({
         trialIndex: trialIndex + 1, // 1-indexed for display
         positionInBin: positionInBin + 1,
         depletionAge: selectedBin,
+        retirementAssets: retirementAssets[positionInBin],
+        peakAssets: peakAssets[positionInBin],
         finalAssets: trialFinalAssets[trialIndex],
       })),
     };
@@ -403,49 +431,85 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
                     </button>
                   </div>
 
-                  {/* Summary stats grid */}
+                  {/* Summary stats grid — three values that contextualize the
+                      "drawdown" story: how much the typical run had at
+                      retirement, how high it climbed (peak), and where it
+                      finally ended up. */}
                   <div className="mc-drilldown-stats">
                     <div>
-                      <div className="mc-summary-label">Median final assets</div>
-                      <div className="mc-drilldown-value">{formatCurrency(selectedBinDetails.medianFinalAssets, { compact: true })}</div>
+                      <div className="mc-summary-label">Median at retirement</div>
+                      <div className="mc-drilldown-value">
+                        {formatCurrency(selectedBinDetails.medianRetirementAssets, { compact: true })}
+                      </div>
+                      <div className="mc-drilldown-sub muted">Nest egg entering withdrawal</div>
                     </div>
                     <div>
-                      <div className="mc-summary-label">Min (best of these)</div>
+                      <div className="mc-summary-label">Median peak (high water)</div>
                       <div className="mc-drilldown-value" style={{ color: colors.green }}>
-                        {formatCurrency(selectedBinDetails.minFinalAssets, { compact: true })}
+                        {formatCurrency(selectedBinDetails.medianPeakAssets, { compact: true })}
                       </div>
+                      <div className="mc-drilldown-sub muted">Highest the plan reached</div>
                     </div>
                     <div>
-                      <div className="mc-summary-label">Max (worst of these)</div>
+                      <div className="mc-summary-label">Median drawdown</div>
                       <div className="mc-drilldown-value" style={{ color: colors.red }}>
-                        {formatCurrency(selectedBinDetails.maxFinalAssets, { compact: true })}
+                        {formatCurrency(selectedBinDetails.medianDrawdown, { compact: true })}
+                        {selectedBinDetails.medianDrawdownPct > 0 && (
+                          <span className="muted" style={{ fontSize: 'var(--text-xs)', marginLeft: 4 }}>
+                            ({(100 - selectedBinDetails.medianDrawdownPct).toFixed(0)}% left)
+                          </span>
+                        )}
                       </div>
+                      <div className="mc-drilldown-sub muted">Peak → depleted</div>
                     </div>
                   </div>
 
-                  {/* Per-run table */}
+                  {/* Per-run table — shows the run's full journey: started with
+                      a nest egg at retirement, climbed to a peak, then collapsed
+                      to ~0 at the depletion age. Each run is identified by
+                      its global trial number. */}
                   <div className="mc-drilldown-table-wrap">
                     <table className="data-table mc-drilldown-table">
                       <thead>
                         <tr>
                           <th>Run #</th>
-                          <th>Depletion age</th>
-                          <th className="text-right">Final assets (today's $)</th>
+                          <th className="text-right">At retirement</th>
+                          <th className="text-right">Peak (high water)</th>
+                          <th className="text-right">Final (depleted)</th>
+                          <th className="text-right">Drawdown</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {selectedBinDetails.runs.map((r) => (
-                          <tr key={r.trialIndex}>
-                            <td>#{r.trialIndex}</td>
-                            <td>{r.depletionAge}</td>
-                            <td
-                              className="text-right"
-                              style={{ color: r.finalAssets < 100 ? colors.red : colors.text }}
-                            >
-                              {formatCurrency(r.finalAssets, { compact: true })}
-                            </td>
-                          </tr>
-                        ))}
+                        {selectedBinDetails.runs.map((r) => {
+                          const drop = r.peakAssets - r.finalAssets;
+                          const dropPct =
+                            r.peakAssets > 0 ? (r.finalAssets / r.peakAssets) * 100 : 0;
+                          return (
+                            <tr key={r.trialIndex}>
+                              <td>#{r.trialIndex}</td>
+                              <td className="text-right">
+                                {formatCurrency(r.retirementAssets, { compact: true })}
+                              </td>
+                              <td className="text-right" style={{ color: colors.green }}>
+                                {formatCurrency(r.peakAssets, { compact: true })}
+                              </td>
+                              <td
+                                className="text-right"
+                                style={{ color: r.finalAssets < 100 ? colors.red : colors.text }}
+                              >
+                                {formatCurrency(r.finalAssets, { compact: true })}
+                              </td>
+                              <td className="text-right">
+                                <span style={{ color: colors.red, fontWeight: 600 }}>
+                                  −{formatCurrency(drop, { compact: true })}
+                                </span>
+                                <div className="muted" style={{ fontSize: 10, marginTop: 1 }}>
+                                  {dropPct > 0 ? `${dropPct.toFixed(0)}% of peak left` : '0%'}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

@@ -403,4 +403,37 @@ describe('runMonteCarloProjection', () => {
       expect(assets).toBeLessThan(1000); // depleted run should be ~zero
     }
   });
+
+  it('exposes trialPeakAssets and trialAssetsAtRetirement for drill-down drawdown', () => {
+    // Tiny nest egg → most runs deplete. Each depleted run should have:
+    //   - trialPeakAssets > 0 (they built up something before crashing)
+    //   - trialAssetsAtRetirement > 0 (they had a nest egg at retirementAge)
+    //   - peak ≥ retirement_assets ≥ final_assets (peak is the high-water mark)
+    const scenario = makeScenario({
+      accounts: [
+        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 5000, annualReturn: 0.02, annualContribution: 0, employerMatch: 0 },
+      ],
+      expenses: [
+        { id: 'e1', name: 'Living', category: 'housing', annualAmount: 60000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
+      ],
+    });
+    const mc = runMonteCarloProjection(scenario, { numRuns: 200, returnStdDev: 0.15, seed: 44 });
+    expect(mc.trialPeakAssets).toHaveLength(200);
+    expect(mc.trialAssetsAtRetirement).toHaveLength(200);
+    // Find the depleted runs and verify the invariants on each.
+    let checkedDepleted = 0;
+    for (let i = 0; i < 200; i++) {
+      if (mc.depletionAges[i] === null) continue; // skip successful runs
+      const peak = mc.trialPeakAssets[i];
+      const atRet = mc.trialAssetsAtRetirement[i];
+      const final = mc.trialFinalAssets[i];
+      expect(peak).toBeGreaterThan(0);
+      expect(atRet).toBeGreaterThan(0);
+      expect(peak).toBeGreaterThanOrEqual(atRet);
+      expect(peak).toBeGreaterThanOrEqual(final);
+      checkedDepleted++;
+      if (checkedDepleted > 20) break; // sample, don't check all
+    }
+    expect(checkedDepleted).toBeGreaterThan(0);
+  });
 });

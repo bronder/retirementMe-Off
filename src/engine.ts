@@ -460,6 +460,30 @@ export function runMonteCarloProjection(
   // histogram drill-down table can show stats (count, median, range) for runs
   // that depleted at a given age, not just the count.
   const trialFinalAssets = finalReals.slice();
+  // Peak real assets reached at any point in each run — the "high water mark"
+  // before any crash, makes the depletion drill-down table impactful instead of
+  // a column of near-zero final balances.
+  const trialPeakAssets: number[] = trialResults.map((r) =>
+    r.years.reduce((m, y) => Math.max(m, y.realAssets), 0),
+  );
+  // Real assets at the retirement age, per run — answers "how much did the
+  // plan build up before retirement?" and contextualises the post-retirement drop.
+  // We use `beginningAssets` (the value at the start of the retirement year,
+  // before retirement-spending hits), converted to today's dollars via the
+  // age-specific inflation factor, so that a run that depletes *during*
+  // its retirement year still shows a positive nest-egg value. This is the
+  // semantically correct definition of "at retirement": the moment they
+  // retired, not the moment they ran out.
+  const retYearsFromNow =
+    scenario.assumptions.retirementAge - scenario.assumptions.currentAge;
+  const retInflationFactor = Math.pow(
+    1 + scenario.assumptions.inflationRate,
+    retYearsFromNow,
+  );
+  const trialAssetsAtRetirement: number[] = trialResults.map((r) => {
+    const yr = r.years.find((y) => y.age === scenario.assumptions.retirementAge);
+    return yr ? yr.beginningAssets / retInflationFactor : 0;
+  });
   const depletionNumbersOnly = depletionAges.filter((a): a is number => a !== null);
   const sortedDepletions = [...depletionNumbersOnly].sort((a, b) => a - b);
   const medianDepletionAge =
@@ -479,6 +503,8 @@ export function runMonteCarloProjection(
     percentilePaths,
     depletionAges,
     trialFinalAssets,
+    trialPeakAssets,
+    trialAssetsAtRetirement,
     elapsedMs: performance.now() - start,
   };
 }

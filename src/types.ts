@@ -318,6 +318,18 @@ export interface MonteCarloResult {
    *  Lets the histogram drill-down show the distribution of outcomes
    *  at a given depletion age, not just a count. */
   trialFinalAssets: number[];
+  /** Peak real assets (in today's dollars) reached at any point in each run.
+   *  The highest balance the plan ever achieved. Always non-zero for any
+   *  funded plan — for depleted runs it represents the "high water mark"
+   *  before the crash, which makes the depletion histogram drill-down
+   *  table impactful (drop = peak − final) instead of just a column of
+   *  near-zero final balances. */
+  trialPeakAssets: number[];
+  /** Real assets (in today's dollars) at the retirement age, per run.
+   *  The starting balance of the withdrawal phase — answers "how much
+   *  did the plan build up before retirement?" and contextualises the
+   *  post-retirement drop. */
+  trialAssetsAtRetirement: number[];
   /** Total computation time in ms. */
   elapsedMs: number;
 }
