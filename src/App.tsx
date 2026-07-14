@@ -1044,6 +1044,12 @@ function OverviewPanel({ scenario, store }: {
         </ResponsiveContainer>
       </div>
 
+      {/* Upcoming Life Events widget — shows the next few events so users can
+          see at a glance what's coming. Each event affects the projection
+          at its `age`; future events show up here but not in today's
+          "Current Net Worth" card (which is always at currentAge). */}
+      <UpcomingEventsWidget scenario={scenario} currentAge={scenario.assumptions.currentAge} />
+
       <div className="summary-strip">
         <div className="summary-strip-item"><span className="label">Years to Retirement</span><span className="value">{Math.max(0, scenario.assumptions.retirementAge - scenario.assumptions.currentAge)}</span></div>
         <div className="summary-strip-item"><span className="label">Years in Retirement</span><span className="value">{scenario.assumptions.endAge - scenario.assumptions.retirementAge}</span></div>
@@ -2237,6 +2243,95 @@ function EventsPanel({ scenario, store }: {
           );
         })
       )}
+    </div>
+  );
+}
+
+/* ============ UPCOMING EVENTS WIDGET ============
+   Shown on the Summary page so users can see at a glance which life
+   events are configured and when they'll fire. The current net-worth
+   card always reflects *today's* state, so future events don't appear
+   there — this widget makes them visible without forcing the user to
+   dig into the Life Events panel. */
+
+const EVENT_ICON: Record<EventType, string> = {
+  home_purchase: '🏠',
+  home_sale: '🏡',
+  large_purchase: '🚗',
+  windfall: '💰',
+  other: '📋',
+};
+
+function UpcomingEventsWidget({
+  scenario,
+  currentAge,
+}: {
+  scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
+  currentAge: number;
+}) {
+  // Pull the next 5 events sorted by age. "Upcoming" = age >= currentAge.
+  // We also include events that already happened (age < currentAge) so users
+  // can see "yep, this event has already been applied" — but tag them as past.
+  const upcoming = scenario.events
+    .slice()
+    .sort((a, b) => a.age - b.age)
+    .slice(0, 5);
+
+  if (upcoming.length === 0) {
+    return (
+      <div className="upcoming-events-widget">
+        <div className="upcoming-events-header">📅 Upcoming Life Events</div>
+        <div className="upcoming-events-empty">
+          No life events yet. Add a windfall, home purchase, or other one-time event to see how it
+          affects your plan. <span className="muted">(Events impact net worth and other projections.)</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="upcoming-events-widget">
+      <div className="upcoming-events-header">
+        📅 Upcoming Life Events
+        <span className="upcoming-events-hint">
+          These will affect your projection at the indicated age.
+        </span>
+      </div>
+      <div className="upcoming-events-list">
+        {upcoming.map((ev) => {
+          const isPast = ev.age < currentAge;
+          const netAmount = ev.proceeds - ev.cost;
+          const ongoing = ev.ongoingAnnualImpact;
+          return (
+            <div
+              key={ev.id}
+              className={`upcoming-event-row ${isPast ? 'past' : ''}`}
+              title={isPast ? 'This event has already been applied to your current net worth' : 'Future event — not yet reflected in current net worth'}
+            >
+              <span className="upcoming-event-icon">{EVENT_ICON[ev.type] ?? '📋'}</span>
+              <span className="upcoming-event-name">{ev.name || prettify(ev.type)}</span>
+              <span className="upcoming-event-age">
+                {isPast ? `Past (age ${ev.age})` : `Age ${ev.age}`}
+              </span>
+              {netAmount !== 0 && (
+                <span
+                  className="upcoming-event-amount"
+                  style={{ color: netAmount > 0 ? 'var(--green)' : 'var(--red)' }}
+                >
+                  {netAmount > 0 ? '+' : ''}
+                  {formatCurrency(netAmount, { compact: true })}
+                </span>
+              )}
+              {ongoing !== 0 && (
+                <span className="upcoming-event-ongoing" title="Ongoing annual impact (inflation-adjusted)">
+                  {ongoing > 0 ? '+' : ''}
+                  {formatCurrency(ongoing, { compact: true })}/yr
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
