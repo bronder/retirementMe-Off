@@ -1704,10 +1704,17 @@ tr.drag-over {
   /* One outer container per category: border + radius encloses the whole
      group, so the section header and child rows visually belong together. */
   border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
   border-radius: var(--radius);
   background: var(--bg-subtle);
   overflow: hidden;
 }
+
+/* Match the Accounts section treatment: cycle through accent + chart colors
+   for the left border so each category gets a distinct visual identifier. */
+.income-group:nth-child(2) { border-left-color: var(--chart-2); }
+.income-group:nth-child(3) { border-left-color: var(--chart-3); }
+.income-group:nth-child(4) { border-left-color: var(--chart-4); }
 
 /* Section header — anchored to the top of the container, with a bottom
    divider separating it from the nested rows. */
