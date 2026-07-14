@@ -2498,6 +2498,7 @@ function YearTable({ result, retirementAge, scenario }: { result: NonNullable<Re
               <th>Age</th>
               <th className="text-right">Start Assets</th>
               <th className="text-right">Contrib.</th>
+              <th className="text-right">Deposits</th>
               <th className="text-right">Growth</th>
               <th className="text-right">Income</th>
               <th className="text-right">Withdrawals</th>
@@ -2519,6 +2520,7 @@ function YearTable({ result, retirementAge, scenario }: { result: NonNullable<Re
                   <td style={{ cursor: 'pointer' }}>{y.age}</td>
                   <td className="text-right">{formatCurrency(y.beginningAssets, { compact: true })}</td>
                   <td className="text-right">{y.contributions > 0 ? formatCurrency(y.contributions, { compact: true }) : '—'}</td>
+                  <td className="text-right" style={{ color: 'var(--chart-2)' }}>{y.deposits > 0 ? '+' + formatCurrency(y.deposits, { compact: true }) : '—'}</td>
                   <td className="text-right" style={{ color: 'var(--green)' }}>{y.growth > 0 ? '+' + formatCurrency(y.growth, { compact: true }) : '—'}</td>
                   <td className="text-right">{y.income > 0 ? formatCurrency(y.income, { compact: true }) : '—'}</td>
                   <td className="text-right" style={{ color: y.withdrawals > 0 ? 'var(--red)' : undefined }}>{y.withdrawals > 0 ? '-' + formatCurrency(y.withdrawals, { compact: true }) : '—'}</td>
@@ -2528,7 +2530,7 @@ function YearTable({ result, retirementAge, scenario }: { result: NonNullable<Re
                 </tr>
                 {expandedAge === y.age && (
                   <tr key={`${y.age}-detail`} className="year-detail-row">
-                    <td colSpan={10} style={{ padding: 0 }}>
+                    <td colSpan={11} style={{ padding: 0 }}>
                       <div className="year-detail">
                         <div className="year-detail-grid">
                           <div className="year-detail-section">
