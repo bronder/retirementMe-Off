@@ -15,8 +15,20 @@ import {
 } from './ai';
 import { formatPercent } from './format';
 
+const PIN_STORAGE_KEY = 'ai-chat-pinned';
+
+function loadStored<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 /**
- * AI Chat Assistant — floating button + slide-in panel.
+ * AI Chat Assistant — can run as a floating modal or pinned sidebar.
  *
  * Lets the user chat with an AI about their retirement plan.
  * Supports fact-checking, suggestions, and scenario creation.
@@ -25,6 +37,7 @@ import { formatPercent } from './format';
 export function AiChat() {
   const store = usePlanStore();
   const [isOpen, setIsOpen] = useState(false);
+  const [pinned, setPinned] = useState(() => loadStored<boolean>(PIN_STORAGE_KEY, false));
   const [showSettings, setShowSettings] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -149,23 +162,59 @@ export function AiChat() {
     }
   };
 
+  // When pinned, auto-open. When unpinned, only show FAB.
+  const effectiveOpen = pinned || isOpen;
+
+  // Toggle the .app--ai-pinned class so the main content gets right-padding
+  // when the chat sidebar is pinned, preventing content from being hidden.
+  useEffect(() => {
+    const appEl = document.querySelector('.app');
+    if (appEl) {
+      appEl.classList.toggle('app--ai-pinned', pinned);
+    }
+  }, [pinned]);
+
+  // Toggle pin and persist.
+  const togglePin = () => {
+    const next = !pinned;
+    setPinned(next);
+    try {
+      localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+    if (next) setIsOpen(true);
+  };
+
   return (
     <>
-      <button
-        className="ai-chat-fab"
-        onClick={() => setIsOpen(!isOpen)}
-        title="AI Assistant"
-      >
-        {isOpen ? '✕' : '🤖'}
-      </button>
+      {!pinned && (
+        <button
+          className="ai-chat-fab"
+          onClick={() => setIsOpen(!isOpen)}
+          title="AI Assistant"
+        >
+          {isOpen ? '✕' : '🤖'}
+        </button>
+      )}
 
-      {isOpen && (
-        <div className="ai-chat-panel">
+      {effectiveOpen && (
+        <div
+          className={`ai-chat-panel${pinned ? ' ai-chat-panel--pinned' : ''}`}
+          style={pinned ? { width: '420px' } : undefined}
+        >
           <div className="ai-chat-header">
             <span className="ai-chat-title">🤖 AI Assistant</span>
             <div className="ai-chat-header-actions">
+              <button
+                className={`ai-chat-icon-btn${pinned ? ' active' : ''}`}
+                onClick={togglePin}
+                title={pinned ? 'Unpin from right side' : 'Pin to right side'}
+              >
+                {pinned ? '📌' : '📍'}
+              </button>
               <button className="ai-chat-icon-btn" onClick={() => setShowSettings(!showSettings)} title="Settings">⚙️</button>
-              <button className="ai-chat-icon-btn" onClick={() => setIsOpen(false)} title="Close">✕</button>
+              <button className="ai-chat-icon-btn" onClick={() => { setIsOpen(false); setPinned(false); try { localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(false)); } catch { /* ignore */ } }} title="Close">✕</button>
             </div>
           </div>
 

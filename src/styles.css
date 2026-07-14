@@ -3009,6 +3009,39 @@ tr.drag-over {
   color: var(--text);
 }
 
+.ai-chat-icon-btn.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* === Pinned sidebar mode === */
+/* When pinned, the panel becomes a fixed-width column on the right side.
+   It sits inline with the document flow (not floating) so it doesn't
+   cover content — the .app container gets right-padding to make room. */
+.ai-chat-panel--pinned {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 420px;
+  height: 100vh;
+  max-height: 100vh;
+  border-radius: 0;
+  border-left: 1px solid var(--border);
+  box-shadow: none;
+  z-index: 50;
+}
+
+/* Push main app content left when chat is pinned */
+.app--ai-pinned {
+  padding-right: 440px;
+  transition: padding-right 0.15s ease;
+}
+
+/* Pin handle (drag-to-resize, future enhancement) reserved space */
+.ai-chat-panel--pinned .ai-chat-header {
+  flex-shrink: 0;
+}
+
 .ai-chat-settings {
   padding: 14px 16px;
   background: var(--bg-subtle);
@@ -3375,6 +3408,26 @@ tr.drag-over {
   cursor: not-allowed;
 }
 
+@media (max-width: 900px) {
+  /* On tablet/mobile, pinned mode falls back to a floating overlay.
+     The app keeps its full width and the chat sits above everything. */
+  .app--ai-pinned {
+    padding-right: 24px;
+  }
+  .ai-chat-panel--pinned {
+    top: auto;
+    bottom: 24px;
+    right: 24px;
+    width: 100% !important;
+    height: 75vh;
+    max-height: calc(100vh - 48px);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    z-index: 1001;
+  }
+}
+
 @media (max-width: 480px) {
   .ai-chat-panel {
     width: 100%;
@@ -3389,5 +3442,14 @@ tr.drag-over {
   .ai-chat-fab {
     bottom: 16px;
     right: 16px;
+  }
+
+  .ai-chat-panel--pinned {
+    bottom: 0;
+    right: 0;
+    width: 100% !important;
+    height: 100%;
+    border-radius: 0;
+    border: none;
   }
 }
