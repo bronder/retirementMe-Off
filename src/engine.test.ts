@@ -3,6 +3,10 @@ import {
   runProjection,
   runMonteCarloProjection,
   createRng,
+  computeAnnualMortgage,
+  deriveMortgageRate,
+  mortgageBalanceAtAge,
+  mortgagePaymentAtAge,
 } from './engine';
 import type { Scenario } from './types';
 
@@ -56,6 +60,39 @@ describe('runProjection', () => {
     // After contribution: 15000. After growth: 15000 * 1.07 = 16050
     expect(result.years[0].contributions).toBeCloseTo(15000, 0);
     expect(result.years[0].endingAssets).toBeCloseTo(16050, 0);
+  });
+
+  it('falls back to assumption returns when an account has no annualReturn (0)', () => {
+    // An account with annualReturn === 0 (the "unconfigured" sentinel) should
+    // grow at preRetirementReturn during accumulation and postRetirementReturn
+    // after retirement — so the assumption fields actually drive the projection.
+    const scenario = makeScenario({
+      assumptions: { ...makeScenario().assumptions, currentAge: 40, retirementAge: 41, endAge: 43, preRetirementReturn: 0.08, postRetirementReturn: 0.04 },
+      accounts: [
+        { id: 'a1', name: 'Unset', type: 'taxable_brokerage', balance: 100000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+      ],
+    });
+    const result = runProjection(scenario);
+    // Age 40 (pre-retirement): grows at 8% → 100000 * 1.08 = 108000.
+    expect(result.years[0].growth).toBeCloseTo(8000, -1);
+    // Age 41 (retirement year): grows at the post-retirement rate of 4%.
+    // beginningAssets = 108000, growth = 108000 * 0.04 = 4320.
+    expect(result.years[1].growth).toBeCloseTo(108000 * 0.04, -1);
+  });
+
+  it('uses the account explicit return over the assumption fallback', () => {
+    // An account with an explicit return always uses it, ignoring the phase
+    // assumption — the assumption only fills in for unconfigured accounts.
+    const scenario = makeScenario({
+      assumptions: { ...makeScenario().assumptions, currentAge: 40, retirementAge: 41, endAge: 42, preRetirementReturn: 0.08, postRetirementReturn: 0.04 },
+      accounts: [
+        { id: 'a1', name: 'Set', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.06, annualContribution: 0, employerMatch: 0 },
+      ],
+    });
+    const result = runProjection(scenario);
+    // Both years use the explicit 6%, never the 8%/4% assumptions.
+    expect(result.years[0].growth).toBeCloseTo(6000, -1);
+    expect(result.years[1].growth).toBeCloseTo(106000 * 0.06, -1);
   });
 
   it('stops contributions at retirement', () => {
@@ -147,7 +184,8 @@ describe('runProjection', () => {
 
   it('deposits event proceeds into accounts (home sale grows savings)', () => {
     // A $300k home-sale windfall at age 52 (pre-retirement) should be deposited
-    // into the taxable brokerage account, not vanish.
+    // into the taxable brokerage account, not vanish. (annualReturn: 0 means
+    // "unconfigured" → grows at the preRetirementReturn fallback, here 7%.)
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 50, retirementAge: 65, endAge: 70, inflationRate: 0 },
       accounts: [
@@ -163,8 +201,9 @@ describe('runProjection', () => {
     const eventYear = result.years.find((y) => y.age === 52)!;
     expect(eventYear.eventCashFlow).toBe(300000);
     expect(eventYear.deposits).toBe(300000);
-    // End-of-year assets should be beginning + deposit = 100000 + 300000 = 400000
-    expect(eventYear.endingAssets).toBeCloseTo(400000, -1);
+    // End-of-year assets: 100000 compounds at 7% (the fallback) for 3 years,
+    // then the 300000 deposit is added → 100000 × 1.07³ + 300000 ≈ 422504.
+    expect(eventYear.endingAssets).toBeCloseTo(100000 * Math.pow(1.07, 3) + 300000, -1);
   });
 
   it('counts expenses with both pre and post retirement checked', () => {
@@ -189,11 +228,11 @@ describe('runProjection', () => {
     expect(lateYear.expenses).toBe(12000);
   });
 
-  it('does not double-inflate COLA income (Social Security)', () => {
-    // Social Security entered as $34,800/yr ($2,900/mo), starts at 67.
-    // With 3% inflation, at age 67 (7 years from now): nominal should be
-    // 34800 * 1.03^7 ≈ 42799. In today's dollars it should still be 34800.
-    // The old code multiplied by an additional COLA factor, inflating too fast.
+  it('grows COLA income at the Social Security COLA rate, decoupled from inflation', () => {
+    // Social Security entered as $34,800/yr, starts at 67. The amount is in
+    // today's dollars, so at startAge it's inflation-adjusted to nominal, then
+    // grows by its OWN COLA rate (2.5%) each year — NOT by general inflation.
+    // This decouples benefit growth from CPI (SS COLA is set separately).
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 60, retirementAge: 67, endAge: 75, inflationRate: 0.03, socialSecurityCola: 0.025 },
       accounts: [
@@ -205,17 +244,39 @@ describe('runProjection', () => {
     });
     const result = runProjection(scenario);
 
-    // At age 67 (start): 34800 * 1.03^7 ≈ 42799
+    // At age 67 (start): 34800 * 1.03^7 ≈ 42799 (inflation-adjusted to nominal,
+    // no COLA growth yet since yearsSinceStart = 0).
     const age67 = result.years.find((y) => y.age === 67)!;
-    expect(age67.income).toBeCloseTo(42799, -1);
+    expect(age67.income).toBeCloseTo(34800 * Math.pow(1.03, 7), -1);
 
-    // At age 68: 34800 * 1.03^8 ≈ 44083 (NOT 34800 * 1.03^8 * 1.025^1)
+    // At age 68: nominalAtStart * 1.025^1 = 42799 * 1.025 ≈ 43869.
+    // (Previously the whole amount grew at inflation: 34800 * 1.03^8 ≈ 44083.)
     const age68 = result.years.find((y) => y.age === 68)!;
-    expect(age68.income).toBeCloseTo(44083, -1);
+    const nominalAtStart = 34800 * Math.pow(1.03, 7);
+    expect(age68.income).toBeCloseTo(nominalAtStart * 1.025, -1);
 
-    // Verify real (today's $) income is still ~34800 at age 67
+    // Verify real (today's $) income at the start is still ~34800.
     const realIncome67 = age67.income / Math.pow(1.03, 7);
     expect(realIncome67).toBeCloseTo(34800, -1);
+  });
+
+  it('falls back to inflation when socialSecurityCola equals inflationRate', () => {
+    // When COLA == inflation, the decoupled formula reduces to pure inflation
+    // growth (the original behavior), so the two rates are interchangeable.
+    const scenario = makeScenario({
+      assumptions: { ...makeScenario().assumptions, currentAge: 60, retirementAge: 67, endAge: 75, inflationRate: 0.03, socialSecurityCola: 0.03 },
+      accounts: [
+        { id: 'a1', name: 'Savings', type: 'taxable_brokerage', balance: 10000000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+      ],
+      incomeSources: [
+        { id: 'i1', name: 'SS', type: 'social_security', annualAmount: 34800, startAge: 67, endAge: null, cola: true, taxable: false },
+      ],
+    });
+    const result = runProjection(scenario);
+    const age70 = result.years.find((y) => y.age === 70)!;
+    // 3 years of COLA at 3% from the start-age nominal: 34800 * 1.03^7 * 1.03^3
+    // = 34800 * 1.03^10 (COLA == inflation → identical to pure inflation growth).
+    expect(age70.income).toBeCloseTo(34800 * Math.pow(1.03, 10), -1);
   });
 
   it('keeps non-COLA income at a fixed nominal amount', () => {
@@ -392,8 +453,9 @@ describe('runMonteCarloProjection', () => {
     expect(mc.percentilePaths[mc.percentilePaths.length - 1].age).toBe(95);
   });
 
-  it('produces a usable medianDepletionAge only when at least one run depleted', () => {
-    // Tiny nest egg -> many depletions -> medianDepletionAge must be a number.
+  it('produces a median depletion age over all runs (successes right-censored)', () => {
+    // Tiny nest egg -> many depletions. medianDepletionAge is the median over
+    // ALL runs, with successful runs (no depletion) right-censored at plan end.
     const scenario = makeScenario({
       accounts: [
         { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 5000, annualReturn: 0.02, annualContribution: 0, employerMatch: 0 },
@@ -405,7 +467,10 @@ describe('runMonteCarloProjection', () => {
     const mc = runMonteCarloProjection(scenario, { numRuns: 200, returnStdDev: 0.15, seed: 33 });
     expect(mc.depletionCount).toBeGreaterThan(0);
     expect(mc.medianDepletionAge).not.toBeNull();
+    // Capped at planEndAge (95) — most runs deplete earlier, so the median
+    // lands somewhere in retirement, before the plan end.
     expect(mc.medianDepletionAge!).toBeGreaterThanOrEqual(65);
+    expect(mc.medianDepletionAge!).toBeLessThanOrEqual(95);
   });
 
   it('exposes trialFinalAssets parallel to depletionAges for histogram drill-down', () => {
@@ -510,30 +575,32 @@ describe('runProjection property net worth', () => {
     expect(yr50.propertyValue).toBeCloseTo(500000 * Math.pow(1.03, 10), 0);
   });
 
-  it('subtracts mortgage balance to give propertyEquity (mortgage held static)', () => {
-    // The engine doesn't amortize the mortgage — equity grows purely
-    // through appreciation. Equity at age 50:
-    //   value - balance = 500000 * 1.03^10 - 200000.
-    const scenario = makeScenario({
-      accounts: [],
-      properties: [
-        {
-          id: 'p1',
-          name: 'Family Home',
-          type: 'primary_residence',
-          currentValue: 500000,
-          mortgageBalance: 200000,
-          mortgagePayment: 12000,
-          mortgageYearsLeft: 25,
-          annualAppreciation: 0.03,
-          annualPropertyTax: 6000,
-          annualInsurance: 1800,
-        },
-      ],
-    });
+  it('amortizes mortgage balance into propertyEquity over the loan term', () => {
+    // The mortgage amortizes: by age 50 (10 years in), the balance has paid
+    // down from 200k at the derived rate, so equity = value − remaining balance.
+    const prop = {
+      id: 'p1',
+      name: 'Family Home',
+      type: 'primary_residence' as const,
+      currentValue: 500000,
+      mortgageBalance: 200000,
+      mortgagePayment: 12000,
+      mortgageYearsLeft: 25,
+      annualAppreciation: 0.03,
+      annualPropertyTax: 6000,
+      annualInsurance: 1800,
+    };
+    const scenario = makeScenario({ accounts: [], properties: [prop] });
     const result = runProjection(scenario);
     const yr50 = result.years.find((y) => y.age === 50)!;
-    expect(yr50.propertyEquity).toBeCloseTo(500000 * Math.pow(1.03, 10) - 200000, 0);
+    const expectedBalance = mortgageBalanceAtAge(prop, 50, 40);
+    // Balance must have paid down (less than the original 200k, more than 0).
+    expect(expectedBalance).toBeGreaterThan(0);
+    expect(expectedBalance).toBeLessThan(200000);
+    expect(yr50.propertyEquity).toBeCloseTo(
+      500000 * Math.pow(1.03, 10) - expectedBalance,
+      0,
+    );
   });
 
   it('returns 0 property value after saleAge', () => {
@@ -630,33 +697,233 @@ describe('runProjection property net worth', () => {
 
   it('lets getReadinessSummary combine accounts and home equity for "nest egg at retirement"', () => {
     // At retirement, the net worth should be account balance + property equity.
+    const prop = {
+      id: 'p1',
+      name: 'Family Home',
+      type: 'primary_residence' as const,
+      currentValue: 500000,
+      mortgageBalance: 100000,
+      annualAppreciation: 0.03,
+      annualPropertyTax: 6000,
+      annualInsurance: 1800,
+    };
     const scenario = makeScenario({
       accounts: [
         { id: 'a1', name: '401k', type: 'traditional_401k', balance: 600000, annualReturn: 0.07, annualContribution: 15000, employerMatch: 5000 },
       ],
-      properties: [
-        {
-          id: 'p1',
-          name: 'Family Home',
-          type: 'primary_residence',
-          currentValue: 500000,
-          mortgageBalance: 100000,
-          annualAppreciation: 0.03,
-          annualPropertyTax: 6000,
-          annualInsurance: 1800,
-        },
-      ],
+      properties: [prop],
     });
     const result = runProjection(scenario);
     const retYear = result.years.find((y) => y.age === scenario.assumptions.retirementAge)!;
     // Total net worth at retirement = endingAssets (accounts) + propertyEquity.
     const totalNetWorth = retYear.endingAssets + retYear.propertyEquity;
-    // Home equity at retirement: 500k * 1.03^25 - 100k ≈ $1,047,347 - 100k ≈ $947,347
-    expect(retYear.propertyEquity).toBeCloseTo(500000 * Math.pow(1.03, 25) - 100000, 0);
+    // The mortgage amortizes from 100k. With no payment/term given, defaults
+    // apply (payment = 100k/30, term = 30, derived rate = 0% → linear paydown).
+    const expectedBalance = mortgageBalanceAtAge(prop, scenario.assumptions.retirementAge, scenario.assumptions.currentAge);
+    expect(retYear.propertyEquity).toBeCloseTo(
+      500000 * Math.pow(1.03, 25) - expectedBalance,
+      0,
+    );
     // Sanity: propertyEquity should be a large positive contribution.
     expect(retYear.propertyEquity).toBeGreaterThan(500000);
     // The summary's nestEggAtRetirement uses the accounts-only beginningAssets;
     // net worth including property lives in the year row directly.
     expect(totalNetWorth).toBeGreaterThan(retYear.endingAssets);
+  });
+});
+
+/* ============================================================
+   MORTGAGE AMORTIZATION TESTS
+   ============================================================
+   The engine amortizes mortgages directly from the property fields, so the
+   balance pays down over the loan term (raising equity) and the contractual
+   payment is NOT inflated like a living expense. These pin down that
+   behavior so it doesn't silently regress. */
+
+describe('mortgage amortization helpers', () => {
+  it('derives a rate whose amortization payment matches the input', () => {
+    // The contract of deriveMortgageRate: at the derived rate, the standard
+    // amortization payment (computeAnnualMortgage) reproduces the input payment.
+    // 200k balance, 12k/yr payment, 25 years → a positive rate (~3.5%).
+    const balance = 200000;
+    const payment = 12000;
+    const years = 25;
+    const rate = deriveMortgageRate(balance, payment, years);
+    expect(rate).toBeGreaterThan(0);
+    expect(rate).toBeLessThan(1);
+    // The payment at the derived rate must match the input payment (the bisection
+    // targets exactly this). And the balance at term must reach ~0 under that
+    // rate+payment — verify via mortgageBalanceAtAge for self-consistency.
+    expect(computeAnnualMortgage(balance, rate, years)).toBeCloseTo(payment, -1);
+    const prop = {
+      currentValue: 0,
+      mortgageBalance: balance,
+      mortgagePayment: payment,
+      mortgageYearsLeft: years,
+      annualAppreciation: 0.03,
+      annualPropertyTax: 0,
+      annualInsurance: 0,
+    };
+    expect(mortgageBalanceAtAge(prop, 40 + years, 40)).toBeCloseTo(0, -3);
+  });
+
+  it('returns 0 rate when the payment cannot even cover principal', () => {
+    // 200k balance, 1k/yr payment, 25 years: 25k paid < 200k principal.
+    // No positive rate amortizes this — must return 0 (treated linearly).
+    expect(deriveMortgageRate(200000, 1000, 25)).toBe(0);
+  });
+
+  it('amortizes the balance down to ~0 over the loan term', () => {
+    const prop = {
+      currentValue: 500000,
+      mortgageBalance: 200000,
+      mortgagePayment: 12000,
+      mortgageYearsLeft: 25,
+      annualAppreciation: 0.03,
+      annualPropertyTax: 0,
+      annualInsurance: 0,
+    };
+    // currentAge = 40, so the loan ends at age 65. At age 64 it's near zero;
+    // at age 65+ it's fully paid off.
+    expect(mortgageBalanceAtAge(prop, 50, 40)).toBeLessThan(200000);
+    expect(mortgageBalanceAtAge(prop, 50, 40)).toBeGreaterThan(0);
+    expect(mortgageBalanceAtAge(prop, 65, 40)).toBeCloseTo(0, -3);
+  });
+
+  it('returns 0 payment after the loan has paid off', () => {
+    const prop = {
+      currentValue: 500000,
+      mortgageBalance: 200000,
+      mortgagePayment: 12000,
+      mortgageYearsLeft: 25,
+      annualAppreciation: 0.03,
+      annualPropertyTax: 0,
+      annualInsurance: 0,
+    };
+    // Before payoff (age 50): payment is the contractual amount.
+    expect(mortgagePaymentAtAge(prop, 50, 40)).toBe(12000);
+    // After payoff (age 66): no payment due.
+    expect(mortgagePaymentAtAge(prop, 66, 40)).toBe(0);
+  });
+
+  it('future-purchase mortgage amortizes from purchasePrice minus downPayment', () => {
+    const prop = {
+      currentValue: 0,
+      mortgageBalance: 0,
+      purchaseAge: 55,
+      purchasePrice: 400000,
+      downPayment: 80000,
+      mortgageRate: 0.06,
+      mortgageTerm: 30,
+      annualAppreciation: 0.03,
+      annualPropertyTax: 0,
+      annualInsurance: 0,
+    };
+    // Before purchase: no balance, no payment.
+    expect(mortgageBalanceAtAge(prop, 54, 40)).toBe(0);
+    expect(mortgagePaymentAtAge(prop, 54, 40)).toBe(0);
+    // At purchase age: balance = 400k − 80k = 320k.
+    expect(mortgageBalanceAtAge(prop, 55, 40)).toBeCloseTo(320000, 0);
+    // Payment matches the amortization formula on 320k @ 6% / 30 yrs.
+    const expectedPayment = computeAnnualMortgage(320000, 0.06, 30);
+    expect(mortgagePaymentAtAge(prop, 55, 40)).toBeCloseTo(expectedPayment, 0);
+    // After full term (age 85): paid off.
+    expect(mortgageBalanceAtAge(prop, 86, 40)).toBe(0);
+  });
+
+  it('returns 0 balance and payment after a sale', () => {
+    const prop = {
+      currentValue: 500000,
+      mortgageBalance: 200000,
+      mortgagePayment: 12000,
+      mortgageYearsLeft: 25,
+      annualAppreciation: 0.03,
+      annualPropertyTax: 0,
+      annualInsurance: 0,
+      saleAge: 60,
+    };
+    expect(mortgageBalanceAtAge(prop, 60, 40)).toBe(0);
+    expect(mortgagePaymentAtAge(prop, 60, 40)).toBe(0);
+  });
+});
+
+describe('runProjection mortgage expenses', () => {
+  it('does not inflate the mortgage payment (contractual, fixed)', () => {
+    // Mortgage payment is contractual — it must NOT grow with inflation,
+    // unlike property tax which does. Compare two consecutive retirement
+    // years: property tax should rise with inflation, mortgage stays flat.
+    const scenario = makeScenario({
+      assumptions: { ...makeScenario().assumptions, currentAge: 64, retirementAge: 65, endAge: 68, inflationRate: 0.05 },
+      accounts: [
+        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 10_000_000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+      ],
+      properties: [
+        {
+          id: 'p1',
+          name: 'Home',
+          type: 'primary_residence',
+          currentValue: 500000,
+          mortgageBalance: 100000,
+          mortgagePayment: 10000,
+          mortgageYearsLeft: 20,
+          annualAppreciation: 0.03,
+          annualPropertyTax: 6000,
+          annualInsurance: 0,
+        },
+      ],
+      expenses: [
+        // Property tax as a linked expense — the engine reads housing costs
+        // from the expense list (mortgage is the exception, computed directly).
+        { id: 't1', name: 'Home — Property Tax', category: 'housing', annualAmount: 6000, preRetirement: false, postRetirement: true, startAge: null, endAge: null, _propertyId: 'p1:tax' },
+      ],
+    });
+    const result = runProjection(scenario);
+    const age65 = result.years.find((y) => y.age === 65)!;
+    const age66 = result.years.find((y) => y.age === 66)!;
+
+    // Property tax (linked expense) inflates with yearsFromNow; mortgage is flat.
+    //   age65 (yearsFromNow=1): tax = 6000 × 1.05 = 6300, mortgage = 10000 → 16300
+    //   age66 (yearsFromNow=2): tax = 6000 × 1.05² = 6615, mortgage = 10000 → 16615
+    expect(age65.expenses).toBeCloseTo(6300 + 10000, -1);
+    expect(age66.expenses).toBeCloseTo(6615 + 10000, -1);
+    // The mortgage portion is identical across years (no inflation growth):
+    // subtract the inflated tax from each year; both should equal 10000.
+    const mortgage65 = age65.expenses - 6000 * 1.05;
+    const mortgage66 = age66.expenses - 6000 * 1.05 * 1.05;
+    expect(mortgage65).toBeCloseTo(10000, -1);
+    expect(mortgage66).toBeCloseTo(10000, -1);
+    expect(mortgage65).toBeCloseTo(mortgage66, -1);
+  });
+
+  it('stops counting the mortgage expense after the loan pays off', () => {
+    // 100k balance, 10k/yr payment, 10 years left → pays off by age 50.
+    // After payoff, expenses should drop by the mortgage amount.
+    const scenario = makeScenario({
+      assumptions: { ...makeScenario().assumptions, currentAge: 40, retirementAge: 40, endAge: 52, inflationRate: 0 },
+      accounts: [
+        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 10_000_000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+      ],
+      properties: [
+        {
+          id: 'p1',
+          name: 'Home',
+          type: 'primary_residence',
+          currentValue: 500000,
+          mortgageBalance: 100000,
+          mortgagePayment: 10000,
+          mortgageYearsLeft: 10,
+          annualAppreciation: 0.03,
+          annualPropertyTax: 0,
+          annualInsurance: 0,
+        },
+      ],
+    });
+    const result = runProjection(scenario);
+    // Age 49 (year 10): mortgage still being paid → expenses ≥ 10000.
+    const age49 = result.years.find((y) => y.age === 49)!;
+    expect(age49.expenses).toBeGreaterThanOrEqual(10000);
+    // Age 51 (after payoff): no mortgage → expenses drop to ~0.
+    const age51 = result.years.find((y) => y.age === 51)!;
+    expect(age51.expenses).toBeLessThan(1000);
   });
 });

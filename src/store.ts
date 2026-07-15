@@ -74,6 +74,41 @@ function getScenario(plan: Plan, id: string): Scenario {
   return s;
 }
 
+/**
+ * Sanitize assumptions received from an AI suggestion. The model returns
+ * untrusted JSON, so every field is type-checked and clamped to a sane range
+ * before it's merged into a scenario. Unknown fields are dropped. This keeps a
+ * malformed response (e.g. retirementAge: -5, inflationRate: 50) from silently
+ * corrupting the projection.
+ *
+ * Each entry is [key, min, max]. Non-numeric values or values outside the range
+ * are dropped (the original assumption is preserved by the caller's spread).
+ */
+const ASSUMPTION_BOUNDS: Record<string, [number, number]> = {
+  currentAge: [1, 100],
+  retirementAge: [1, 100],
+  endAge: [1, 120],
+  inflationRate: [0, 0.5],
+  socialSecurityCola: [0, 0.5],
+  retirementTaxRate: [0, 0.9],
+  safeWithdrawalRate: [0, 0.2],
+  preRetirementReturn: [-0.5, 0.5],
+  postRetirementReturn: [-0.5, 0.5],
+};
+
+function sanitizeAssumptions(raw: unknown): Partial<Assumptions> {
+  if (!raw || typeof raw !== 'object') return {};
+  const src = raw as Record<string, unknown>;
+  const clean: Record<string, number> = {};
+  for (const [key, [min, max]] of Object.entries(ASSUMPTION_BOUNDS)) {
+    const v = src[key];
+    if (typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max) {
+      clean[key] = v;
+    }
+  }
+  return clean as Partial<Assumptions>;
+}
+
 export const usePlanStore = create<PlanStore>()(
   persist(
     (set) => ({
@@ -147,7 +182,7 @@ export const usePlanStore = create<PlanStore>()(
             id: createId(),
             name: suggestion.name,
             assumptions: suggestion.assumptions
-              ? { ...original.assumptions, ...suggestion.assumptions }
+              ? { ...original.assumptions, ...sanitizeAssumptions(suggestion.assumptions) }
               : { ...original.assumptions },
           };
           return {
@@ -220,8 +255,11 @@ export const usePlanStore = create<PlanStore>()(
               if (s.id !== scenarioId) return s;
               const newId = createId();
               const prop = { ...property, id: newId };
-              // Auto-create linked expense entries for housing costs so the
-              // Expenses section is the single source of truth.
+              // Auto-create linked expense entries for housing costs that
+              // inflate like normal living expenses. The mortgage is NOT
+              // included here — it's a fixed (contractual) payment that the
+              // engine computes and amortizes directly from the property
+              // fields, so it never gets inflated like an expense.
               const linkedExpenses: Expense[] = [
                 {
                   id: createId(),
@@ -244,17 +282,6 @@ export const usePlanStore = create<PlanStore>()(
                   startAge: null,
                   endAge: null,
                   _propertyId: `${newId}:insurance`,
-                },
-                {
-                  id: createId(),
-                  name: `${prop.name} — Mortgage`,
-                  category: 'housing',
-                  annualAmount: prop.mortgagePayment ?? Math.round(prop.mortgageBalance / 30),
-                  preRetirement: false,
-                  postRetirement: true,
-                  startAge: null,
-                  endAge: null,
-                  _propertyId: `${newId}:mortgage`,
                 },
               ];
               return {
@@ -281,13 +308,6 @@ export const usePlanStore = create<PlanStore>()(
                 }
                 if (e._propertyId === `${propertyId}:insurance`) {
                   return { ...e, name: `${updated.name} — Insurance`, annualAmount: updated.annualInsurance };
-                }
-                if (e._propertyId === `${propertyId}:mortgage`) {
-                  return {
-                    ...e,
-                    name: `${updated.name} — Mortgage`,
-                    annualAmount: updated.mortgagePayment ?? Math.round(updated.mortgageBalance / 30),
-                  };
                 }
                 return e;
               });
@@ -354,17 +374,6 @@ export const usePlanStore = create<PlanStore>()(
                     startAge: null,
                     endAge: null,
                     _propertyId: `${prop.id}:insurance`,
-                  } as Expense,
-                  {
-                    id: `sync-${prop.id}-mortgage`,
-                    name: `${prop.name} — Mortgage`,
-                    category: 'housing',
-                    annualAmount: prop.mortgagePayment ?? Math.round(prop.mortgageBalance / 30),
-                    preRetirement: false,
-                    postRetirement: true,
-                    startAge: null,
-                    endAge: null,
-                    _propertyId: `${prop.id}:mortgage`,
                   } as Expense,
                 );
               }
@@ -553,7 +562,7 @@ export const usePlanStore = create<PlanStore>()(
     }),
     {
       name: 'retirement-planner',
-      version: 5,
+      version: 6,
       partialize: (state) => ({
         plan: state.plan,
         activeScenarioId: state.activeScenarioId,
@@ -640,6 +649,18 @@ export const usePlanStore = create<PlanStore>()(
                 } as Expense,
               );
             }
+          }
+        }
+        // v5→v6: the mortgage is now computed by the engine directly from the
+        // property fields (so it amortizes and isn't inflated like a living
+        // expense). Remove the legacy :mortgage linked expense entries — the
+        // engine also defensively skips them, but cleaning them up keeps the
+        // Expenses panel from showing a stale, auto-inflating mortgage line.
+        if (version < 6 && state?.plan) {
+          for (const scenario of state.plan.scenarios) {
+            scenario.expenses = scenario.expenses.filter(
+              (e) => !e._propertyId?.endsWith(':mortgage'),
+            );
           }
         }
         return state;

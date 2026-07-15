@@ -11,11 +11,8 @@
  * is only sent to the AI provider's API endpoint.
  */
 import type { Plan, ProjectionResult, Scenario } from './types';
-import { formatCurrency, formatPercent } from './format';
+import { formatCurrency, formatPercent, prettify } from './format';
 import { getReadinessSummary } from './engine';
-
-const prettify = (s: string): string =>
-  s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 /** AI provider definitions */
 export interface AiProvider {
@@ -73,10 +70,10 @@ export function getProvider(providerId: string): AiProvider {
   return AI_PROVIDERS.find((p) => p.id === providerId) ?? AI_PROVIDERS[0];
 }
 
-/** Get the default model for a provider */
+/** Get the default model for a provider (the flagship, listed first). */
 export function getDefaultModel(providerId: string): string {
   const provider = getProvider(providerId);
-  return provider.models[provider.models.length - 1]?.id ?? '';
+  return provider.models[0]?.id ?? '';
 }
 
 /** Chat message types for the UI */

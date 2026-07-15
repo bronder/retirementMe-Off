@@ -188,15 +188,18 @@ export interface Assumptions {
   endAge: number;
   /** General inflation rate (annual, decimal). */
   inflationRate: number;
-  /** Social Security COLA (annual, decimal). Often ~= inflation. */
+  /** Social Security COLA (annual, decimal). Drives the growth of COLA-flagged
+   *  income (e.g. Social Security) independently of general inflation. */
   socialSecurityCola: number;
   /** Effective tax rate during retirement (decimal). Applied to taxable + tax-deferred withdrawals. */
   retirementTaxRate: number;
   /** Safe withdrawal rate (decimal). 0.04 = 4% rule. Used for guidance indicators. */
   safeWithdrawalRate: number;
-  /** Expected annual return during accumulation phase (blended, decimal). Used as fallback. */
+  /** Expected annual return during accumulation phase (blended, decimal). Used as
+   *  the fallback return for any account whose annualReturn is 0 (unconfigured). */
   preRetirementReturn: number;
-  /** Expected annual return during retirement (blended, decimal). Often more conservative. */
+  /** Expected annual return during retirement (blended, decimal). Often more
+   *  conservative. Fallback return for unconfigured accounts post-retirement. */
   postRetirementReturn: number;
   /** Optional spouse configuration. When enabled, the plan extends to cover the spouse's lifespan. */
   spouse?: SpouseAssumptions;
@@ -327,7 +330,10 @@ export interface MonteCarloResult {
   p10FinalAssets: number;
   /** 90th percentile of final assets in today's dollars. */
   p90FinalAssets: number;
-  /** Median age at which runs depleted (null if no runs depleted). */
+  /** Median survival age across ALL runs (null if no runs). Successful runs
+   *  (no depletion) are right-censored at the plan end age, per the
+   *  survival-analysis convention, so this reflects the whole distribution —
+   *  not just the failures. Equals planEndAge when at least half of runs succeed. */
   medianDepletionAge: number | null;
   /** Per-age percentile bands across the plan. */
   percentilePaths: MonteCarloPercentileYear[];

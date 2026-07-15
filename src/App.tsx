@@ -15,10 +15,10 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { usePlanStore } from './store';
-import { runProjection, getReadinessSummary } from './engine';
+import { runProjection, getReadinessSummary, computeAnnualMortgage, mortgagePaymentAtAge } from './engine';
 import { ACCOUNT_TAX_TREATMENT } from './types';
 import type { AccountType, IncomeType, ExpenseCategory, EventType, PropertyType } from './types';
-import { formatCurrency, formatPercent, formatAge } from './format';
+import { formatCurrency, formatPercent, formatAge, prettify, parseNum } from './format';
 import { exportMarkdown } from './markdown';
 import { AiChat } from './AiChat';
 import { MonteCarloPanel } from './MonteCarloPanel';
@@ -92,9 +92,6 @@ const EVENT_TYPES: EventType[] = [
   'windfall',
   'other',
 ];
-
-const prettify = (s: string): string =>
-  s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 /**
  * Theme-aware chart color set, read once from CSS custom properties.
@@ -816,7 +813,7 @@ function AgeInput({ value, onChange, unit = 'yrs' }: { value: number; onChange: 
       <input
         type="number"
         value={value}
-        onChange={(e) => onChange(+e.target.value)}
+        onChange={(e) => { const v = parseNum(e.target.value); if (!Number.isNaN(v)) onChange(v); }}
       />
       <span className="unit-suffix">{unit}</span>
     </div>
@@ -830,7 +827,7 @@ function PctInputEnhanced({ value, onChange }: { value: number; onChange: (v: nu
         type="number"
         value={+(value * 100).toFixed(2)}
         step={0.1}
-        onChange={(e) => onChange(+e.target.value / 100)}
+        onChange={(e) => { const v = parseNum(e.target.value); if (!Number.isNaN(v)) onChange(v / 100); }}
       />
       <span className="unit-suffix">%</span>
     </div>
@@ -1467,15 +1464,6 @@ function AccountsPanel({ scenario, store }: {
 
 const PROPERTY_TYPES: PropertyType[] = ['primary_residence', 'vacation', 'investment', 'land', 'other'];
 
-/** Helper: compute estimated annual mortgage payment for a future purchase */
-function computeAnnualMortgage(principal: number, annualRate: number, years: number): number {
-  if (principal <= 0 || years <= 0) return 0;
-  const r = annualRate / 12;
-  const n = years * 12;
-  const monthly = principal * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1);
-  return monthly * 12;
-}
-
 const PLAN_ACTION_LABELS: { value: string; label: string; icon: string }[] = [
   { value: 'keep', label: 'Keep it', icon: '🏠' },
   { value: 'sell', label: 'Sell it', icon: '🏡' },
@@ -1659,7 +1647,7 @@ function PropertyCard({ prop, scenario, store }: {
             </div>
             <div className="prop-field">
               <label>Mortgage term (years)</label>
-              <input type="number" value={prop.mortgageTerm ?? 30} onChange={(e) => store.updateProperty(scenario.id, prop.id, { mortgageTerm: +e.target.value })} />
+              <input type="number" value={prop.mortgageTerm ?? 30} onChange={(e) => { const v = parseNum(e.target.value); if (!Number.isNaN(v)) store.updateProperty(scenario.id, prop.id, { mortgageTerm: v }); }} />
             </div>
           </div>
           {estMortgage > 0 && (
@@ -2195,7 +2183,7 @@ function EventsPanel({ scenario, store }: {
                     <input
                       type="number"
                       value={ev.age}
-                      onChange={(e) => store.updateEvent(scenario.id, ev.id, { age: +e.target.value })}
+                      onChange={(e) => { const v = parseNum(e.target.value); if (!Number.isNaN(v)) store.updateEvent(scenario.id, ev.id, { age: v }); }}
                       style={{ width: 70 }}
                     />
                   </div>
@@ -2604,36 +2592,28 @@ function getExpenseBreakdown(scenario: NonNullable<ReturnType<typeof usePlanStor
   const isRetired = age >= a.retirementAge;
   const items: { name: string; amount: number; category: string }[] = [];
 
-  // Regular expenses
+  // Regular expenses (includes linked :tax and :insurance entries).
   for (const exp of scenario.expenses) {
     const activePre = exp.preRetirement && !isRetired;
     const activePost = exp.postRetirement && isRetired;
     if (!activePre && !activePost) continue;
     if (exp.startAge !== null && age < exp.startAge) continue;
     if (exp.endAge !== null && age > exp.endAge) continue;
+    // Legacy :mortgage linked expenses are computed by the engine now (see
+    // below) — skip any that pre-date migration v6 to avoid double-counting.
+    if (exp._propertyId?.endsWith(':mortgage')) continue;
     items.push({ name: exp.name, amount: exp.annualAmount * inflationFactor, category: exp.category });
   }
 
-  // Property expenses
-  if (scenario.properties) {
+  // Mortgage payments (engine-computed, contractual — NOT inflated).
+  // Counted in retirement only, matching the projection engine. Tax and
+  // insurance are already covered above via their linked expense entries.
+  if (isRetired && scenario.properties) {
     for (const prop of scenario.properties) {
       if (prop.saleAge && age >= prop.saleAge) continue;
       if (prop.purchaseAge && age < prop.purchaseAge) continue;
-
-      const propTax = prop.annualPropertyTax * inflationFactor;
-      if (propTax > 0) items.push({ name: `${prop.name} — Property Tax`, amount: propTax, category: 'housing' });
-
-      const insurance = prop.annualInsurance * inflationFactor;
-      if (insurance > 0) items.push({ name: `${prop.name} — Insurance`, amount: insurance, category: 'insurance' });
-
-      // Existing mortgage
-      if (!prop.purchaseAge && prop.mortgageBalance > 0) {
-        const yearsLeft = prop.mortgageYearsLeft ?? 30;
-        if (yearsFromNow < yearsLeft) {
-          const payment = (prop.mortgagePayment ?? prop.mortgageBalance / 30) * inflationFactor;
-          if (payment > 0) items.push({ name: `${prop.name} — Mortgage`, amount: payment, category: 'housing' });
-        }
-      }
+      const payment = mortgagePaymentAtAge(prop, age, a.currentAge);
+      if (payment > 0) items.push({ name: `${prop.name} — Mortgage`, amount: payment, category: 'housing' });
     }
   }
 
@@ -2840,7 +2820,7 @@ function PctCellInput({ value, onChange }: { value: number; onChange: (v: number
         type="number"
         value={+(value * 100).toFixed(1)}
         step={0.5}
-        onChange={(e) => onChange(+e.target.value / 100)}
+        onChange={(e) => { const v = parseNum(e.target.value); if (!Number.isNaN(v)) onChange(v / 100); }}
       />
       <span className="unit">%</span>
     </div>
@@ -2855,7 +2835,7 @@ function CurrencyCellInput({ value, onChange }: { value: number; onChange: (v: n
         className="table-input text-right"
         type="number"
         value={value}
-        onChange={(e) => onChange(+e.target.value)}
+        onChange={(e) => { const v = parseNum(e.target.value); if (!Number.isNaN(v)) onChange(v); }}
       />
     </div>
   );
@@ -2867,7 +2847,7 @@ function NumCellInput({ value, onChange }: { value: number; onChange: (v: number
       className="table-input text-right"
       type="number"
       value={value}
-      onChange={(e) => onChange(+e.target.value)}
+      onChange={(e) => { const v = parseNum(e.target.value); if (!Number.isNaN(v)) onChange(v); }}
     />
   );
 }

@@ -52,13 +52,9 @@ export function runProjection(scenario: Scenario): ProjectionResult {
  *     purchasePrice at purchaseAge
  *   - sales: value drops to 0 at saleAge
  *
- * Appreciation uses the property's `annualAppreciation` rate.
- *
- * Note: the engine does not currently model mortgage amortization, so
- * `mortgageBalance` is treated as a static liability (paid down implicitly
- * via the auto-created mortgage expense). This function returns only the
- * market value; subtracting the (static) balance to get equity is the
- * caller's job.
+ * Appreciation uses the property's `annualAppreciation` rate. The outstanding
+ * mortgage balance (which reduces equity) is computed separately by
+ * `mortgageBalanceAtAge`.
  */
 function propertyValueAtAge(
   prop: {
@@ -82,6 +78,189 @@ function propertyValueAtAge(
   const baseValue = prop.purchaseAge ? (prop.purchasePrice ?? 0) : prop.currentValue;
   const years = age - baseAge;
   return baseValue * Math.pow(1 + prop.annualAppreciation, years);
+}
+
+/* ============================================================
+   MORTGAGE AMORTIZATION
+   ============================================================
+   Fixed-rate mortgages are amortized in the engine so that the outstanding
+   balance declines over the loan term (raising equity over time) and the
+   contractual payment is NOT inflated like a normal living expense.
+
+   Two flavors of mortgage exist on a Property:
+     1. Existing mortgage — the user enters balance, annual payment, and years
+        remaining. The interest rate is implied, so we solve for the rate that
+        amortizes the balance to ~0 over `yearsLeft` payments, then step the
+        balance down year-by-year.
+     2. Future purchase — the user enters rate, term, and down payment. The
+        loan starts at (purchasePrice − downPayment) at purchaseAge and
+        amortizes at the explicit rate.
+*/
+
+/**
+ * Standard amortization formula: the constant annual payment that pays off
+ * `principal` at `annualRate` over exactly `years`. Exported so the UI can
+ * show the same estimated payment for a future purchase that the engine uses.
+ */
+export function computeAnnualMortgage(principal: number, annualRate: number, years: number): number {
+  if (principal <= 0 || years <= 0) return 0;
+  if (annualRate === 0) return principal / years;
+  const r = annualRate / 12;
+  const n = years * 12;
+  const monthly = (principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+  return monthly * 12;
+}
+
+/**
+ * Solve for the annual interest rate implied by a balance, payment, and term.
+ * Given a starting `balance` that should reach ~0 after `yearsLeft` payments
+ * of `annualPayment`, find the rate via bisection on the amortization formula.
+ *
+ * Returns 0 when the inputs can't amortize (payment × years ≤ balance — the
+ * payment isn't even covering principal), in which case the caller treats the
+ * balance as interest-free and pays it down linearly. Clamps to [0, 1].
+ */
+export function deriveMortgageRate(
+  balance: number,
+  annualPayment: number,
+  yearsLeft: number,
+): number {
+  if (balance <= 0 || annualPayment <= 0 || yearsLeft <= 0) return 0;
+  // Total paid must exceed the balance for any positive rate to amortize it.
+  if (annualPayment * yearsLeft <= balance) return 0;
+
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    const payment = computeAnnualMortgage(balance, mid, yearsLeft);
+    if (payment > annualPayment) hi = mid;
+    else lo = mid;
+  }
+  return lo;
+}
+
+/**
+ * The age at which a property's mortgage originates: purchaseAge for a future
+ * purchase, otherwise currentAge (the mortgage already exists).
+ */
+function mortgageStartAge(
+  prop: { purchaseAge?: number | null },
+  currentAge: number,
+): number {
+  return prop.purchaseAge ?? currentAge;
+}
+
+/**
+ * Outstanding mortgage balance at a given age, amortized from the loan's
+ * starting point. Returns 0 when the property isn't owned (before a future
+ * purchase or after a sale) or after the loan has paid off.
+ *
+ * The balance is amortized year-by-year:
+ *   balance = balance × (1 + rate) − payment
+ * floored at 0. For an existing mortgage the rate is derived from the user's
+ * (balance, payment, yearsLeft); for a future purchase it's the explicit
+ * `mortgageRate`.
+ */
+export function mortgageBalanceAtAge(
+  prop: {
+    currentValue?: number;
+    mortgageBalance: number;
+    mortgagePayment?: number;
+    mortgageYearsLeft?: number;
+    purchaseAge?: number | null;
+    purchasePrice?: number;
+    downPayment?: number;
+    mortgageRate?: number;
+    mortgageTerm?: number;
+    saleAge?: number | null;
+  },
+  age: number,
+  currentAge: number,
+): number {
+  // Not owned: before a future purchase or after a sale.
+  if (prop.saleAge && age >= prop.saleAge) return 0;
+  if (prop.purchaseAge && age < prop.purchaseAge) return 0;
+
+  const isFuturePurchase = !!prop.purchaseAge;
+  const startAge = mortgageStartAge(prop, currentAge);
+
+  // Loan origin values.
+  const principal = isFuturePurchase
+    ? Math.max(0, (prop.purchasePrice ?? 0) - (prop.downPayment ?? 0))
+    : prop.mortgageBalance;
+  if (principal <= 0) return 0;
+
+  const yearsElapsed = Math.max(0, age - startAge);
+
+  // No time has passed — still at the original principal.
+  if (yearsElapsed === 0) return principal;
+
+  const term = isFuturePurchase
+    ? prop.mortgageTerm ?? 30
+    : prop.mortgageYearsLeft ?? 30;
+  const annualPayment = isFuturePurchase
+    ? computeAnnualMortgage(principal, prop.mortgageRate ?? 0, term)
+    : prop.mortgagePayment ?? principal / 30;
+  const rate = isFuturePurchase
+    ? prop.mortgageRate ?? 0
+    : deriveMortgageRate(principal, annualPayment, term);
+
+  // Past the loan term → paid off.
+  if (yearsElapsed >= term) return 0;
+
+  // Remaining balance via the closed-form amortization formula, using MONTHLY
+  // compounding to match computeAnnualMortgage exactly:
+  //   B(k) = P(1+r)^k − PMT_monthly · [((1+r)^k − 1) / r]
+  // where r is the monthly rate and k the number of months elapsed.
+  const monthlyRate = rate / 12;
+  const monthsElapsed = yearsElapsed * 12;
+  if (monthlyRate === 0) {
+    // Interest-free (e.g. payment barely covers principal): linear paydown.
+    return Math.max(0, principal - annualPayment * yearsElapsed);
+  }
+  const growth = Math.pow(1 + monthlyRate, monthsElapsed);
+  const monthlyPayment = annualPayment / 12;
+  const balance = principal * growth - (monthlyPayment * (growth - 1)) / monthlyRate;
+  return Math.max(0, balance);
+}
+
+/**
+ * The contractual (un-inflated) annual mortgage payment due at a given age,
+ * or 0 when no payment is due (property not owned, or loan paid off).
+ *
+ * Fixed-rate payments are nominal/contractual: they do NOT grow with
+ * inflation, unlike living expenses. The caller adds this to the expense
+ * total without an inflation factor.
+ */
+export function mortgagePaymentAtAge(
+  prop: {
+    mortgageBalance: number;
+    mortgagePayment?: number;
+    mortgageYearsLeft?: number;
+    purchaseAge?: number | null;
+    purchasePrice?: number;
+    downPayment?: number;
+    mortgageRate?: number;
+    mortgageTerm?: number;
+    saleAge?: number | null;
+  },
+  age: number,
+  currentAge: number,
+): number {
+  // No payment when not owned.
+  if (prop.saleAge && age >= prop.saleAge) return 0;
+  if (prop.purchaseAge && age < prop.purchaseAge) return 0;
+
+  // No payment if the loan has fully paid off by this age.
+  if (mortgageBalanceAtAge(prop, age, currentAge) <= 0) return 0;
+
+  const isFuturePurchase = !!prop.purchaseAge;
+  if (isFuturePurchase) {
+    const principal = Math.max(0, (prop.purchasePrice ?? 0) - (prop.downPayment ?? 0));
+    return computeAnnualMortgage(principal, prop.mortgageRate ?? 0, prop.mortgageTerm ?? 30);
+  }
+  return prop.mortgagePayment ?? prop.mortgageBalance / 30;
 }
 
 /**
@@ -135,9 +314,19 @@ export function runProjectionCore(
     // --- Growth ---
     // Use the provided sampler so Monte Carlo can randomize per (account, year)
     // while the deterministic path still gets the account's configured return.
+    // Accounts with no configured return (annualReturn === 0, the "unconfigured"
+    // sentinel) fall back to the phase-appropriate assumption: preRetirementReturn
+    // during accumulation, postRetirementReturn after retirement. Accounts that
+    // carry an explicit return always use it.
     let growth = 0;
+    const phaseReturn = isRetired
+      ? assumptions.postRetirementReturn
+      : assumptions.preRetirementReturn;
     for (const s of accountStates) {
-      const r = sampleAnnualReturn(s.account, age, year);
+      const effAccount = s.account.annualReturn === 0
+        ? { ...s.account, annualReturn: phaseReturn }
+        : s.account;
+      const r = sampleAnnualReturn(effAccount, age, year);
       const g = s.balance * r;
       s.balance += g;
       growth += g;
@@ -150,10 +339,19 @@ export function runProjectionCore(
       if (age >= inc.startAge && (inc.endAge === null || age <= inc.endAge)) {
         let nominalGross: number;
         if (inc.cola) {
-          // COLA income (e.g. Social Security): grows with inflation from
-          // today's dollars. inflationFactor already captures this growth —
-          // a separate COLA factor would double-count inflation.
-          nominalGross = inc.annualAmount * inflationFactor;
+          // COLA income (e.g. Social Security): the amount is in today's
+          // dollars at the start age, so first inflation-adjust it to nominal
+          // at startAge, then grow it by its OWN COLA rate each year after.
+          // This decouples the benefit's growth from general inflation — SS
+          // COLA is set independently of CPI and may differ from inflationRate.
+          const startAgeInflation = Math.pow(
+            1 + assumptions.inflationRate,
+            inc.startAge - assumptions.currentAge,
+          );
+          const nominalAtStart = inc.annualAmount * startAgeInflation;
+          const yearsSinceStart = age - inc.startAge;
+          const colaFactor = Math.pow(1 + assumptions.socialSecurityCola, yearsSinceStart);
+          nominalGross = nominalAtStart * colaFactor;
         } else {
           // Non-COLA income (e.g. fixed pension): the nominal amount is set
           // at startAge (inflated from today's dollars) and stays fixed.
@@ -190,9 +388,27 @@ export function runProjectionCore(
           if (prop.saleAge && age >= prop.saleAge) continue;
           if (prop.purchaseAge && age < prop.purchaseAge) continue;
         }
+        // Legacy :mortgage linked expenses are no longer the source of truth —
+        // the engine computes the mortgage payment directly (see below) so the
+        // payment isn't inflated like a normal expense and the balance
+        // amortizes. Skip any old :mortgage entries that pre-date migration v6.
+        if (exp._propertyId.endsWith(':mortgage')) continue;
       }
 
       expenses += exp.annualAmount * inflationFactor;
+    }
+
+    // --- Mortgage payments (engine-computed, not a linked expense) ---
+    // Fixed-rate mortgage payments are contractual — they do NOT inflate with
+    // the cost of living. The engine computes the payment from the property
+    // fields so it stays flat and the balance amortizes down. Counted in
+    // retirement only (matching the old linked-expense's preRetirement: false).
+    if (isRetired && scenario.properties) {
+      for (const prop of scenario.properties) {
+        if (prop.saleAge && age >= prop.saleAge) continue;
+        if (prop.purchaseAge && age < prop.purchaseAge) continue;
+        expenses += mortgagePaymentAtAge(prop, age, assumptions.currentAge);
+      }
     }
 
     // --- Life events (initialize first) ---
@@ -235,22 +451,16 @@ export function runProjectionCore(
     // Sum the market value of every property the user owns at this age.
     // We exclude any liability still owed on the property (the mortgage
     // balance) — true net worth = assets − liabilities = value − mortgage.
-    // The mortgage balance is treated as static for now (no amortization);
-    // see propertyValueAtAge for details.
+    // The mortgage balance amortizes down over the loan term, so equity
+    // grows through both appreciation AND paydown.
     let propertyValue = 0;
     let propertyMortgage = 0;
     if (scenario.properties) {
       for (const prop of scenario.properties) {
         propertyValue += propertyValueAtAge(prop, age, assumptions.currentAge);
-        // Only count the mortgage while the property is still owned
-        // (before saleAge). For future purchases, the mortgage doesn't
-        // exist yet (the auto-created mortgage expense starts at
-        // purchaseAge).
-        if (!prop.saleAge || age < prop.saleAge) {
-          if (!prop.purchaseAge || age >= prop.purchaseAge) {
-            propertyMortgage += prop.mortgageBalance ?? 0;
-          }
-        }
+        // mortgageBalanceAtAge returns 0 before a future purchase or after a
+        // sale, so it already handles the ownership window.
+        propertyMortgage += mortgageBalanceAtAge(prop, age, assumptions.currentAge);
       }
     }
     const propertyEquity = Math.max(0, propertyValue - propertyMortgage);
@@ -632,11 +842,22 @@ export function runMonteCarloProjection(
     return yr ? yr.beginningAssets / retInflationFactor : 0;
   });
   const depletionNumbersOnly = depletionAges.filter((a): a is number => a !== null);
-  const sortedDepletions = [...depletionNumbersOnly].sort((a, b) => a - b);
+  // Median depletion age over ALL runs — not just the failures. Successful runs
+  // (null depletion) are right-censored at the plan end, so they count as
+  // "survived past endAge". This is the survival-analysis convention and keeps
+  // the median meaningful when most runs succeed (otherwise the "median" would
+  // be the median of only the failures, misrepresenting the distribution).
+  const planEndAge = scenario.assumptions.spouse?.enabled
+    ? Math.max(scenario.assumptions.endAge, scenario.assumptions.spouse.endAge)
+    : scenario.assumptions.endAge;
+  const allAgesCensored = depletionAges.map((a) => (a === null ? planEndAge : a));
+  const sortedAll = [...allAgesCensored].sort((a, b) => a - b);
   const medianDepletionAge =
-    sortedDepletions.length === 0
+    sortedAll.length === 0
       ? null
-      : sortedDepletions[Math.floor(sortedDepletions.length / 2)];
+      : sortedAll.length % 2 === 1
+        ? sortedAll[(sortedAll.length - 1) / 2]
+        : (sortedAll[sortedAll.length / 2 - 1] + sortedAll[sortedAll.length / 2]) / 2;
 
   return {
     numRuns,
