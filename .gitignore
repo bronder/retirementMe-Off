@@ -25,3 +25,13 @@ npm-debug.log*
 
 # Temp files
 *.tmp
+
+# ZCode agent session data (local only)
+.zcode/
+
+# Captured dev-server output from parallel sessions
+dev*-out.txt
+dev*-err.txt
+
+# Exported plan snapshots saved into public/ (user data, not source)
+public/images/retirementMe_Off*.json
