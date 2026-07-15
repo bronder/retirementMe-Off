@@ -2995,6 +2995,16 @@ tr.drag-over {
   font-weight: 600;
 }
 
+/* Groups the Lifetime/At-age toggle + conditional number input as one
+   unit so they stay together when the row wraps, and keeps the button
+   labels on a single line. */
+.income-end-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
 .income-lifetime-btn {
   padding: 3px 8px;
   border: 1px solid var(--border);
@@ -3004,6 +3014,7 @@ tr.drag-over {
   color: var(--text-dim);
   cursor: pointer;
   font-family: var(--font-sans);
+  white-space: nowrap;
   transition: all 0.15s;
 }
 
