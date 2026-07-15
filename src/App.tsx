@@ -2008,7 +2008,7 @@ function PropertiesPanel({ scenario, store }: {
                     name: 'New Property', type: g.types[0], currentValue: 0, mortgageBalance: 0, annualAppreciation: 0.03, annualPropertyTax: 0, annualInsurance: 0,
                   })}>+ Add</button>
                 </div>
-                <div className="acct-group-cards">
+                <div className="prop-group-cards">
                   {groupProps.map((prop) => (
                     <PropertyCard key={prop.id} prop={prop} scenario={scenario} store={store} />
                   ))}
@@ -3015,13 +3015,22 @@ function YearTable({ result, retirementAge, scenario }: { result: NonNullable<Re
                                 {(() => {
                                   const items = getIncomeBreakdown(scenario, y.age);
                                   if (items.length === 0) return <tr><td className="muted">No income this year</td></tr>;
-                                  return items.map((item, i) => (
-                                    <tr key={i}>
-                                      <td>{item.name}</td>
-                                      <td className="muted" style={{ fontSize: 11 }}>{prettify(item.type)}</td>
-                                      <td className="text-right" style={{ color: 'var(--green)' }}>{formatCurrency(item.amount)}</td>
-                                    </tr>
-                                  ));
+                                  const total = items.reduce((s, it) => s + it.amount, 0);
+                                  return (
+                                    <>
+                                      {items.map((item, i) => (
+                                        <tr key={i}>
+                                          <td>{item.name}</td>
+                                          <td className="muted" style={{ fontSize: 11 }}>{prettify(item.type)}</td>
+                                          <td className="text-right" style={{ color: 'var(--green)' }}>{formatCurrency(item.amount)}</td>
+                                        </tr>
+                                      ))}
+                                      <tr className="year-detail-total">
+                                        <td colSpan={2}>Total / yr</td>
+                                        <td className="text-right" style={{ color: 'var(--green)' }}>{formatCurrency(total)}</td>
+                                      </tr>
+                                    </>
+                                  );
                                 })()}
                               </tbody>
                             </table>
@@ -3033,13 +3042,22 @@ function YearTable({ result, retirementAge, scenario }: { result: NonNullable<Re
                                 {(() => {
                                   const items = getExpenseBreakdown(scenario, y.age);
                                   if (items.length === 0) return <tr><td className="muted">No expenses this year</td></tr>;
-                                  return items.map((item, i) => (
-                                    <tr key={i}>
-                                      <td>{item.name}</td>
-                                      <td className="muted" style={{ fontSize: 11 }}>{prettify(item.category)}</td>
-                                      <td className="text-right" style={{ color: 'var(--red)' }}>{formatCurrency(item.amount)}</td>
-                                    </tr>
-                                  ));
+                                  const total = items.reduce((s, it) => s + it.amount, 0);
+                                  return (
+                                    <>
+                                      {items.map((item, i) => (
+                                        <tr key={i}>
+                                          <td>{item.name}</td>
+                                          <td className="muted" style={{ fontSize: 11 }}>{prettify(item.category)}</td>
+                                          <td className="text-right" style={{ color: 'var(--red)' }}>{formatCurrency(item.amount)}</td>
+                                        </tr>
+                                      ))}
+                                      <tr className="year-detail-total">
+                                        <td colSpan={2}>Total / yr</td>
+                                        <td className="text-right" style={{ color: 'var(--red)' }}>{formatCurrency(total)}</td>
+                                      </tr>
+                                    </>
+                                  );
                                 })()}
                               </tbody>
                             </table>

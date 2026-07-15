@@ -2982,6 +2982,16 @@ tr.drag-over {
   gap: 10px;
 }
 
+/* Property cards are tall, multi-section guided forms — unlike compact account
+   tiles, they should stack full-width rather than stretch across a grid cell.
+   Stacking vertically keeps them readable on wide screens instead of producing
+   one absurdly wide/tall card. */
+.prop-group-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 /* Make cards within groups visually flatter than the group container */
 .acct-group .acct-card {
   background: var(--panel);
@@ -3253,6 +3263,15 @@ tr.drag-over {
 
 .year-detail-table tr:last-child td {
   border-bottom: none;
+}
+
+/* Total row in an expanded year's income/expense breakdown */
+.year-detail-total td {
+  font-weight: 700;
+  border-top: 2px solid var(--border-strong);
+  border-bottom: none !important;
+  padding-top: 6px;
+  color: var(--text);
 }
 
 /* ============================================================
