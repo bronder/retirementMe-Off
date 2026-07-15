@@ -48,6 +48,7 @@ export function AiChat() {
   const [modelInput, setModelInput] = useState(store.aiModel);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const hasApiKey = store.aiApiKey.length > 0;
 
@@ -174,6 +175,43 @@ export function AiChat() {
     }
   }, [pinned]);
 
+  // Escape closes the floating chat (not the pinned sidebar — that's a
+  // persistent docked panel, closing it via Escape would surprise the user).
+  // Also implements a focus trap so Tab cycles within the panel while open.
+  const close = () => {
+    if (pinned) return; // pinned stays until explicitly unpinned
+    setIsOpen(false);
+  };
+  useEffect(() => {
+    if (!effectiveOpen || pinned) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        close();
+        return;
+      }
+      // Focus trap: when Tabbing, keep focus inside the panel.
+      if (e.key !== 'Tab') return;
+      const focusable = panel.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [effectiveOpen, pinned]);
+
   // Toggle pin and persist.
   const togglePin = () => {
     const next = !pinned;
@@ -193,15 +231,21 @@ export function AiChat() {
           className="ai-chat-fab"
           onClick={() => setIsOpen(!isOpen)}
           title="AI Assistant"
+          aria-label={isOpen ? 'Close AI Assistant' : 'Open AI Assistant'}
+          aria-expanded={isOpen}
         >
-          {isOpen ? '✕' : '🤖'}
+          {isOpen ? '✕' : <><span aria-hidden="true">🤖</span><span className="ai-chat-fab-label">Ask AI</span></>}
         </button>
       )}
 
       {effectiveOpen && (
         <div
+          ref={panelRef}
           className={`ai-chat-panel${pinned ? ' ai-chat-panel--pinned' : ''}`}
           style={pinned ? { width: '420px' } : undefined}
+          role="dialog"
+          aria-modal={!pinned ? 'true' : undefined}
+          aria-label="AI Assistant"
         >
           <div className="ai-chat-header">
             <span className="ai-chat-title">🤖 AI Assistant</span>
@@ -210,11 +254,12 @@ export function AiChat() {
                 className={`ai-chat-icon-btn${pinned ? ' active' : ''}`}
                 onClick={togglePin}
                 title={pinned ? 'Unpin from right side' : 'Pin to right side'}
+                aria-label={pinned ? 'Unpin from right side' : 'Pin to right side'}
               >
                 {pinned ? '📌' : '📍'}
               </button>
-              <button className="ai-chat-icon-btn" onClick={() => setShowSettings(!showSettings)} title="Settings">⚙️</button>
-              <button className="ai-chat-icon-btn" onClick={() => { setIsOpen(false); setPinned(false); try { localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(false)); } catch { /* ignore */ } }} title="Close">✕</button>
+              <button className="ai-chat-icon-btn" onClick={() => setShowSettings(!showSettings)} title="Settings" aria-label="AI settings">⚙️</button>
+              <button className="ai-chat-icon-btn" onClick={() => { setIsOpen(false); setPinned(false); try { localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(false)); } catch { /* ignore */ } }} title="Close" aria-label="Close AI Assistant">✕</button>
             </div>
           </div>
 

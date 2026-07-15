@@ -396,10 +396,10 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
             </div>
 
             <div className="mc-summary-card">
-              <div className="mc-summary-label">Elapsed</div>
-              <div className="mc-summary-value">{run.result.elapsedMs.toFixed(0)} ms</div>
+              <div className="mc-summary-label">Simulation</div>
+              <div className="mc-summary-value">{run.result.numRuns.toLocaleString()} trials</div>
               <div className="mc-summary-sub muted">
-                for {run.result.numRuns.toLocaleString()} trials · σ = {(returnStdDev * 100).toFixed(0)}%
+                σ = {(returnStdDev * 100).toFixed(0)}% volatility · computed in {run.result.elapsedMs.toFixed(0)} ms
               </div>
             </div>
           </div>

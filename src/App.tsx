@@ -71,6 +71,32 @@ const COMMON_EXPENSES: { name: string; icon: string; category: ExpenseCategory; 
   { name: 'Vehicle Payment & Gas', icon: '🚗', category: 'transportation', annualAmount: 12285, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
 ];
 
+/** Quick-add templates for accounts — sensible defaults per type (typical
+ *  long-term return + contribution). Mirrors the Expenses Quick Add pattern so
+ *  all three data panels offer one-click setup. */
+const COMMON_ACCOUNTS: { name: string; icon: string; type: AccountType; balance: number; annualReturn: number; annualContribution: number; employerMatch: number; hint: string }[] = [
+  { name: 'Checking', icon: '🏦', type: 'checking_savings', balance: 10000, annualReturn: 0.01, annualContribution: 0, employerMatch: 0, hint: 'Cash' },
+  { name: 'Savings', icon: '💰', type: 'checking_savings', balance: 25000, annualReturn: 0.03, annualContribution: 3600, employerMatch: 0, hint: 'Emergency fund' },
+  { name: 'Taxable Brokerage', icon: '📈', type: 'taxable_brokerage', balance: 50000, annualReturn: 0.07, annualContribution: 6000, employerMatch: 0, hint: 'Invested' },
+  { name: 'Traditional 401(k)', icon: '🏛️', type: 'traditional_401k', balance: 120000, annualReturn: 0.07, annualContribution: 12000, employerMatch: 4000, hint: '+ match' },
+  { name: 'Roth 401(k)', icon: '🌿', type: 'roth_401k', balance: 0, annualReturn: 0.07, annualContribution: 12000, employerMatch: 0, hint: 'Tax-free' },
+  { name: 'Traditional IRA', icon: '📕', type: 'traditional_ira', balance: 30000, annualReturn: 0.07, annualContribution: 7000, employerMatch: 0, hint: 'Tax-deferred' },
+  { name: 'Roth IRA', icon: '🌱', type: 'roth_ira', balance: 60000, annualReturn: 0.07, annualContribution: 7000, employerMatch: 0, hint: 'Tax-free' },
+  { name: 'HSA (invested)', icon: '🏥', type: 'hsa', balance: 8000, annualReturn: 0.06, annualContribution: 4150, employerMatch: 0, hint: 'Triple-tax-free' },
+];
+
+/** Quick-add templates for income sources — typical amounts and ages so the
+ *  user can populate a realistic plan in a few clicks. */
+const COMMON_INCOME: { name: string; icon: string; type: IncomeType; annualAmount: number; startAge: number; endAge: number | null; cola: boolean; taxable: boolean; hint: string }[] = [
+  { name: 'Salary', icon: '💼', type: 'salary', annualAmount: 85000, startAge: 0, endAge: 64, cola: true, taxable: true, hint: 'Pre-retirement' },
+  { name: 'Social Security', icon: '🏛️', type: 'social_security', annualAmount: 36000, startAge: 67, endAge: null, cola: true, taxable: false, hint: 'COLA' },
+  { name: 'Pension', icon: '📄', type: 'pension', annualAmount: 18000, startAge: 65, endAge: null, cola: false, taxable: true, hint: 'Fixed' },
+  { name: 'Part-time', icon: '🕒', type: 'part_time', annualAmount: 15000, startAge: 65, endAge: 70, cola: false, taxable: true, hint: 'Bridge' },
+  { name: 'Rental Income', icon: '🏠', type: 'rental', annualAmount: 24000, startAge: 0, endAge: null, cola: true, taxable: true, hint: 'Property' },
+  { name: 'Dividends', icon: '💹', type: 'dividends', annualAmount: 6000, startAge: 0, endAge: null, cola: false, taxable: true, hint: 'Investments' },
+  { name: 'Annuity', icon: '🔒', type: 'annuity', annualAmount: 12000, startAge: 65, endAge: null, cola: false, taxable: true, hint: 'Guaranteed' },
+];
+
 const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   'housing',
   'food',
@@ -91,6 +117,59 @@ const EVENT_TYPES: EventType[] = [
   'large_purchase',
   'windfall',
   'other',
+];
+
+/** Curated external resources (calculators, SSA, IRS, Medicare, investing).
+ *  Shown in a collapsible footer so they're accessible without cluttering the
+ *  data-entry sidebar on every Inputs screen. */
+const RESOURCE_GROUPS: { label: string; links: { icon: string; name: string; url: string }[] }[] = [
+  {
+    label: 'Calculators',
+    links: [
+      { icon: '🏦', name: 'SSA Retirement Estimator', url: 'https://www.ssa.gov/benefits/retirement/estimator.html' },
+      { icon: '📅', name: 'SSA Benefit Calculator', url: 'https://www.ssa.gov/OACT/quickcalc/' },
+      { icon: '💰', name: 'Fidelity Retirement Score', url: 'https://www.fidelity.com/calculators-tools/retirement-score' },
+      { icon: '📊', name: 'Vanguard Retirement Nest Egg', url: 'https://retirementplans.vanguard.com/VGApp/pe/pubeducation/calculators/RetirementNestEggCalc.jsf' },
+      { icon: '🧮', name: 'AARP Retirement Calculator', url: 'https://www.aarp.org/work/retirement-calculator/' },
+      { icon: '📈', name: 'Bankrate 401k Calculator', url: 'https://www.bankrate.com/retirement/401-k-calculator/' },
+    ],
+  },
+  {
+    label: 'Social Security',
+    links: [
+      { icon: '💳', name: 'my Social Security Account', url: 'https://www.ssa.gov/myaccount/' },
+      { icon: '📋', name: 'SSA Benefit Formulas', url: 'https://www.ssa.gov/oact/cola/Benefits.html' },
+      { icon: '⏰', name: 'SS Claiming Age Guide', url: 'https://www.ssa.gov/benefits/retirement/planner/agereduction.html' },
+      { icon: '👥', name: 'Spousal Benefits', url: 'https://www.ssa.gov/oact/quickcalc/spouse.html' },
+    ],
+  },
+  {
+    label: 'Taxes',
+    links: [
+      { icon: '🧾', name: 'IRS Tax Bracket Calculator', url: 'https://www.irs.gov/help/ita/whats-my-tax-bracket' },
+      { icon: '📕', name: 'IRS Pub 590-B (IRA Withdrawals)', url: 'https://www.irs.gov/publications/p590b' },
+      { icon: '🏢', name: 'IRS Pub 560 (401k Limits)', url: 'https://www.irs.gov/publications/p560' },
+      { icon: '💲', name: 'RMD Calculator (IRS)', url: 'https://www.irs.gov/retirement-plans/required-minimum-distribution-calculators' },
+    ],
+  },
+  {
+    label: 'Medicare & Healthcare',
+    links: [
+      { icon: '🏥', name: 'Medicare.gov Official Site', url: 'https://www.medicare.gov/' },
+      { icon: '🩺', name: 'Medicare Eligibility Tool', url: 'https://www.medicare.gov/eligibilitypremiumcalc/' },
+      { icon: '💊', name: 'Plan Finder (Drug Coverage)', url: 'https://www.medicare.gov/plan-compare/' },
+      { icon: '📚', name: 'Medicare & You Handbook', url: 'https://www.medicare.gov/medicare-and-you' },
+    ],
+  },
+  {
+    label: 'Investing & Education',
+    links: [
+      { icon: '🎓', name: 'Investor.gov (SEC)', url: 'https://www.investor.gov/' },
+      { icon: '📖', name: 'Compound Interest Calc', url: 'https://www.investor.gov/financial-tools-calculators/calculators/compound-interest-calculator' },
+      { icon: '⚖️', name: 'FINRA Broker Check', url: 'https://brokercheck.finra.org/' },
+      { icon: '🔒', name: 'SIPC Protection Info', url: 'https://www.sipc.org/for-investors/what-sipc-protects' },
+    ],
+  },
 ];
 
 /**
@@ -236,11 +315,150 @@ function ThemePicker({ theme, setTheme }: { theme: Theme; setTheme: (t: Theme) =
   );
 }
 
+/**
+ * Save indicator — gives the user confidence their edits persist.
+ *
+ * Subscribes to the serialized plan (a stable JSON snapshot) so ANY nested
+ * change — account balance, expense amount, scenario name — is detected. On a
+ * change it flashes "Saving…" for a beat, then "Saved ✓" which fades after 2s
+ * to a quiet "Saved · {relative time}" that stays visible as a trust signal.
+ *
+ * For a financial app where users are entering their life savings, this silent-
+ * otherwise persistence is a meaningful reassurance.
+ */
+function SaveIndicator() {
+  const plan = usePlanStore((s) => s.plan);
+  // Stable snapshot that changes on any (deep) plan mutation.
+  const snapshot = JSON.stringify(plan);
+  const [phase, setPhase] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const firstRun = useRef(true);
+
+  useEffect(() => {
+    // Skip the very first run so we don't flash "Saving" on initial load.
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    setPhase('saving');
+    const t1 = setTimeout(() => {
+      setPhase('saved');
+      setSavedAt(Date.now());
+    }, 250);
+    return () => clearTimeout(t1);
+  }, [snapshot]);
+
+  // After "saved", fade to idle after 2s so the checkmark doesn't linger.
+  useEffect(() => {
+    if (phase !== 'saved') return;
+    const t2 = setTimeout(() => setPhase('idle'), 2000);
+    return () => clearTimeout(t2);
+  }, [phase]);
+
+  // Relative "x ago" tick while idle, refreshed every 30s.
+  const [, force] = useState(0);
+  useEffect(() => {
+    if (phase !== 'idle') return;
+    const t3 = setInterval(() => force((n) => n + 1), 30000);
+    return () => clearInterval(t3);
+  }, [phase]);
+
+  if (phase === 'idle') {
+    if (savedAt === null) return null;
+    return (
+      <span className="save-indicator save-indicator-idle" title={`Last saved ${new Date(savedAt).toLocaleTimeString()}`}>
+        <span aria-hidden="true">✓</span> Saved · {relativeTime(savedAt)}
+      </span>
+    );
+  }
+  return (
+    <span className={`save-indicator save-indicator-${phase}`}>
+      {phase === 'saving' ? <span className="save-dot" aria-hidden="true" /> : <span aria-hidden="true">✓</span>}
+      {phase === 'saving' ? 'Saving…' : 'Saved'}
+    </span>
+  );
+}
+
+/** Compact "just now" / "3m ago" relative-time label. */
+function relativeTime(ts: number): string {
+  const secs = Math.round((Date.now() - ts) / 1000);
+  if (secs < 5) return 'just now';
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
+/**
+ * First-run banner. New users inherit a fully-populated sample plan (a
+ * hypothetical 40-year-old) so the app demonstrates itself — but without a
+ * signal, they could believe the $120k 401(k) is somehow real. This dismissible
+ * banner names the sample data, offers a one-click "Start fresh" (reset), and
+ * remembers the dismissal so it never nags. The "Start fresh" path uses the
+ * store's resetPlan, which wipes to an empty plan.
+ */
+const ONBOARD_KEY = 'retirement-onboarded';
+function OnboardingBanner({ onStartFresh, onDismiss }: { onStartFresh: () => void; onDismiss: () => void }) {
+  return (
+    <div className="onboarding-banner" role="status">
+      <span className="onboarding-icon" aria-hidden="true">👋</span>
+      <div className="onboarding-body">
+        <strong>Welcome!</strong> This is sample data to show how the app works.
+        Edit the numbers to match your life, or start with a blank plan.
+      </div>
+      <div className="onboarding-actions">
+        <button className="btn btn-sm" onClick={onStartFresh}>Start fresh</button>
+        <button className="onboarding-dismiss" onClick={onDismiss} aria-label="Dismiss welcome message">Got it ✕</button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Collapsible resource links, shown as a footer so they're accessible from any
+ * tab without cluttering the data-entry sidebar. Collapsed by default — a
+ * user who needs a calculator or SSA reference can expand it; everyone else
+ * never sees the 22 links.
+ */
+function ResourcesFooter() {
+  return (
+    <footer className="resources-footer">
+      <details>
+        <summary>🔗 Helpful resources — calculators, SSA, IRS, Medicare & more</summary>
+        <div className="resources-footer-grid">
+          {RESOURCE_GROUPS.map((group) => (
+            <div key={group.label} className="resources-footer-group">
+              <div className="resources-footer-label">{group.label}</div>
+              {group.links.map((link) => (
+                <a
+                  key={link.url}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="resource-link"
+                  title={link.name}
+                >
+                  <span className="resource-icon" aria-hidden="true">{link.icon}</span>
+                  <span className="resource-name">{link.name}</span>
+                  <span className="resource-ext" aria-hidden="true">↗</span>
+                </a>
+              ))}
+            </div>
+          ))}
+        </div>
+      </details>
+    </footer>
+  );
+}
+
 export default function App() {
   const store = usePlanStore();
   const [tab, setTab] = useState<Tab>(() => (localStorage.getItem('retirement-tab') as Tab) || 'inputs');
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('retirement-theme') as Theme) || 'light');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem(ONBOARD_KEY) === null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -327,6 +545,16 @@ export default function App() {
     e.target.value = '';
   };
 
+  const dismissOnboarding = () => {
+    localStorage.setItem(ONBOARD_KEY, '1');
+    setShowOnboarding(false);
+  };
+
+  const startFresh = () => {
+    store.resetPlan();
+    dismissOnboarding();
+  };
+
   return (
     <div className="app">
       {/* Compact top bar — logo, scenario tabs, and actions in a single row */}
@@ -339,12 +567,15 @@ export default function App() {
             onSelect={(id) => store.setActiveScenario(id)}
             onAdd={() => store.addScenario()}
             onDelete={(id) => store.deleteScenario(id)}
+            onRename={(id, name) => store.renameScenario(id, name)}
+            onDuplicate={(id) => store.duplicateScenario(id)}
           />
         </div>
         <div className="header-actions">
+          <SaveIndicator />
           <ThemePicker theme={theme} setTheme={setTheme} />
           <div className="menu-wrapper" ref={menuRef}>
-            <button className="btn btn-sm" onClick={() => setMenuOpen(!menuOpen)}>☰ Menu</button>
+            <button className="btn btn-sm menu-trigger" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">☰ Menu</button>
             {menuOpen && (
               <div className="menu-dropdown">
                 <button className="menu-item" onClick={() => { fileInputRef.current?.click(); setMenuOpen(false); }}>
@@ -358,6 +589,24 @@ export default function App() {
                 </button>
                 <div className="menu-divider" />
                 <ResetPlanMenuItem onReset={() => { store.resetPlan(); setMenuOpen(false); }} />
+                <div className="menu-divider menu-divider-theme" />
+                <div className="menu-theme-label">Theme</div>
+                <div className="menu-theme-grid">
+                  {THEMES.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      className={`menu-theme-swatch${t.id === theme ? ' active' : ''}`}
+                      style={{ background: t.swatch }}
+                      onClick={() => { setTheme(t.id); setMenuOpen(false); }}
+                      title={t.label}
+                      aria-label={t.label}
+                      aria-pressed={t.id === theme}
+                    >
+                      <span className="menu-theme-icon">{t.icon}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -395,6 +644,10 @@ export default function App() {
         )}
       </div>
 
+      {showOnboarding && (
+        <OnboardingBanner onStartFresh={startFresh} onDismiss={dismissOnboarding} />
+      )}
+
       {tab === 'inputs' && (
         <InputsView
           scenario={activeScenario}
@@ -411,8 +664,10 @@ export default function App() {
       )}
 
       {tab === 'compare' && (
-        <CompareView results={allResults} />
+        <CompareView results={allResults} scenarios={store.plan.scenarios} />
       )}
+
+      <ResourcesFooter />
 
       {/* AI Chat Assistant */}
       <AiChat />
@@ -508,12 +763,16 @@ function ScenarioSwitcher({
   onSelect,
   onAdd,
   onDelete,
+  onRename,
+  onDuplicate,
 }: {
   scenarios: Scenario[];
   activeScenarioId: string;
   onSelect: (id: string) => void;
   onAdd: () => void;
   onDelete: (id: string) => void;
+  onRename: (id: string, name: string) => void;
+  onDuplicate: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -562,6 +821,8 @@ function ScenarioSwitcher({
               canDelete={scenarios.length > 1}
               onSelect={() => { onSelect(s.id); setOpen(false); }}
               onDelete={() => onDelete(s.id)}
+              onRename={(name) => { onRename(s.id, name); }}
+              onDuplicate={() => { onDuplicate(s.id); setOpen(false); }}
             />
           ))}
           <div className="scenario-menu-divider" />
@@ -589,24 +850,38 @@ function ScenarioSwitcher({
   );
 }
 
-/** One row in the scenario dropdown — selectable, with two-step delete confirm. */
+/** One row in the scenario dropdown — selectable, with inline rename,
+ *  duplicate, and two-step delete confirm. All scenario actions live here so
+ *  users don't have to hunt across the top bar and the Assumptions panel. */
 function ScenarioMenuItem({
   scenario,
   isActive,
   canDelete,
   onSelect,
   onDelete,
+  onRename,
+  onDuplicate,
 }: {
   scenario: Scenario;
   isActive: boolean;
   canDelete: boolean;
   onSelect: () => void;
   onDelete: () => void;
+  onRename: (name: string) => void;
+  onDuplicate: () => void;
 }) {
   const [armed, setArmed] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(scenario.name);
+
+  const commitRename = () => {
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== scenario.name) onRename(trimmed);
+    setEditing(false);
+  };
 
   return (
-    <div className={`scenario-menu-item-row${armed ? ' confirming' : ''}`}>
+    <div className={`scenario-menu-item-row${armed ? ' confirming' : ''}${editing ? ' editing' : ''}`}>
       {armed ? (
         <div className="scenario-confirm-inline">
           <span className="scenario-confirm-text">Delete “{scenario.name}”?</span>
@@ -625,6 +900,28 @@ function ScenarioMenuItem({
             >✕</button>
           </span>
         </div>
+      ) : editing ? (
+        <div className="scenario-rename-inline">
+          <input
+            type="text"
+            className="scenario-rename-input"
+            value={draft}
+            autoFocus
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+              if (e.key === 'Escape') { setDraft(scenario.name); setEditing(false); }
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            type="button"
+            className="scenario-confirm-btn yes"
+            title="Save name"
+            onClick={(e) => { e.stopPropagation(); commitRename(); }}
+          >✓</button>
+        </div>
       ) : (
         <>
           <button
@@ -638,17 +935,33 @@ function ScenarioMenuItem({
             <span className="scenario-menu-item-name">{scenario.name}</span>
             {isActive && <span className="scenario-menu-item-check" aria-hidden="true">✓</span>}
           </button>
-          {canDelete && (
+          <span className="scenario-menu-item-actions">
             <button
               type="button"
-              className="scenario-menu-item-delete"
-              title="Delete scenario"
-              onClick={(e) => { e.stopPropagation(); setArmed(true); }}
-              aria-label={`Delete scenario ${scenario.name}`}
-            >
-              ×
-            </button>
-          )}
+              className="scenario-menu-item-action"
+              title="Rename scenario"
+              onClick={(e) => { e.stopPropagation(); setDraft(scenario.name); setEditing(true); }}
+              aria-label={`Rename scenario ${scenario.name}`}
+            >✎</button>
+            <button
+              type="button"
+              className="scenario-menu-item-action"
+              title="Duplicate scenario"
+              onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
+              aria-label={`Duplicate scenario ${scenario.name}`}
+            >⧉</button>
+            {canDelete && (
+              <button
+                type="button"
+                className="scenario-menu-item-delete"
+                title="Delete scenario"
+                onClick={(e) => { e.stopPropagation(); setArmed(true); }}
+                aria-label={`Delete scenario ${scenario.name}`}
+              >
+                ×
+              </button>
+            )}
+          </span>
         </>
       )}
     </div>
@@ -680,69 +993,6 @@ function InputsView({ scenario, store }: {
     { id: 'events', label: 'Life Events', icon: '📅' },
   ];
 
-  const resourceGroups: { label: string; links: { icon: string; name: string; url: string }[] }[] = [
-    {
-      label: 'Calculators',
-      links: [
-        { icon: '🏦', name: 'SSA Retirement Estimator', url: 'https://www.ssa.gov/benefits/retirement/estimator.html' },
-        { icon: '📅', name: 'SSA Benefit Calculator', url: 'https://www.ssa.gov/OACT/quickcalc/' },
-        { icon: '💰', name: 'Fidelity Retirement Score', url: 'https://www.fidelity.com/calculators-tools/retirement-score' },
-        { icon: '📊', name: 'Vanguard Retirement Nest Egg', url: 'https://retirementplans.vanguard.com/VGApp/pe/pubeducation/calculators/RetirementNestEggCalc.jsf' },
-        { icon: '🧮', name: 'AARP Retirement Calculator', url: 'https://www.aarp.org/work/retirement-calculator/' },
-        { icon: '📈', name: 'Bankrate 401k Calculator', url: 'https://www.bankrate.com/retirement/401-k-calculator/' },
-      ],
-    },
-    {
-      label: 'Social Security',
-      links: [
-        { icon: '💳', name: 'my Social Security Account', url: 'https://www.ssa.gov/myaccount/' },
-        { icon: '📋', name: 'SSA Benefit Formulas', url: 'https://www.ssa.gov/oact/cola/Benefits.html' },
-        { icon: '⏰', name: 'SS Claiming Age Guide', url: 'https://www.ssa.gov/benefits/retirement/planner/agereduction.html' },
-        { icon: '👥', name: 'Spousal Benefits', url: 'https://www.ssa.gov/oact/quickcalc/spouse.html' },
-      ],
-    },
-    {
-      label: 'Taxes',
-      links: [
-        { icon: '🧾', name: 'IRS Tax Bracket Calculator', url: 'https://www.irs.gov/help/ita/whats-my-tax-bracket' },
-        { icon: '📕', name: 'IRS Pub 590-B (IRA Withdrawals)', url: 'https://www.irs.gov/publications/p590b' },
-        { icon: '🏢', name: 'IRS Pub 560 (401k Limits)', url: 'https://www.irs.gov/publications/p560' },
-        { icon: '💲', name: 'RMD Calculator (IRS)', url: 'https://www.irs.gov/retirement-plans/required-minimum-distribution-calculators' },
-      ],
-    },
-    {
-      label: 'Medicare & Healthcare',
-      links: [
-        { icon: '🏥', name: 'Medicare.gov Official Site', url: 'https://www.medicare.gov/' },
-        { icon: '🩺', name: 'Medicare Eligibility Tool', url: 'https://www.medicare.gov/eligibilitypremiumcalc/' },
-        { icon: '💊', name: 'Plan Finder (Drug Coverage)', url: 'https://www.medicare.gov/plan-compare/' },
-        { icon: '📚', name: 'Medicare & You Handbook', url: 'https://www.medicare.gov/medicare-and-you' },
-      ],
-    },
-    {
-      label: 'Investing & Education',
-      links: [
-        { icon: '🎓', name: 'Investor.gov (SEC)', url: 'https://www.investor.gov/' },
-        { icon: '📖', name: 'Compound Interest Calc', url: 'https://www.investor.gov/financial-tools-calculators/calculators/compound-interest-calculator' },
-        { icon: '⚖️', name: 'FINRA Broker Check', url: 'https://brokercheck.finra.org/' },
-        { icon: '🔒', name: 'SIPC Protection Info', url: 'https://www.sipc.org/for-investors/what-sipc-protects' },
-      ],
-    },
-  ];
-
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
-    () => new Set(resourceGroups.map((g) => g.label))
-  );
-
-  const toggleGroup = (label: string) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
-      return next;
-    });
-  };
-
   return (
     <div className="inputs-layout">
       <aside className="inputs-sidebar">
@@ -759,40 +1009,6 @@ function InputsView({ scenario, store }: {
             </li>
           ))}
         </ul>
-
-        {/* Resources section */}
-        <div className="sidebar-divider" />
-        <div className="sidebar-resources-label">🔗 Resources</div>
-        {resourceGroups.map((group) => {
-          const isCollapsed = collapsedGroups.has(group.label);
-          return (
-            <div key={group.label} className="resource-group">
-              <button
-                className={`resource-group-toggle ${isCollapsed ? 'collapsed' : ''}`}
-                onClick={() => toggleGroup(group.label)}
-              >
-                <span>{group.label}</span>
-                <span className="toggle-arrow">▼</span>
-              </button>
-              <div className={`resource-group-links ${isCollapsed ? 'collapsed' : ''}`}>
-                {group.links.map((link) => (
-                  <a
-                    key={link.url}
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="resource-link"
-                    title={link.name}
-                  >
-                    <span className="resource-icon">{link.icon}</span>
-                    <span className="resource-name">{link.name}</span>
-                    <span className="resource-ext">↗</span>
-                  </a>
-                ))}
-              </div>
-            </div>
-          );
-        })}
       </aside>
       <div className="inputs-content">
         {section === 'overview' && <OverviewPanel scenario={scenario} store={store} />}
@@ -1102,12 +1318,18 @@ function AssumptionsPanel({ scenario, store }: {
   return (
     <div className="panel mb-16">
       <div className="panel-header">
-        <h2>⚙️ Assumptions — <input
-          type="text"
-          value={scenario.name}
-          onChange={(e) => store.renameScenario(scenario.id, e.target.value)}
-          style={{ display: 'inline-block', width: '200px', fontSize: '16px', fontWeight: 600 }}
-        /></h2>
+        <h2 className="assumptions-title">⚙️ Assumptions
+          <span className="scenario-name-edit" title="Click to rename this scenario">
+            <input
+              type="text"
+              className="scenario-name-input"
+              value={scenario.name}
+              onChange={(e) => store.renameScenario(scenario.id, e.target.value)}
+              aria-label="Scenario name"
+            />
+            <span className="scenario-name-edit-icon" aria-hidden="true">✎</span>
+          </span>
+        </h2>
         <div style={{ display: 'flex', gap: 6 }}>
           <button className="btn btn-sm" onClick={() => store.duplicateScenario(scenario.id)}>Duplicate</button>
           {store.plan.scenarios.length > 1 && (
@@ -1295,7 +1517,7 @@ function AccountCard({ acct, scenario, store }: {
     <div className="acct-card">
       <div className="acct-card-header">
         <div className="acct-card-header-left">
-          <span className="acct-card-icon">{acct.type === 'checking_savings' ? '💵' : acct.type === 'taxable_brokerage' ? '📈' : acct.type.includes('roth') ? '🌿' : acct.type === 'hsa' ? '🏥' : acct.type === 'pension' ? '🏢' : '🏦'}</span>
+          <span className="acct-card-icon" aria-hidden="true">{acct.type === 'checking_savings' ? '💵' : acct.type === 'taxable_brokerage' ? '📈' : acct.type.includes('roth') ? '🌿' : acct.type === 'hsa' ? '🏥' : acct.type === 'pension' ? '🏢' : '🏦'}</span>
           <div className="acct-card-title-area">
             <input
               type="text"
@@ -1362,12 +1584,28 @@ function AccountsPanel({ scenario, store }: {
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2>🏦 Accounts & Savings</h2>
+        <h2><span aria-hidden="true">🏦</span> Accounts & Savings</h2>
       </div>
       <p className="section-help">
         Track all your savings and investment accounts. Enter the <strong>current balance</strong>, expected <strong>annual return</strong>,
         and your <strong>yearly contribution</strong>. Employer match is only shown for 401(k) accounts.
       </p>
+
+      {/* Quick add common accounts */}
+      <details className="quick-add-section">
+        <summary className="quick-add-label">⚡ Quick Add Common Accounts <span className="quick-add-toggle"></span></summary>
+        <div className="quick-add-grid">
+          {COMMON_ACCOUNTS.map((ca) => (
+            <button key={ca.name} className="quick-add-btn" onClick={() => store.addAccount(scenario.id, {
+              name: ca.name, type: ca.type, balance: ca.balance, annualReturn: ca.annualReturn, annualContribution: ca.annualContribution, employerMatch: ca.employerMatch,
+            })}>
+              <span className="quick-add-icon" aria-hidden="true">{ca.icon}</span>
+              <span>{ca.name}</span>
+              <span className="quick-add-amount">{ca.hint}</span>
+            </button>
+          ))}
+        </div>
+      </details>
 
       {/* Summary strip */}
       <div className="summary-strip">
@@ -1463,6 +1701,15 @@ function AccountsPanel({ scenario, store }: {
 }
 
 const PROPERTY_TYPES: PropertyType[] = ['primary_residence', 'vacation', 'investment', 'land', 'other'];
+
+/** Property group metadata — mirrors ACCOUNT_GROUP_META so the Properties
+ *  panel groups by type with per-group headers and + Add buttons, just like
+ *  Accounts & Savings. Each group lists its property types in display order. */
+const PROPERTY_GROUP_META: { label: string; icon: string; types: PropertyType[] }[] = [
+  { label: 'Primary & Residential', icon: '🏠', types: ['primary_residence'] },
+  { label: 'Vacation & Investment', icon: '🏖️', types: ['vacation', 'investment'] },
+  { label: 'Land & Other', icon: '🌳', types: ['land', 'other'] },
+];
 
 const PLAN_ACTION_LABELS: { value: string; label: string; icon: string }[] = [
   { value: 'keep', label: 'Keep it', icon: '🏠' },
@@ -1715,7 +1962,7 @@ function PropertiesPanel({ scenario, store }: {
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2>🏠 Homes & Property</h2>
+        <h2><span aria-hidden="true">🏠</span> Homes & Property</h2>
         <button className="btn btn-sm" onClick={() => store.addProperty(scenario.id, {
           name: 'New Property', type: 'primary_residence', currentValue: 0, mortgageBalance: 0, annualAppreciation: 0.03, annualPropertyTax: 0, annualInsurance: 0,
         })}>+ Add Property</button>
@@ -1746,9 +1993,29 @@ function PropertiesPanel({ scenario, store }: {
         <p className="muted" style={{ padding: '8px 0' }}>No properties added yet. Click "Add Property" to include your home or other real estate in your plan.</p>
       ) : (
         <div className="prop-card-list">
-          {properties.map((prop) => (
-            <PropertyCard key={prop.id} prop={prop} scenario={scenario} store={store} />
-          ))}
+          {PROPERTY_GROUP_META.map((g) => {
+            const groupProps = properties.filter((p) => g.types.includes(p.type));
+            if (groupProps.length === 0) return null;
+            const groupValue = groupProps.reduce((s, p) => s + p.currentValue, 0);
+            return (
+              <div key={g.label} className="acct-group">
+                <div className="acct-group-header">
+                  <span className="acct-group-icon" aria-hidden="true">{g.icon}</span>
+                  <span className="acct-group-label">{g.label}</span>
+                  <span className="acct-group-count">{groupProps.length}</span>
+                  <span className="acct-group-total">{formatCurrency(groupValue, { compact: true })}</span>
+                  <button className="btn btn-sm acct-group-add" onClick={() => store.addProperty(scenario.id, {
+                    name: 'New Property', type: g.types[0], currentValue: 0, mortgageBalance: 0, annualAppreciation: 0.03, annualPropertyTax: 0, annualInsurance: 0,
+                  })}>+ Add</button>
+                </div>
+                <div className="acct-group-cards">
+                  {groupProps.map((prop) => (
+                    <PropertyCard key={prop.id} prop={prop} scenario={scenario} store={store} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -1787,7 +2054,7 @@ function ExpenseRow({ exp, scenario, store }: {
   return (
     <div className="income-row exp-row">
       <div className="income-row-main">
-        <span className="income-row-icon">{CATEGORY_ICONS[exp.category] ?? '📦'}</span>
+        <span className="income-row-icon" aria-hidden="true">{CATEGORY_ICONS[exp.category] ?? '📦'}</span>
         <input
           type="text"
           className="income-row-name"
@@ -1845,7 +2112,7 @@ function ExpensesPanel({ scenario, store }: {
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2>📋 Expenses</h2>
+        <h2><span aria-hidden="true">📋</span> Expenses</h2>
         <button className="btn btn-sm" onClick={() => store.addExpense(scenario.id, {
           name: 'New Expense', category: 'other', annualAmount: 0, preRetirement: false, postRetirement: true, startAge: null, endAge: null,
         })}>+ Add Expense</button>
@@ -1897,6 +2164,9 @@ function ExpensesPanel({ scenario, store }: {
                   <span className="income-group-label">{prettify(g.category)}</span>
                   <span className="income-group-count">{g.expenses.length}</span>
                   <span className="income-group-total-muted">{formatCurrency(groupTotal, { compact: true })}/mo</span>
+                  <button className="btn btn-sm acct-group-add" onClick={() => store.addExpense(scenario.id, {
+                    name: 'New Expense', category: g.category, annualAmount: 0, preRetirement: false, postRetirement: true, startAge: null, endAge: null,
+                  })}>+ Add</button>
                 </div>
                 <div className="income-group-rows">
                   {g.expenses.map((exp) => (
@@ -1951,7 +2221,7 @@ function IncomeRow({ inc, scenario, store }: {
   return (
     <div className="income-row">
       <div className="income-row-main">
-        <span className="income-row-icon">{INCOME_ICONS[inc.type] ?? '📦'}</span>
+        <span className="income-row-icon" aria-hidden="true">{INCOME_ICONS[inc.type] ?? '📦'}</span>
         <input
           type="text"
           className="income-row-name"
@@ -2032,7 +2302,7 @@ function IncomePanel({ scenario, store }: {
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2>💵 Income Sources</h2>
+        <h2><span aria-hidden="true">💵</span> Income Sources</h2>
         <button className="btn btn-sm" onClick={() => store.addIncome(scenario.id, {
           name: 'New Income', type: 'part_time', annualAmount: 0, startAge: scenario.assumptions.currentAge, endAge: scenario.assumptions.retirementAge - 1, cola: true, taxable: true,
         })}>+ Add Income</button>
@@ -2041,6 +2311,23 @@ function IncomePanel({ scenario, store }: {
         Add <strong>any income source</strong> — pre-retirement (salary, self-employment) or post-retirement (Social Security, pension).
         Set Start/End ages to control when each source is active.
       </p>
+
+      {/* Quick add common income sources */}
+      <details className="quick-add-section">
+        <summary className="quick-add-label">⚡ Quick Add Common Income <span className="quick-add-toggle"></span></summary>
+        <div className="quick-add-grid">
+          {COMMON_INCOME.map((ci) => (
+            <button key={ci.name} className="quick-add-btn" onClick={() => store.addIncome(scenario.id, {
+              name: ci.name, type: ci.type, annualAmount: ci.annualAmount, startAge: Math.max(ci.startAge, scenario.assumptions.currentAge), endAge: ci.endAge, cola: ci.cola, taxable: ci.taxable,
+            })}>
+              <span className="quick-add-icon" aria-hidden="true">{ci.icon}</span>
+              <span>{ci.name}</span>
+              <span className="quick-add-amount">{formatCurrency(ci.annualAmount / 12, { compact: true })}/mo</span>
+            </button>
+          ))}
+        </div>
+      </details>
+
       <div className="summary-strip">
         <div className="summary-strip-item">
           <span className="label">Total Monthly</span>
@@ -2068,6 +2355,9 @@ function IncomePanel({ scenario, store }: {
                 <span className="income-group-icon">💼</span>
                 <span className="income-group-label">Pre-Retirement Income</span>
                 <span className="income-group-count">{preRet.length}</span>
+                <button className="btn btn-sm acct-group-add" onClick={() => store.addIncome(scenario.id, {
+                  name: 'New Income', type: 'salary', annualAmount: 0, startAge: scenario.assumptions.currentAge, endAge: scenario.assumptions.retirementAge - 1, cola: true, taxable: true,
+                })}>+ Add</button>
               </div>
               <div className="income-group-rows">
                 {preRet.map((inc) => (
@@ -2082,6 +2372,9 @@ function IncomePanel({ scenario, store }: {
                 <span className="income-group-icon">🏛️</span>
                 <span className="income-group-label">Retirement Income</span>
                 <span className="income-group-count">{postRet.length}</span>
+                <button className="btn btn-sm acct-group-add" onClick={() => store.addIncome(scenario.id, {
+                  name: 'New Income', type: 'pension', annualAmount: 0, startAge: scenario.assumptions.retirementAge, endAge: null, cola: false, taxable: true,
+                })}>+ Add</button>
               </div>
               <div className="income-group-rows">
                 {postRet.map((inc) => (
@@ -2115,7 +2408,7 @@ function EventsPanel({ scenario, store }: {
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2>📅 Life Events</h2>
+        <h2><span aria-hidden="true">📅</span> Life Events</h2>
         <button className="btn btn-sm" onClick={() => store.addEvent(scenario.id, {
           name: '', type: 'home_purchase', age: scenario.assumptions.currentAge + 5, cost: 0, proceeds: 0, ongoingAnnualImpact: 0, ongoingDurationYears: null, notes: '',
         })}>+ Add Event</button>
@@ -2348,6 +2641,14 @@ function ResultsView({ scenario, result, readiness }: {
     localStorage.setItem('retirement-result-section', section);
   }, [section]);
 
+  // Net-worth chart view mode: show nominal OR real (today's $), not both.
+  // Showing both at once produces 4 overlapping areas + reference lines — too
+  // dense. Defaults to real (today's $) since that's the more meaningful number.
+  const [nwView, setNwView] = useState<'real' | 'nominal'>(
+    () => (localStorage.getItem('retirement-nw-view') as 'real' | 'nominal') || 'real',
+  );
+  useEffect(() => { localStorage.setItem('retirement-nw-view', nwView); }, [nwView]);
+
   const tooltipStyle = { background: tc.panel, border: `1px solid ${tc.border}`, borderRadius: 8 };
 
   // Net worth chart: liquid (financial accounts) + home equity, stacked.
@@ -2446,7 +2747,7 @@ function ResultsView({ scenario, result, readiness }: {
           {section === 'monte-carlo' && (
             <div className="panel">
               <div className="panel-header">
-                <h2>🎲 Monte Carlo Stress Test</h2>
+                <h2><span aria-hidden="true">🎲</span> Monte Carlo Stress Test</h2>
                 <button
                   className="btn btn-sm"
                   onClick={() => setSection('deterministic')}
@@ -2466,9 +2767,17 @@ function ResultsView({ scenario, result, readiness }: {
 
           {section === 'deterministic' && (
             <>
-              {/* Net worth chart — stacked liquid + home equity, nominal and real $ */}
+              {/* Net worth chart — stacked liquid + home equity.
+                  Toggle between Nominal and Today's $ to avoid 4 overlapping
+                  areas; both views are available but not shown at once. */}
               <div className="chart-container">
-                <h3>Projected Net Worth Over Time</h3>
+                <div className="chart-header-row">
+                  <h3>Projected Net Worth Over Time</h3>
+                  <div className="seg-toggle" role="group" aria-label="Net worth view">
+                    <button className={`seg-btn${nwView === 'real' ? ' active' : ''}`} onClick={() => setNwView('real')}>Today's $</button>
+                    <button className={`seg-btn${nwView === 'nominal' ? ' active' : ''}`} onClick={() => setNwView('nominal')}>Nominal</button>
+                  </div>
+                </div>
                 <ResponsiveContainer width="100%" height={320}>
                   <AreaChart data={chartData}>
                     <defs>
@@ -2500,12 +2809,17 @@ function ResultsView({ scenario, result, readiness }: {
                       itemStyle={{ color: tc.text }}
                     />
                     <Legend />
-                    {/* Nominal — stacked liquid (bottom) + home equity (top) */}
-                    <Area type="monotone" dataKey="Liquid (Nominal)" stackId="nom" stroke={tc.chart} fill="url(#detGradientLiquidNom)" strokeWidth={1.5} />
-                    <Area type="monotone" dataKey="Home Equity (Nominal)" stackId="nom" stroke={tc.chart3} fill="url(#detGradientHomeNom)" strokeWidth={1.5} />
-                    {/* Today's $ — stacked liquid + home equity */}
-                    <Area type="monotone" dataKey="Liquid (Today\u2019s $)" stackId="real" stroke={tc.chart2} fill="url(#detGradientLiquidReal)" strokeWidth={1.5} />
-                    <Area type="monotone" dataKey="Home Equity (Today\u2019s $)" stackId="real" stroke={tc.chart4} fill="url(#detGradientHomeReal)" strokeWidth={1.5} />
+                    {nwView === 'nominal' ? (
+                      <>
+                        <Area type="monotone" dataKey="Liquid (Nominal)" stackId="nom" stroke={tc.chart} fill="url(#detGradientLiquidNom)" strokeWidth={1.5} />
+                        <Area type="monotone" dataKey="Home Equity (Nominal)" stackId="nom" stroke={tc.chart3} fill="url(#detGradientHomeNom)" strokeWidth={1.5} />
+                      </>
+                    ) : (
+                      <>
+                        <Area type="monotone" dataKey="Liquid (Today\u2019s $)" stackId="real" stroke={tc.chart2} fill="url(#detGradientLiquidReal)" strokeWidth={1.5} />
+                        <Area type="monotone" dataKey="Home Equity (Today\u2019s $)" stackId="real" stroke={tc.chart4} fill="url(#detGradientHomeReal)" strokeWidth={1.5} />
+                      </>
+                    )}
                     <ReferenceLine x={scenario.assumptions.retirementAge} stroke={tc.yellow} strokeDasharray="5 5" label={{ value: 'Retire', fill: tc.yellow, fontSize: 11 }} />
                     {scenario.events.filter((ev) => ev.proceeds > 0 || ev.cost > 0).map((ev) => (
                       <ReferenceLine
@@ -2638,24 +2952,24 @@ function YearTable({ result, retirementAge, scenario }: { result: NonNullable<Re
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2>📊 Year-by-Year Detail</h2>
+        <h2><span aria-hidden="true">📊</span> Year-by-Year Detail</h2>
         <button className="btn btn-sm" onClick={() => setShowAll(!showAll)}>{showAll ? 'Show Summary' : 'Show All Years'}</button>
       </div>
-      <div style={{ overflowX: 'auto' }}>
+      <div className="table-scroll" style={{ overflowX: 'auto' }}>
         <table className="data-table">
           <thead>
             <tr>
               <th style={{ width: 28 }}></th>
               <th>Age</th>
-              <th className="text-right">Start Assets</th>
-              <th className="text-right">Contrib.</th>
-              <th className="text-right">Deposits</th>
-              <th className="text-right">Growth</th>
+              <th className="text-right col-optional">Start Assets</th>
+              <th className="text-right col-optional">Contrib.</th>
+              <th className="text-right col-optional">Deposits</th>
+              <th className="text-right col-optional">Growth</th>
               <th className="text-right">Income</th>
               <th className="text-right">Withdrawals</th>
               <th className="text-right">Expenses</th>
               <th className="text-right">End Assets</th>
-              <th className="text-right">Real $</th>
+              <th className="text-right col-optional">Real $</th>
             </tr>
           </thead>
           <tbody>
@@ -2665,19 +2979,29 @@ function YearTable({ result, retirementAge, scenario }: { result: NonNullable<Re
                   key={y.age}
                   style={y.depleted ? { color: 'var(--red)' } : {}}
                   className="year-row"
+                  tabIndex={0}
+                  role="button"
+                  aria-expanded={expandedAge === y.age}
+                  aria-label={`Age ${y.age}, ${expandedAge === y.age ? 'collapse' : 'expand'} details`}
                   onClick={() => setExpandedAge(expandedAge === y.age ? null : y.age)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setExpandedAge(expandedAge === y.age ? null : y.age);
+                    }
+                  }}
                 >
-                  <td className="drag-handle" style={{ cursor: 'pointer', opacity: 1 }}>{expandedAge === y.age ? '▼' : '▶'}</td>
+                  <td className="drag-handle" style={{ cursor: 'pointer', opacity: 1 }} aria-hidden="true">{expandedAge === y.age ? '▼' : '▶'}</td>
                   <td style={{ cursor: 'pointer' }}>{y.age}</td>
-                  <td className="text-right">{formatCurrency(y.beginningAssets, { compact: true })}</td>
-                  <td className="text-right">{y.contributions > 0 ? formatCurrency(y.contributions, { compact: true }) : '—'}</td>
-                  <td className="text-right" style={{ color: 'var(--chart-2)' }}>{y.deposits > 0 ? '+' + formatCurrency(y.deposits, { compact: true }) : '—'}</td>
-                  <td className="text-right" style={{ color: 'var(--green)' }}>{y.growth > 0 ? '+' + formatCurrency(y.growth, { compact: true }) : '—'}</td>
+                  <td className="text-right col-optional">{formatCurrency(y.beginningAssets, { compact: true })}</td>
+                  <td className="text-right col-optional">{y.contributions > 0 ? formatCurrency(y.contributions, { compact: true }) : '—'}</td>
+                  <td className="text-right col-optional" style={{ color: 'var(--chart-2)' }}>{y.deposits > 0 ? '+' + formatCurrency(y.deposits, { compact: true }) : '—'}</td>
+                  <td className="text-right col-optional" style={{ color: 'var(--green)' }}>{y.growth > 0 ? '+' + formatCurrency(y.growth, { compact: true }) : '—'}</td>
                   <td className="text-right">{y.income > 0 ? formatCurrency(y.income, { compact: true }) : '—'}</td>
                   <td className="text-right" style={{ color: y.withdrawals > 0 ? 'var(--red)' : undefined }}>{y.withdrawals > 0 ? '-' + formatCurrency(y.withdrawals, { compact: true }) : '—'}</td>
                   <td className="text-right">{y.expenses > 0 ? formatCurrency(y.expenses, { compact: true }) : '—'}</td>
                   <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(y.endingAssets, { compact: true })}</td>
-                  <td className="text-right muted">{formatCurrency(y.realAssets, { compact: true })}</td>
+                  <td className="text-right col-optional muted">{formatCurrency(y.realAssets, { compact: true })}</td>
                 </tr>
                 {expandedAge === y.age && (
                   <tr key={`${y.age}-detail`} className="year-detail-row">
@@ -2736,9 +3060,32 @@ function YearTable({ result, retirementAge, scenario }: { result: NonNullable<Re
 
 /* ============ COMPARE VIEW ============ */
 
-function CompareView({ results }: { results: NonNullable<ReturnType<typeof runProjection>>[] }) {
+function CompareView({ results, scenarios }: { results: NonNullable<ReturnType<typeof runProjection>>[]; scenarios: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'] }) {
   const tc = useThemeColors();
   const tooltipStyle = { background: tc.panel, border: `1px solid ${tc.border}`, borderRadius: 8 };
+
+  // Assumption fields to compare, with label + formatter. Only fields that
+  // DIFFER across scenarios are shown — identical values add noise, not signal.
+  const assumptionFields: { key: keyof Scenario['assumptions']; label: string; fmt: (v: number) => string }[] = [
+    { key: 'currentAge', label: 'Current age', fmt: (v) => String(v) },
+    { key: 'retirementAge', label: 'Retirement age', fmt: (v) => String(v) },
+    { key: 'endAge', label: 'Plan end age', fmt: (v) => String(v) },
+    { key: 'inflationRate', label: 'Inflation', fmt: (v) => formatPercent(v) },
+    { key: 'socialSecurityCola', label: 'SS COLA', fmt: (v) => formatPercent(v) },
+    { key: 'retirementTaxRate', label: 'Retirement tax rate', fmt: (v) => formatPercent(v) },
+    { key: 'safeWithdrawalRate', label: 'Safe withdrawal', fmt: (v) => formatPercent(v) },
+    { key: 'preRetirementReturn', label: 'Pre-retirement return', fmt: (v) => formatPercent(v) },
+    { key: 'postRetirementReturn', label: 'Post-retirement return', fmt: (v) => formatPercent(v) },
+  ];
+  // Map results back to their scenarios so the diff columns align with the
+  // summary cards above (same scenario order).
+  const orderedScenarios = results
+    .map((r) => scenarios.find((s) => s.id === r.scenarioId))
+    .filter((s): s is Scenario => !!s);
+  const differingFields = assumptionFields.filter((f) => {
+    const vals = orderedScenarios.map((s) => s.assumptions[f.key]);
+    return !vals.every((v) => v === vals[0]);
+  });
   // Each scenario gets two parallel lines: liquid and total (incl. home equity).
   // Total - Liquid === Home Equity at that age, so the gap between the lines
   // visually communicates how much of each scenario's wealth is real estate.
@@ -2775,6 +3122,39 @@ function CompareView({ results }: { results: NonNullable<ReturnType<typeof runPr
           </div>
         ))}
       </div>
+
+      {differingFields.length > 0 && (
+        <div className="panel mb-16">
+          <div className="panel-header">
+            <h3>What's different?</h3>
+          </div>
+          <p className="section-help">
+            Only the assumptions that vary between scenarios are shown — so you can see <em>why</em> the outcomes differ without switching back to Inputs.
+          </p>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table compare-diff-table">
+              <thead>
+                <tr>
+                  <th>Assumption</th>
+                  {orderedScenarios.map((s, i) => (
+                    <th key={s.id} className="text-right" style={{ color: colors[i % colors.length] }}>{s.name}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {differingFields.map((f) => (
+                  <tr key={f.key}>
+                    <td>{f.label}</td>
+                    {orderedScenarios.map((s) => (
+                      <td key={s.id} className="text-right">{f.fmt(s.assumptions[f.key] as number)}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="chart-container">
         <h3>Net Worth Comparison (Today's Dollars)</h3>
