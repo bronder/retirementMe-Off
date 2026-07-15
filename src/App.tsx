@@ -2334,20 +2334,24 @@ function IncomeRow({ inc, scenario, store }: {
           {/* Two-state toggle that reads as a radio: "Lifetime" (endAge=null)
               vs "At age" (endAge=number). Same controls in both states, so the
               user always sees one predictable affordance — unlike the old
-              Lifetime/∞ design which swapped between different button states. */}
-          <button
-            className={`income-lifetime-btn ${inc.endAge === null ? 'active' : ''}`}
-            title="Continues for life"
-            onClick={() => store.updateIncome(scenario.id, inc.id, { endAge: null })}
-          >Lifetime</button>
-          <button
-            className={`income-lifetime-btn ${inc.endAge !== null ? 'active' : ''}`}
-            title="Ends at a specific age"
-            onClick={() => store.updateIncome(scenario.id, inc.id, { endAge: inc.endAge ?? inc.startAge })}
-          >At age</button>
-          {inc.endAge !== null && (
-            <NumCellInput value={inc.endAge} onChange={(v) => store.updateIncome(scenario.id, inc.id, { endAge: v || null })} />
-          )}
+              Lifetime/∞ design which swapped between different button states.
+              The toggle + conditional input are grouped as one unit so they
+              don't break apart when the row wraps. */}
+          <span className="income-end-toggle">
+            <button
+              className={`income-lifetime-btn ${inc.endAge === null ? 'active' : ''}`}
+              title="Continues for life"
+              onClick={() => store.updateIncome(scenario.id, inc.id, { endAge: null })}
+            >Lifetime</button>
+            <button
+              className={`income-lifetime-btn ${inc.endAge !== null ? 'active' : ''}`}
+              title="Ends at a specific age"
+              onClick={() => store.updateIncome(scenario.id, inc.id, { endAge: inc.endAge ?? inc.startAge })}
+            >At age</button>
+            {inc.endAge !== null && (
+              <NumCellInput value={inc.endAge} onChange={(v) => store.updateIncome(scenario.id, inc.id, { endAge: v || null })} />
+            )}
+          </span>
         </div>
         <div className="income-row-flags">
           <button
@@ -3391,15 +3395,16 @@ function CompareView({ results, scenarios }: { results: NonNullable<ReturnType<t
             <Legend />
             {results.map((r, i) => {
               const c = colors[i % colors.length];
-              // Liquid line: solid. Total line (incl. home equity): same
-              // color, dashed, slightly thinner — the gap between them is
-              // the home equity contribution at each age.
-              return (
-                <g key={r.scenarioId}>
-                  <Line type="monotone" dataKey={`${r.scenarioName} (Liquid)`} name={r.scenarioName} stroke={c} strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey={`${r.scenarioName} (Total)`} name={`${r.scenarioName} (+ home)`} stroke={c} strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
-                </g>
-              );
+              // Two lines per scenario: solid for liquid assets, dashed for
+              // total (incl. home equity). The gap between them is the home
+              // equity contribution at each age.
+              // NOTE: <Line> must be a DIRECT child of <LineChart> — Recharts
+              // discovers series via React.Children and skips anything nested
+              // in a wrapper like <g> or <Fragment>, so we return a flat array.
+              return [
+                <Line key={`${r.scenarioId}-liquid`} type="monotone" dataKey={`${r.scenarioName} (Liquid)`} name={r.scenarioName} stroke={c} strokeWidth={2} dot={false} />,
+                <Line key={`${r.scenarioId}-total`} type="monotone" dataKey={`${r.scenarioName} (Total)`} name={`${r.scenarioName} (+ home)`} stroke={c} strokeWidth={1.5} strokeDasharray="4 3" dot={false} />,
+              ];
             })}
           </LineChart>
         </ResponsiveContainer>
