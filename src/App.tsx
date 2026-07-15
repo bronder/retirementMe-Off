@@ -1166,10 +1166,50 @@ function clampNum(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v));
 }
 
+/**
+ * Local "draft" state for a controlled number input. Keeps the field editable
+ * even when the user clears it to retype — the raw string is held locally
+ * and a number is only propagated to the store when parseable. On blur, an
+ * empty/invalid field snaps back to the last valid value.
+ *
+ * `toInput` / `fromInput` convert between the store's number and the input's
+ * display string (e.g. percentages multiply by 100).
+ */
+function useEditableNumber(
+  value: number,
+  onChange: (v: number) => void,
+  toInput: (v: number) => string = String,
+  fromInput: (v: number) => number = (v) => v,
+) {
+  const [draft, setDraft] = useState<string | null>(null);
+
+  // If the store value changes externally (scenario switch, undo), drop the
+  // draft so the field reflects the new value.
+  useEffect(() => { setDraft(null); }, [value]);
+
+  const display = draft ?? toInput(value);
+
+  const handleChange = (raw: string) => {
+    setDraft(raw);
+    const v = parseNum(raw);
+    if (!Number.isNaN(v)) onChange(fromInput(v));
+  };
+
+  const handleBlur = () => {
+    // Drop the draft — if it was valid, the store already has the value;
+    // if it was empty/invalid, the field snaps back to the last valid one.
+    setDraft(null);
+  };
+
+  return { display, handleChange, handleBlur };
+}
+
 function AgeInput({ value, onChange, unit = 'yrs', min, max }: { value: number; onChange: (v: number) => void; unit?: string; min?: number; max?: number }) {
+  const { display, handleChange, handleBlur: draftBlur } = useEditableNumber(value, onChange);
   // Free edit while typing; snap into bounds on blur so the user can clear
   // the field or retype without fighting the cursor mid-keystroke.
   const commit = () => {
+    draftBlur();
     if (min !== undefined || max !== undefined) {
       const clamped = clampNum(value, min ?? -Infinity, max ?? Infinity);
       if (!Number.isNaN(clamped) && clamped !== value) onChange(clamped);
@@ -1179,10 +1219,10 @@ function AgeInput({ value, onChange, unit = 'yrs', min, max }: { value: number; 
     <div className="input-wrapper">
       <input
         type="number"
-        value={value}
+        value={display}
         min={min}
         max={max}
-        onChange={(e) => { const v = parseNum(e.target.value); if (!Number.isNaN(v)) onChange(v); }}
+        onChange={(e) => handleChange(e.target.value)}
         onBlur={commit}
       />
       <span className="unit-suffix">{unit}</span>
@@ -1191,7 +1231,14 @@ function AgeInput({ value, onChange, unit = 'yrs', min, max }: { value: number; 
 }
 
 function PctInputEnhanced({ value, onChange, min, max }: { value: number; onChange: (v: number) => void; min?: number; max?: number }) {
+  const { display, handleChange, handleBlur: draftBlur } = useEditableNumber(
+    value,
+    onChange,
+    (v) => (v * 100).toFixed(2),
+    (v) => v / 100,
+  );
   const commit = () => {
+    draftBlur();
     if (min !== undefined || max !== undefined) {
       const clamped = clampNum(value, min ?? -Infinity, max ?? Infinity);
       if (!Number.isNaN(clamped) && clamped !== value) onChange(clamped);
@@ -1201,11 +1248,11 @@ function PctInputEnhanced({ value, onChange, min, max }: { value: number; onChan
     <div className="input-wrapper">
       <input
         type="number"
-        value={+(value * 100).toFixed(2)}
+        value={display}
         step={0.1}
         min={min !== undefined ? +(min * 100).toFixed(2) : undefined}
         max={max !== undefined ? +(max * 100).toFixed(2) : undefined}
-        onChange={(e) => { const v = parseNum(e.target.value); if (!Number.isNaN(v)) onChange(v / 100); }}
+        onChange={(e) => handleChange(e.target.value)}
         onBlur={commit}
       />
       <span className="unit-suffix">%</span>
@@ -3499,14 +3546,21 @@ function CompareView({ results, scenarios }: { results: NonNullable<ReturnType<t
 /* ============ SHARED INPUT COMPONENTS ============ */
 
 function PctCellInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const { display, handleChange, handleBlur } = useEditableNumber(
+    value,
+    onChange,
+    (v) => (v * 100).toFixed(1),
+    (v) => v / 100,
+  );
   return (
     <div className="input-with-unit">
       <input
         className="table-input text-right"
         type="number"
-        value={+(value * 100).toFixed(1)}
+        value={display}
         step={0.5}
-        onChange={(e) => { const v = parseNum(e.target.value); if (!Number.isNaN(v)) onChange(v / 100); }}
+        onChange={(e) => handleChange(e.target.value)}
+        onBlur={handleBlur}
       />
       <span className="unit">%</span>
     </div>
@@ -3514,10 +3568,12 @@ function PctCellInput({ value, onChange }: { value: number; onChange: (v: number
 }
 
 function CurrencyCellInput({ value, onChange, min = 0 }: { value: number; onChange: (v: number) => void; min?: number }) {
+  const { display, handleChange, handleBlur: draftBlur } = useEditableNumber(value, onChange);
   // Currency amounts default to a 0 floor; negative balances/amounts are
   // almost never meaningful here and silently corrupt the projection.
   // The floor is enforced on blur so the user can still clear and retype.
   const commit = () => {
+    draftBlur();
     const clamped = clampNum(value, min, Infinity);
     if (!Number.isNaN(clamped) && clamped !== value) onChange(clamped);
   };
@@ -3527,9 +3583,9 @@ function CurrencyCellInput({ value, onChange, min = 0 }: { value: number; onChan
       <input
         className="table-input text-right"
         type="number"
-        value={value}
+        value={display}
         min={min}
-        onChange={(e) => { const v = parseNum(e.target.value); if (!Number.isNaN(v)) onChange(v); }}
+        onChange={(e) => handleChange(e.target.value)}
         onBlur={commit}
       />
     </div>
@@ -3537,12 +3593,14 @@ function CurrencyCellInput({ value, onChange, min = 0 }: { value: number; onChan
 }
 
 function NumCellInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const { display, handleChange, handleBlur } = useEditableNumber(value, onChange);
   return (
     <input
       className="table-input text-right"
       type="number"
-      value={value}
-      onChange={(e) => { const v = parseNum(e.target.value); if (!Number.isNaN(v)) onChange(v); }}
+      value={display}
+      onChange={(e) => handleChange(e.target.value)}
+      onBlur={handleBlur}
     />
   );
 }
