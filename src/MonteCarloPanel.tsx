@@ -6,7 +6,7 @@
  * Reuses the existing `useThemeColors()` color hook from App.tsx so the
  * percentile chart respects the active theme without duplicate code.
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import {
   AreaChart,
   Area,
@@ -76,6 +76,56 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
   // Depletion histogram drill-down: when the user clicks a bar, we surface
   // the per-run final-asset values for that depletion age in a small table.
   const [selectedBin, setSelectedBin] = useState<number | null>(null);
+
+  // Guards the auto-run so it fires exactly once per scenario, not on every
+  // keystroke edit (which recreates the scenario object). See effects below.
+  const autoRan = useRef(false);
+
+  // When the user switches to a DIFFERENT scenario (not edits the current
+  // one), the stale result no longer applies. Reset to idle so the auto-run
+  // effect re-fires for the new scenario. Keyed on scenario.id so typing in
+  // a field (which recreates the scenario object but keeps the same id)
+  // does NOT trigger a re-run.
+  const prevScenarioId = useRef(scenario.id);
+  useEffect(() => {
+    if (prevScenarioId.current !== scenario.id) {
+      prevScenarioId.current = scenario.id;
+      autoRan.current = false;
+      setRun({ status: 'idle', result: null, error: null });
+      setSelectedBin(null);
+    }
+  }, [scenario.id]);
+
+  // Auto-run once on first mount (and after a scenario switch resets the
+  // guard) so the user doesn't land on an idle/blank panel. Uses a FIXED
+  // seed so the initial result is stable and reproducible — two users with
+  // the same plan see the same success rate, and refreshing doesn't reshuffle
+  // the outcome. A manual "Run Simulation" click stays unseeded so users can
+  // still explore natural variance. The ref guard ensures this fires once
+  // per scenario, not on every edit (which would re-run 1000 trials per
+  // keystroke).
+  useEffect(() => {
+    if (autoRan.current) return;
+    autoRan.current = true;
+    setRun({ status: 'running', result: null, error: null });
+    requestAnimationFrame(() => {
+      try {
+        const result = runMonteCarloProjection(scenario, {
+          numRuns,
+          returnStdDev,
+          seed: 42,
+        });
+        setRun({ status: 'done', result, error: null });
+      } catch (e) {
+        setRun({
+          status: 'error',
+          result: null,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenario.id, numRuns, returnStdDev]);
 
   const handleRun = () => {
     setRun({ status: 'running', result: null, error: null });
