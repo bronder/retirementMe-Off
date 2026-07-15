@@ -152,9 +152,9 @@ export const usePlanStore = create<PlanStore>()(
       plan: defaultPlan(),
       activeScenarioId: '',
       undoState: null,
-      aiProvider: 'openai',
+      aiProvider: 'minimax',
       aiApiKeys: {},
-      aiModel: 'gpt-4o-mini',
+      aiModel: 'MiniMax-M3',
 
       setAiProvider: (provider) => set({ aiProvider: provider }),
       setAiApiKey: (provider, key) =>

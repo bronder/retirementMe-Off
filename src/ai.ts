@@ -26,18 +26,8 @@ export interface AiProvider {
 
 export const AI_PROVIDERS: AiProvider[] = [
   {
-    id: 'openai',
-    label: 'OpenAI',
-    endpoint: 'https://api.openai.com/v1/chat/completions',
-    authHeader: (key) => `Bearer ${key}`,
-    models: [
-      { id: 'gpt-4o', label: 'GPT-4o', hint: 'Most capable' },
-      { id: 'gpt-4o-mini', label: 'GPT-4o mini', hint: 'Fast & affordable' },
-    ],
-  },
-  {
     id: 'minimax',
-    label: 'MiniMax',
+    label: 'MiniMax (Coding Plan API)',
     endpoint: 'https://api.minimax.io/v1/chat/completions',
     authHeader: (key) => `Bearer ${key}`,
     models: [
@@ -47,8 +37,8 @@ export const AI_PROVIDERS: AiProvider[] = [
   },
   {
     id: 'zai',
-    label: 'Z.ai (GLM)',
-    endpoint: 'https://api.z.ai/api/paas/v4/chat/completions',
+    label: 'Z.ai (GLM) (Coding Plan API)',
+    endpoint: 'https://api.z.ai/api/coding/paas/v4/chat/completions',
     authHeader: (key) => `Bearer ${key}`,
     models: [
       { id: 'glm-5.2', label: 'GLM-5.2', hint: 'Most capable' },
@@ -62,10 +52,10 @@ export const AI_PROVIDERS: AiProvider[] = [
   },
 ];
 
-export const DEFAULT_AI_PROVIDER = 'openai';
-export const DEFAULT_AI_MODEL = 'gpt-4o-mini';
+export const DEFAULT_AI_PROVIDER = 'minimax';
+export const DEFAULT_AI_MODEL = 'MiniMax-M3';
 
-/** Get a provider by ID (falls back to OpenAI) */
+/** Get a provider by ID (falls back to the first available) */
 export function getProvider(providerId: string): AiProvider {
   return AI_PROVIDERS.find((p) => p.id === providerId) ?? AI_PROVIDERS[0];
 }
