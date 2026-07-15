@@ -489,9 +489,10 @@ function UndoToast() {
     if (!undoState) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
-      const el = document.activeElement as HTMLElement | null;
-      const tag = el?.tagName.toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || tag === 'select' || el?.isContentEditable) return;
+        // Skip when focus is in a text field so the native text-undo works.
+        const el = document.activeElement as HTMLElement | null;
+        const tag = el?.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select' || el?.isContentEditable) return;
         e.preventDefault();
         undo();
       }
@@ -1219,7 +1220,7 @@ function OverviewPanel({ scenario, store }: {
     return sum + earned;
   }, 0);
   const wellnessColor = wellnessScore >= 80 ? 'var(--green)' : wellnessScore >= 50 ? 'var(--yellow)' : 'var(--red)';
-  const wellnessLabel = wellnessScore >= 80 ? 'Well Populated' : wellnessScore >= 50 ? 'Needs Attention' : 'Incomplete';
+  const wellnessLabel = wellnessScore >= 80 ? 'Detailed' : wellnessScore >= 50 ? 'Basic' : 'Sparse';
   const gaugeDeg = Math.min(180, (wellnessScore / 100) * 180);
 
   // Mini-chart series: stacked liquid + property equity so users see both
@@ -1278,7 +1279,7 @@ function OverviewPanel({ scenario, store }: {
 
       <div className="overview-wellness-grid">
         <div className="panel overview-gauge-card">
-          <h3 className="overview-section-title">📋 Data Completeness</h3>
+          <h3 className="overview-section-title">📋 Plan Detail</h3>
           <div className="overview-gauge-container">
             <div className="overview-gauge" style={{ background: `conic-gradient(from 270deg, ${wellnessColor} 0deg ${gaugeDeg}deg, var(--bg-subtle) ${gaugeDeg}deg 180deg, transparent 180deg)` }}>
               <div className="overview-gauge-inner">
@@ -1287,7 +1288,7 @@ function OverviewPanel({ scenario, store }: {
               </div>
             </div>
           </div>
-          <div className="overview-gauge-hint">Higher = more complete and realistic data</div>
+          <div className="overview-gauge-hint">How much of your plan you've filled in — not a measure of whether it will succeed</div>
         </div>
         <div className="panel overview-checks-card">
           <h3 className="overview-section-title">✅ Checklist</h3>
@@ -2799,13 +2800,13 @@ function ResultsView({ scenario, result, readiness }: {
           can see how the number was derived. The "Plan Outcome" card jumps
           to the depletion age (if the plan runs out) or the end age. */}
       <div className="summary-grid">
-        <button className="summary-card summary-card-drilldown" onClick={() => focusOn(scenario.assumptions.retirementAge)} title="See the year-by-year breakdown at retirement">
+        <button type="button" className="summary-card summary-card-drilldown" onClick={() => focusOn(scenario.assumptions.retirementAge)} title="See the year-by-year breakdown at retirement">
           <div className="label">Nest Egg at Retirement</div>
           <div className="value">{formatCurrency(readiness.nestEggAtRetirement, { compact: true })}</div>
           <div className="sub">{formatCurrency(readiness.nestEggAtRetirementReal, { compact: true })} in today's dollars</div>
           <span className="summary-card-drilldown-hint" aria-hidden="true">View breakdown →</span>
         </button>
-        <button className="summary-card summary-card-drilldown" onClick={() => focusOn(result.depletionAge ?? scenario.assumptions.endAge)} title="See the year the plan depletes (or the final year)">
+        <button type="button" className="summary-card summary-card-drilldown" onClick={() => focusOn(result.depletionAge ?? scenario.assumptions.endAge)} title="See the year the plan depletes (or the final year)">
           <div className="label">Plan Outcome</div>
           <div className={`value ${result.success ? 'value-good' : 'value-bad'}`}>
             {result.success ? '✓ Sustainable' : '✗ Runs Out'}
@@ -2820,7 +2821,7 @@ function ResultsView({ scenario, result, readiness }: {
           </div>
           <div className="sub">Safe rate: {formatPercent(scenario.assumptions.safeWithdrawalRate)}</div>
         </div>
-        <button className="summary-card summary-card-drilldown" onClick={() => focusOn(scenario.assumptions.endAge)} title="See the final-year breakdown">
+        <button type="button" className="summary-card summary-card-drilldown" onClick={() => focusOn(scenario.assumptions.endAge)} title="See the final-year breakdown">
           <div className="label">Final Assets (age {scenario.assumptions.endAge})</div>
           <div className="value">{formatCurrency(result.finalAssets, { compact: true })}</div>
           <div className="sub">{formatCurrency(result.finalAssetsReal, { compact: true })} in today's dollars</div>
@@ -2982,6 +2983,39 @@ function ResultsView({ scenario, result, readiness }: {
       </div>
     </div>
   );
+}
+
+/** Builds a helpful "why is this empty?" message for the income detail row.
+ *  Finds the next income source that will activate after the current age, so
+ *  the user understands the gap (e.g. "Social Security starts at 67"). */
+function nextIncomeHint(scenario: NonNullable<ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]>, age: number): string {
+  const upcoming = scenario.incomeSources
+    .filter((i) => i.startAge > age)
+    .sort((a, b) => a.startAge - b.startAge);
+  if (upcoming.length > 0) {
+    const next = upcoming[0];
+    return `No income active at ${age}. Next up: ${next.name} at age ${next.startAge}.`;
+  }
+  const isRetired = age >= scenario.assumptions.retirementAge;
+  return isRetired
+    ? `No income active at ${age}. Add Social Security, a pension, or other sources on the Income tab.`
+    : `No income active at ${age}. Add a salary or other income source on the Income tab.`;
+}
+
+/** Builds a helpful "why is this empty?" message for the expense detail row. */
+function nextExpenseHint(scenario: NonNullable<ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]>, age: number): string {
+  const isRetired = age >= scenario.assumptions.retirementAge;
+  // Check if any expenses exist at all for this phase
+  const hasAnyForPhase = scenario.expenses.some((e) =>
+    isRetired ? e.postRetirement : e.preRetirement,
+  );
+  if (!hasAnyForPhase) {
+    return isRetired
+      ? `No expenses marked for retirement at ${age}. Add housing, healthcare, and living costs on the Expenses tab.`
+      : `No expenses marked for pre-retirement at ${age}. Add your current monthly costs on the Expenses tab.`;
+  }
+  // Expenses exist for the phase but none active at this exact age (age-window gap)
+  return `No expenses active at age ${age}.`;
 }
 
 /** Compute per-source income breakdown for a given age */
@@ -3154,7 +3188,7 @@ function YearTable({ result, retirementAge, scenario, focusAge, onFocusConsumed 
                               <tbody>
                                 {(() => {
                                   const items = getIncomeBreakdown(scenario, y.age);
-                                  if (items.length === 0) return <tr><td className="muted">No income this year</td></tr>;
+                                  if (items.length === 0) return <tr><td className="muted">{nextIncomeHint(scenario, y.age)}</td></tr>;
                                   const total = items.reduce((s, it) => s + it.amount, 0);
                                   return (
                                     <>
@@ -3181,7 +3215,7 @@ function YearTable({ result, retirementAge, scenario, focusAge, onFocusConsumed 
                               <tbody>
                                 {(() => {
                                   const items = getExpenseBreakdown(scenario, y.age);
-                                  if (items.length === 0) return <tr><td className="muted">No expenses this year</td></tr>;
+                                  if (items.length === 0) return <tr><td className="muted">{nextExpenseHint(scenario, y.age)}</td></tr>;
                                   const total = items.reduce((s, it) => s + it.amount, 0);
                                   return (
                                     <>
