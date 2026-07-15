@@ -4,9 +4,36 @@ import type { Plan, Scenario, Account, IncomeSource, Expense, LifeEvent, Assumpt
 import { defaultPlan, defaultScenario, createId, PLAN_VERSION } from './defaults';
 import type { ScenarioSuggestion } from './ai';
 
+/**
+ * Single-slot undo for destructive operations (delete + reset). We snapshot
+ * the entire plan + activeScenarioId just before the destructive `set`, then
+ * `undo()` restores it. Because the store only ever holds immutable references
+ * (every update is a spread/filter/map), the pre-mutation plan object is still
+ * intact in memory — no deep clone needed, just hold the reference.
+ *
+ * The `kind`/`label` are for the toast UI ("Deleted 'Checking' — Undo").
+ * Single-slot (not a stack) keeps it simple and matches the 7-second toast
+ * lifetime: one undo, then it's gone. If a new destructive op happens while a
+ * previous undo is still available, the older snapshot is discarded.
+ */
+export interface UndoState {
+  /** The plan + active scenario to restore. */
+  plan: Plan;
+  activeScenarioId: string;
+  /** Short human label for the toast, e.g. "Deleted 'Checking'". */
+  label: string;
+}
+
 interface PlanStore {
   plan: Plan;
   activeScenarioId: string;
+
+  /** Single-slot undo snapshot, or null when there's nothing to undo. */
+  undoState: UndoState | null;
+  /** Restore the last destructive operation. No-op if undoState is null. */
+  undo: () => void;
+  /** Clear the undo slot without restoring (used when the toast auto-expires). */
+  dismissUndo: () => void;
 
   // AI settings (stored separately, not in plan JSON)
   aiProvider: string;
@@ -74,6 +101,12 @@ function getScenario(plan: Plan, id: string): Scenario {
   return s;
 }
 
+/** Event types often have empty names, so fall back to a prettified type. */
+function prettifyEventType(type?: string): string {
+  if (!type) return 'event';
+  return type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 /**
  * Sanitize assumptions received from an AI suggestion. The model returns
  * untrusted JSON, so every field is type-checked and clamped to a sane range
@@ -84,7 +117,7 @@ function getScenario(plan: Plan, id: string): Scenario {
  * Each entry is [key, min, max]. Non-numeric values or values outside the range
  * are dropped (the original assumption is preserved by the caller's spread).
  */
-const ASSUMPTION_BOUNDS: Record<string, [number, number]> = {
+export const ASSUMPTION_BOUNDS: Record<string, [number, number]> = {
   currentAge: [1, 100],
   retirementAge: [1, 100],
   endAge: [1, 120],
@@ -111,9 +144,10 @@ function sanitizeAssumptions(raw: unknown): Partial<Assumptions> {
 
 export const usePlanStore = create<PlanStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       plan: defaultPlan(),
       activeScenarioId: '',
+      undoState: null,
       aiProvider: 'openai',
       aiApiKey: '',
       aiModel: 'gpt-4o-mini',
@@ -121,6 +155,18 @@ export const usePlanStore = create<PlanStore>()(
       setAiProvider: (provider) => set({ aiProvider: provider }),
       setAiApiKey: (key) => set({ aiApiKey: key }),
       setAiModel: (model) => set({ aiModel: model }),
+
+      undo: () =>
+        set((state) => {
+          if (!state.undoState) return state;
+          return {
+            plan: state.undoState.plan,
+            activeScenarioId: state.undoState.activeScenarioId,
+            undoState: null,
+          };
+        }),
+
+      dismissUndo: () => set({ undoState: null }),
 
       setActiveScenario: (id) => set({ activeScenarioId: id }),
 
@@ -150,10 +196,19 @@ export const usePlanStore = create<PlanStore>()(
       deleteScenario: (id) =>
         set((state) => {
           if (state.plan.scenarios.length <= 1) return state;
+          const removed = state.plan.scenarios.find((s) => s.id === id);
           const scenarios = state.plan.scenarios.filter((s) => s.id !== id);
           const activeScenarioId =
             state.activeScenarioId === id ? scenarios[0].id : state.activeScenarioId;
-          return { plan: { ...state.plan, scenarios }, activeScenarioId };
+          return {
+            plan: { ...state.plan, scenarios },
+            activeScenarioId,
+            undoState: {
+              plan: state.plan,
+              activeScenarioId: state.activeScenarioId,
+              label: `Deleted “${removed?.name ?? 'scenario'}”`,
+            },
+          };
         }),
 
       renameScenario: (id, name) =>
@@ -221,16 +276,25 @@ export const usePlanStore = create<PlanStore>()(
         })),
 
       deleteAccount: (scenarioId, accountId) =>
-        set((state) => ({
-          plan: {
-            ...state.plan,
-            scenarios: state.plan.scenarios.map((s) =>
-              s.id === scenarioId
-                ? { ...s, accounts: s.accounts.filter((a) => a.id !== accountId) }
-                : s,
-            ),
-          },
-        })),
+        set((state) => {
+          const scenario = getScenario(state.plan, scenarioId);
+          const removed = scenario.accounts.find((a) => a.id === accountId);
+          return {
+            undoState: {
+              plan: state.plan,
+              activeScenarioId: state.activeScenarioId,
+              label: `Deleted “${removed?.name ?? 'account'}”`,
+            },
+            plan: {
+              ...state.plan,
+              scenarios: state.plan.scenarios.map((s) =>
+                s.id === scenarioId
+                  ? { ...s, accounts: s.accounts.filter((a) => a.id !== accountId) }
+                  : s,
+              ),
+            },
+          };
+        }),
 
       reorderAccounts: (scenarioId: string, fromIndex: number, toIndex: number) =>
         set((state) => ({
@@ -321,21 +385,30 @@ export const usePlanStore = create<PlanStore>()(
         })),
 
       deleteProperty: (scenarioId, propertyId) =>
-        set((state) => ({
-          plan: {
-            ...state.plan,
-            scenarios: state.plan.scenarios.map((s) =>
-              s.id === scenarioId
-                ? {
-                    ...s,
-                    properties: (s.properties ?? []).filter((p) => p.id !== propertyId),
-                    // Remove any expenses linked to this property
-                    expenses: s.expenses.filter((e) => !e._propertyId?.startsWith(propertyId + ':')),
-                  }
-                : s,
-            ),
-          },
-        })),
+        set((state) => {
+          const scenario = getScenario(state.plan, scenarioId);
+          const removed = (scenario.properties ?? []).find((p) => p.id === propertyId);
+          return {
+            undoState: {
+              plan: state.plan,
+              activeScenarioId: state.activeScenarioId,
+              label: `Deleted “${removed?.name ?? 'property'}”`,
+            },
+            plan: {
+              ...state.plan,
+              scenarios: state.plan.scenarios.map((s) =>
+                s.id === scenarioId
+                  ? {
+                      ...s,
+                      properties: (s.properties ?? []).filter((p) => p.id !== propertyId),
+                      // Remove any expenses linked to this property
+                      expenses: s.expenses.filter((e) => !e._propertyId?.startsWith(propertyId + ':')),
+                    }
+                  : s,
+              ),
+            },
+          };
+        }),
 
       syncPropertiesToExpenses: (scenarioId) =>
         set((state) => ({
@@ -412,16 +485,25 @@ export const usePlanStore = create<PlanStore>()(
         })),
 
       deleteIncome: (scenarioId, incomeId) =>
-        set((state) => ({
-          plan: {
-            ...state.plan,
-            scenarios: state.plan.scenarios.map((s) =>
-              s.id === scenarioId
-                ? { ...s, incomeSources: s.incomeSources.filter((i) => i.id !== incomeId) }
-                : s,
-            ),
-          },
-        })),
+        set((state) => {
+          const scenario = getScenario(state.plan, scenarioId);
+          const removed = scenario.incomeSources.find((i) => i.id === incomeId);
+          return {
+            undoState: {
+              plan: state.plan,
+              activeScenarioId: state.activeScenarioId,
+              label: `Deleted “${removed?.name ?? 'income source'}”`,
+            },
+            plan: {
+              ...state.plan,
+              scenarios: state.plan.scenarios.map((s) =>
+                s.id === scenarioId
+                  ? { ...s, incomeSources: s.incomeSources.filter((i) => i.id !== incomeId) }
+                  : s,
+              ),
+            },
+          };
+        }),
 
       reorderIncome: (scenarioId: string, fromIndex: number, toIndex: number) =>
         set((state) => ({
@@ -468,16 +550,25 @@ export const usePlanStore = create<PlanStore>()(
         })),
 
       deleteExpense: (scenarioId, expenseId) =>
-        set((state) => ({
-          plan: {
-            ...state.plan,
-            scenarios: state.plan.scenarios.map((s) =>
-              s.id === scenarioId
-                ? { ...s, expenses: s.expenses.filter((e) => e.id !== expenseId) }
-                : s,
-            ),
-          },
-        })),
+        set((state) => {
+          const scenario = getScenario(state.plan, scenarioId);
+          const removed = scenario.expenses.find((e) => e.id === expenseId);
+          return {
+            undoState: {
+              plan: state.plan,
+              activeScenarioId: state.activeScenarioId,
+              label: `Deleted “${removed?.name ?? 'expense'}”`,
+            },
+            plan: {
+              ...state.plan,
+              scenarios: state.plan.scenarios.map((s) =>
+                s.id === scenarioId
+                  ? { ...s, expenses: s.expenses.filter((e) => e.id !== expenseId) }
+                  : s,
+              ),
+            },
+          };
+        }),
 
       reorderExpenses: (scenarioId: string, fromIndex: number, toIndex: number) =>
         set((state) => ({
@@ -539,16 +630,25 @@ export const usePlanStore = create<PlanStore>()(
         })),
 
       deleteEvent: (scenarioId, eventId) =>
-        set((state) => ({
-          plan: {
-            ...state.plan,
-            scenarios: state.plan.scenarios.map((s) =>
-              s.id === scenarioId
-                ? { ...s, events: s.events.filter((e) => e.id !== eventId) }
-                : s,
-            ),
-          },
-        })),
+        set((state) => {
+          const scenario = getScenario(state.plan, scenarioId);
+          const removed = scenario.events.find((e) => e.id === eventId);
+          return {
+            undoState: {
+              plan: state.plan,
+              activeScenarioId: state.activeScenarioId,
+              label: `Deleted “${removed?.name || prettifyEventType(removed?.type)}”`,
+            },
+            plan: {
+              ...state.plan,
+              scenarios: state.plan.scenarios.map((s) =>
+                s.id === scenarioId
+                  ? { ...s, events: s.events.filter((e) => e.id !== eventId) }
+                  : s,
+              ),
+            },
+          };
+        }),
 
       loadPlan: (plan) => {
         const firstId = plan.scenarios[0]?.id ?? '';
@@ -556,8 +656,17 @@ export const usePlanStore = create<PlanStore>()(
       },
 
       resetPlan: () => {
+        const prev = get();
         const plan = defaultPlan();
-        set({ plan, activeScenarioId: plan.scenarios[0].id });
+        set({
+          plan,
+          activeScenarioId: plan.scenarios[0].id,
+          undoState: {
+            plan: prev.plan,
+            activeScenarioId: prev.activeScenarioId,
+            label: 'Reset plan',
+          },
+        });
       },
     }),
     {
@@ -569,6 +678,8 @@ export const usePlanStore = create<PlanStore>()(
         aiProvider: state.aiProvider,
         aiApiKey: state.aiApiKey,
         aiModel: state.aiModel,
+        // NOTE: undoState is intentionally excluded — undo is a transient
+        // session gesture, not something to restore across refreshes.
       }),
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as PlanStore;
