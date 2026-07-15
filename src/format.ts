@@ -1,7 +1,11 @@
 /** Formatting helpers for currency, percentages, and ages. */
 
 export function formatCurrency(value: number, opts: { compact?: boolean } = {}): string {
-  if (!isFinite(value)) return '$0';
+  // Non-finite values mean a malformed/missing input leaked through. Returning
+  // '$0' here would silently disguise bad data as a valid zero — dangerous in
+  // a financial app where a user could mistake a broken projection for a real
+  // result. A muted dash makes the problem visible without an alarming error.
+  if (!isFinite(value)) return '—';
   if (opts.compact && Math.abs(value) >= 1000) {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
