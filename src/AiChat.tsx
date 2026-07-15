@@ -3,6 +3,7 @@ import { usePlanStore } from './store';
 import { runProjection } from './engine';
 import {
   AI_PROVIDERS,
+  CUSTOM_PROVIDER_ID,
   SYSTEM_PROMPT,
   buildPlanContext,
   callAI,
@@ -46,6 +47,7 @@ export function AiChat() {
   const [apiKeyInput, setApiKeyInput] = useState(store.aiApiKeys[store.aiProvider] ?? '');
   const [providerInput, setProviderInput] = useState(store.aiProvider);
   const [modelInput, setModelInput] = useState(store.aiModel);
+  const [customEndpointInput, setCustomEndpointInput] = useState(store.aiCustomEndpoint);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -53,7 +55,9 @@ export function AiChat() {
   const hasApiKey = (store.aiApiKeys[store.aiProvider] ?? '').length > 0;
 
   // Validate that the stored model exists for the current provider.
+  // The custom provider has no model list, so skip validation for it.
   useEffect(() => {
+    if (store.aiProvider === CUSTOM_PROVIDER_ID) return;
     const provider = getProvider(store.aiProvider);
     const isValid = provider.models.some((m) => m.id === store.aiModel);
     if (!isValid) {
@@ -109,7 +113,7 @@ export function AiChat() {
           ...historyForApi,
         ];
 
-        const response = await callAI(store.aiProvider, activeKey, store.aiModel, apiMessages);
+        const response = await callAI(store.aiProvider, activeKey, store.aiModel, apiMessages, store.aiCustomEndpoint);
 
         const suggestion = parseScenarioSuggestion(response);
         const displayContent = stripScenarioBlock(stripThinkBlocks(response));
@@ -149,12 +153,20 @@ export function AiChat() {
     store.setAiProvider(providerInput);
     store.setAiApiKey(providerInput, apiKeyInput.trim());
     store.setAiModel(modelInput);
+    if (providerInput === CUSTOM_PROVIDER_ID) {
+      store.setAiCustomEndpoint(customEndpointInput.trim());
+      store.setAiCustomModel(modelInput.trim());
+    }
     setShowSettings(false);
   };
 
   const handleProviderChange = (newProviderId: string) => {
     setProviderInput(newProviderId);
-    setModelInput(getDefaultModel(newProviderId));
+    if (newProviderId === CUSTOM_PROVIDER_ID) {
+      setModelInput(store.aiCustomModel || '');
+    } else {
+      setModelInput(getDefaultModel(newProviderId));
+    }
     // Load the key the user previously entered for this provider (or empty),
     // so switching providers never silently drops a saved key.
     setApiKeyInput(store.aiApiKeys[newProviderId] ?? '');
@@ -283,12 +295,22 @@ export function AiChat() {
               </label>
               <label className="ai-chat-label">
                 Model
-                <select value={modelInput} onChange={(e) => setModelInput(e.target.value)} className="ai-chat-select">
-                  {getProvider(providerInput).models.map((m) => (
-                    <option key={m.id} value={m.id}>{m.label} — {m.hint}</option>
-                  ))}
-                </select>
+                {providerInput === CUSTOM_PROVIDER_ID ? (
+                  <input type="text" value={modelInput} onChange={(e) => setModelInput(e.target.value)} placeholder="e.g. gpt-4o-mini" className="ai-chat-input" />
+                ) : (
+                  <select value={modelInput} onChange={(e) => setModelInput(e.target.value)} className="ai-chat-select">
+                    {getProvider(providerInput).models.map((m) => (
+                      <option key={m.id} value={m.id}>{m.label} — {m.hint}</option>
+                    ))}
+                  </select>
+                )}
               </label>
+              {providerInput === CUSTOM_PROVIDER_ID && (
+                <label className="ai-chat-label">
+                  API Endpoint URL
+                  <input type="text" value={customEndpointInput} onChange={(e) => setCustomEndpointInput(e.target.value)} placeholder="https://your-host/chat/completions" className="ai-chat-input" />
+                </label>
+              )}
               <button className="ai-chat-save-btn" onClick={handleSaveSettings}>Save</button>
               <p className="ai-chat-disclaimer">
                 Your API key is stored in your browser only. It is sent directly to {getProvider(providerInput).label} and never to any other server.

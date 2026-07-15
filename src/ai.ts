@@ -50,18 +50,41 @@ export const AI_PROVIDERS: AiProvider[] = [
       { id: 'glm-4', label: 'GLM-4', hint: 'Previous gen' },
     ],
   },
+  {
+    id: 'custom',
+    label: 'Custom (OpenAI-compatible)',
+    endpoint: '',
+    authHeader: (key) => `Bearer ${key}`,
+    models: [],
+  },
 ];
 
 export const DEFAULT_AI_PROVIDER = 'minimax';
 export const DEFAULT_AI_MODEL = 'MiniMax-M3';
+
+/** Provider ID for the custom OpenAI-compatible option. */
+export const CUSTOM_PROVIDER_ID = 'custom';
+
+/** Resolve the endpoint for a provider, applying a custom URL override
+ *  when the provider is 'custom'. The customEndpoint should come from the
+ *  store (user-supplied). It must be the full chat completions URL, e.g.
+ *  https://models.inference.ai.azure.com/chat/completions */
+export function resolveEndpoint(providerId: string, customEndpoint: string): string {
+  if (providerId === CUSTOM_PROVIDER_ID) {
+    return customEndpoint.trim() || '';
+  }
+  return getProvider(providerId).endpoint;
+}
 
 /** Get a provider by ID (falls back to the first available) */
 export function getProvider(providerId: string): AiProvider {
   return AI_PROVIDERS.find((p) => p.id === providerId) ?? AI_PROVIDERS[0];
 }
 
-/** Get the default model for a provider (the flagship, listed first). */
-export function getDefaultModel(providerId: string): string {
+/** Get the default model for a provider (the flagship, listed first).
+ *  For the custom provider, returns the user-supplied custom model. */
+export function getDefaultModel(providerId: string, customModel = ''): string {
+  if (providerId === CUSTOM_PROVIDER_ID) return customModel;
   const provider = getProvider(providerId);
   return provider.models[0]?.id ?? '';
 }
@@ -234,16 +257,24 @@ Guidelines:
 
 /**
  * Call an AI provider's chat completions API.
- * Supports OpenAI, MiniMax, and Z.ai (GLM).
+ * Supports MiniMax, Z.ai (GLM), and any custom OpenAI-compatible endpoint.
+ * When providerId is 'custom', the customEndpoint is used as the URL and
+ * model is whatever the user typed (since we can't list models for an
+ * arbitrary endpoint).
  */
 export async function callAI(
   providerId: string,
   apiKey: string,
   model: string,
   messages: { role: 'user' | 'assistant' | 'system'; content: string }[],
+  customEndpoint = '',
 ): Promise<string> {
   const provider = getProvider(providerId);
-  const response = await fetch(provider.endpoint, {
+  const endpoint = resolveEndpoint(providerId, customEndpoint);
+  if (!endpoint) {
+    throw new Error('No API endpoint set. Enter your endpoint URL in Settings.');
+  }
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

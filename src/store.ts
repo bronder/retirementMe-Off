@@ -42,10 +42,16 @@ interface PlanStore {
    *  provider keeps its own. */
   aiApiKeys: Record<string, string>;
   aiModel: string;
+  /** Custom OpenAI-compatible endpoint URL (only used when aiProvider === 'custom'). */
+  aiCustomEndpoint: string;
+  /** Custom model name (only used when aiProvider === 'custom'). */
+  aiCustomModel: string;
   setAiProvider: (provider: string) => void;
   /** Set the API key for a specific provider. */
   setAiApiKey: (provider: string, key: string) => void;
   setAiModel: (model: string) => void;
+  setAiCustomEndpoint: (endpoint: string) => void;
+  setAiCustomModel: (model: string) => void;
 
   // Scenario operations
   setActiveScenario: (id: string) => void;
@@ -155,11 +161,15 @@ export const usePlanStore = create<PlanStore>()(
       aiProvider: 'minimax',
       aiApiKeys: {},
       aiModel: 'MiniMax-M3',
+      aiCustomEndpoint: '',
+      aiCustomModel: '',
 
       setAiProvider: (provider) => set({ aiProvider: provider }),
       setAiApiKey: (provider, key) =>
         set((state) => ({ aiApiKeys: { ...state.aiApiKeys, [provider]: key } })),
       setAiModel: (model) => set({ aiModel: model }),
+      setAiCustomEndpoint: (endpoint) => set({ aiCustomEndpoint: endpoint }),
+      setAiCustomModel: (model) => set({ aiCustomModel: model }),
 
       undo: () =>
         set((state) => {
@@ -683,6 +693,8 @@ export const usePlanStore = create<PlanStore>()(
         aiProvider: state.aiProvider,
         aiApiKeys: state.aiApiKeys,
         aiModel: state.aiModel,
+        aiCustomEndpoint: state.aiCustomEndpoint,
+        aiCustomModel: state.aiCustomModel,
         // NOTE: undoState is intentionally excluded — undo is a transient
         // session gesture, not something to restore across refreshes.
       }),
