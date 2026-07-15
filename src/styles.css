@@ -2534,6 +2534,105 @@ tr.drag-over {
 .resources-footer .resource-link { padding: 4px 0; }
 
 /* ============================================================
+   CONTEXTUAL RESOURCES (per-panel collapsible)
+   ============================================================
+   One-line collapsed <details> at the bottom of each Inputs panel,
+   showing only the resource links relevant to that panel's data. */
+.contextual-resources {
+  margin-top: 20px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.contextual-resources summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  list-style: none;
+  transition: color 0.15s;
+}
+
+.contextual-resources summary::-webkit-details-marker { display: none; }
+.contextual-resources summary:hover { color: var(--text); }
+
+.contextual-resources-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 4px 16px;
+  padding: 12px 0 0;
+}
+
+/* ============================================================
+   HEADER RESOURCES POPOVER
+   ============================================================
+   Mirrors the ThemePicker pattern — a btn-sm trigger in the top bar
+   that opens a dropdown with ALL resource groups. */
+.resources-picker {
+  position: relative;
+}
+
+.resources-picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.resources-picker-caret {
+  font-size: 10px;
+  opacity: 0.6;
+  transition: transform 0.15s;
+}
+
+.resources-picker-trigger.open .resources-picker-caret {
+  transform: rotate(180deg);
+}
+
+.resources-picker-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 280px;
+  max-width: 360px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  padding: 8px 0;
+}
+
+.resources-picker-group {
+  padding: 4px 0;
+}
+
+.resources-picker-group:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+
+.resources-picker-label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 6px 16px 2px;
+}
+
+.resources-picker-menu .resource-link {
+  padding: 6px 16px;
+}
+
+@media (max-width: 540px) {
+  .resources-picker-menu {
+    right: auto;
+    left: 0;
+    min-width: min(320px, calc(100vw - 24px));
+  }
+}
+
+/* ============================================================
    EVENT CARDS
    ============================================================ */
 

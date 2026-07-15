@@ -431,12 +431,83 @@ function ResourcesFooter() {
         Past performance doesn't guarantee future results. Consult a qualified
         financial advisor before making decisions.
       </p>
-      <details>
-        <summary>🔗 Helpful resources — calculators, SSA, IRS, Medicare & more</summary>
-        <div className="resources-footer-grid">
+    </footer>
+  );
+}
+
+/**
+ * Contextual resource section — shown at the bottom of an Inputs panel with
+ * ONLY the links relevant to that panel's data (e.g. SSA links on Income,
+ * tax links on Assumptions). Collapsed by default so it adds one line of
+ * height until the user expands it. Reuses the shared .resource-link styling.
+ */
+function ContextualResources({ group }: { group: { label: string; links: { icon: string; name: string; url: string }[] } }) {
+  return (
+    <details className="contextual-resources">
+      <summary>🔗 {group.label} resources</summary>
+      <div className="contextual-resources-grid">
+        {group.links.map((link) => (
+          <a
+            key={link.url}
+            href={link.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="resource-link"
+            title={link.name}
+          >
+            <span className="resource-icon" aria-hidden="true">{link.icon}</span>
+            <span className="resource-name">{link.name}</span>
+            <span className="resource-ext" aria-hidden="true">↗</span>
+          </a>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+/**
+ * Header resources popover — shows ALL resource groups in a dropdown so the
+ * full list is reachable from anywhere in the app. Mirrors the ThemePicker
+ * pattern (self-contained open state, outside-click + Escape to close).
+ */
+function ResourcesPicker() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="resources-picker" ref={ref}>
+      <button
+        type="button"
+        className={`btn btn-sm resources-picker-trigger${open ? ' open' : ''}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="true"
+        aria-expanded={open}
+        title="Helpful resources"
+      >
+        <span aria-hidden="true">🔗</span> Resources
+        <span className="resources-picker-caret" aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <div className="resources-picker-menu">
           {RESOURCE_GROUPS.map((group) => (
-            <div key={group.label} className="resources-footer-group">
-              <div className="resources-footer-label">{group.label}</div>
+            <div key={group.label} className="resources-picker-group">
+              <div className="resources-picker-label">{group.label}</div>
               {group.links.map((link) => (
                 <a
                   key={link.url}
@@ -445,6 +516,7 @@ function ResourcesFooter() {
                   rel="noopener noreferrer"
                   className="resource-link"
                   title={link.name}
+                  onClick={() => setOpen(false)}
                 >
                   <span className="resource-icon" aria-hidden="true">{link.icon}</span>
                   <span className="resource-name">{link.name}</span>
@@ -454,8 +526,8 @@ function ResourcesFooter() {
             </div>
           ))}
         </div>
-      </details>
-    </footer>
+      )}
+    </div>
   );
 }
 /**
@@ -633,6 +705,7 @@ export default function App() {
         </div>
         <div className="header-actions">
           <SaveIndicator />
+          <ResourcesPicker />
           <ThemePicker theme={theme} setTheme={setTheme} />
           <div className="menu-wrapper" ref={menuRef}>
             <button className="btn btn-sm menu-trigger" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">☰ Menu</button>
@@ -1360,6 +1433,8 @@ function OverviewPanel({ scenario, store }: {
         <div className="summary-strip-item"><span className="label">Monthly Income (Ret.)</span><span className="value">{formatCurrency(readiness.firstYearIncome / 12, { compact: true })}</span></div>
         <div className="summary-strip-item"><span className="label">Life Events</span><span className="value">{scenario.events.length}</span></div>
       </div>
+
+      <ContextualResources group={RESOURCE_GROUPS[0]} />
     </div>
   );
 }
@@ -1577,6 +1652,8 @@ function AssumptionsPanel({ scenario, store }: {
           </FieldGroup>
         </div>
       </div>
+
+      <ContextualResources group={RESOURCE_GROUPS[2]} />
     </div>
   );
 }
@@ -1782,6 +1859,8 @@ function AccountsPanel({ scenario, store }: {
       {scenario.accounts.length === 0 && (
         <p className="muted" style={{ padding: '8px 0' }}>No accounts added yet. Click "Add Account" to start tracking your savings and investments.</p>
       )}
+
+      <ContextualResources group={RESOURCE_GROUPS[4]} />
     </div>
   );
 }
@@ -2264,6 +2343,8 @@ function ExpensesPanel({ scenario, store }: {
           })}
         </div>
       )}
+
+      <ContextualResources group={RESOURCE_GROUPS[3]} />
     </div>
   );
 }
@@ -2478,6 +2559,8 @@ function IncomePanel({ scenario, store }: {
           )}
         </div>
       )}
+
+      <ContextualResources group={RESOURCE_GROUPS[1]} />
     </div>
   );
 }
