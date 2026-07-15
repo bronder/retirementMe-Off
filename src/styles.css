@@ -4,6 +4,43 @@
    Light-first, warm-white surfaces, orange primary, teal charts.
    ============================================================ */
 
+/* ---------- Accessibility utilities ---------- */
+/* Visually hidden but available to screen readers. Use for labels and text
+   alternatives that sighted users get from visual context (icons, layout). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Keyboard focus indication. :focus-visible only fires for keyboard
+   navigation (not mouse clicks), so keyboard users get a clear accent ring
+   on every interactive element while mouse users see no extra clutter.
+   Text inputs already have their own box-shadow focus ring, so we exclude
+   them here to avoid double rings. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+/* Inputs keep their existing box-shadow focus ring — don't double up. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+/* The keyboard-navigable year-row needs an inset ring so it reads as a row. */
+.year-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 /* ---------- LIGHT (default, premium) ---------- */
 :root,
 [data-theme='light'] {
@@ -21,7 +58,7 @@
   /* Text */
   --text: #1c1b19;          /* near-black, warm */
   --text-dim: #6e6a60;      /* muted, editorial */
-  --text-faint: #a8a294;
+  --text-faint: #76715f;    /* AA-compliant (4.5:1 on --bg) */
 
   /* Primary action (orange — used sparingly) */
   --accent: #e8590c;        /* refined orange */
@@ -84,7 +121,7 @@
 
   --text: #ece9e3;
   --text-dim: #a8a294;
-  --text-faint: #75716a;
+  --text-faint: #9a948a;    /* AA-compliant (5.9:1 on --bg) */
 
   --accent: #f97316;        /* slightly brighter orange for dark */
   --accent-hover: #fb923c;
@@ -122,7 +159,7 @@
   --border-strong: #c4b088;
   --text: #3d3221;
   --text-dim: #8c7a5b;
-  --text-faint: #b5a788;
+  --text-faint: #766a4f;    /* AA-compliant (4.5:1 on --bg) */
   --accent: #c2410c;
   --accent-hover: #9a3412;
   --accent-dim: #fce7d5;
@@ -156,7 +193,7 @@
   --border-strong: #5a544d;
   --text: #ece6dc;
   --text-dim: #a8a094;
-  --text-faint: #75716a;
+  --text-faint: #a39d92;    /* AA-compliant (5.3:1 on --bg) */
   --accent: #d97757;        /* terracotta — distinct from dark's orange */
   --accent-hover: #e89478;
   --accent-dim: #3a2820;
@@ -190,7 +227,7 @@
   --border-strong: #5a6680;
   --text: #eceff4;
   --text-dim: #a3b1c2;
-  --text-faint: #768096;
+  --text-faint: #9ba4b0;    /* AA-compliant (5.0:1 on --bg) */
   --accent: #d08770;
   --accent-hover: #ebcb8b;
   --accent-dim: #3b4252;
@@ -224,7 +261,7 @@
   --border-strong: #6272a4;
   --text: #f8f8f2;          /* Dracula foreground */
   --text-dim: #c5c8d6;
-  --text-faint: #6272a4;    /* comment */
+  --text-faint: #9098b8;    /* AA-compliant (5.0:1 on --bg) */
   --accent: #bd93f9;        /* Dracula purple — signature accent */
   --accent-hover: #d6a8ff;
   --accent-dim: #2e2a47;
@@ -318,6 +355,121 @@ body {
   flex-wrap: wrap;
   align-items: center;
   flex-shrink: 0;
+}
+
+/* ---- First-run onboarding banner ---- */
+/* Dismissible welcome that names the sample data so new users don't mistake
+   the prefilled plan for their own. Calm, not alarming. */
+.onboarding-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  margin-bottom: 10px;
+  background: var(--accent-dim);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.onboarding-icon { font-size: 20px; flex-shrink: 0; }
+.onboarding-body { flex: 1; min-width: 0; }
+.onboarding-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.onboarding-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s, background 0.15s;
+}
+.onboarding-dismiss:hover { color: var(--text); background: var(--bg-subtle); }
+
+@media (max-width: 600px) {
+  .onboarding-banner { flex-wrap: wrap; }
+  .onboarding-actions { width: 100%; justify-content: flex-end; }
+}
+/* Styled to look like a heading but reveal itself as editable on hover via a
+   dashed underline + pencil icon, so users discover they can rename here. */
+.assumptions-title { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.scenario-name-edit {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.scenario-name-input {
+  width: 220px;
+  max-width: 50vw;
+  padding: 2px 6px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text);
+  transition: border-color 0.15s, background 0.15s;
+}
+.scenario-name-edit:hover .scenario-name-input {
+  border-bottom-color: var(--border-strong);
+  background: var(--bg-subtle);
+}
+.scenario-name-input:focus {
+  outline: none;
+  border-bottom: 1px solid var(--accent);
+  background: var(--bg-subtle);
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+.scenario-name-edit-icon {
+  position: absolute;
+  right: -16px;
+  font-size: 12px;
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
+.scenario-name-edit:hover .scenario-name-edit-icon { opacity: 0.7; }
+
+/* ---- Save indicator (trust signal — edits persist to localStorage) ---- */
+.save-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  transition: color 0.2s ease, background 0.2s ease;
+  min-height: 22px;
+}
+.save-indicator-saving { color: var(--text-dim); }
+.save-indicator-saved {
+  color: var(--green);
+  background: var(--green-dim);
+}
+.save-indicator-idle { opacity: 0.85; }
+
+/* Animated "saving" dot — pulses to signal work in progress. */
+.save-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: save-pulse 0.9s ease-in-out infinite;
+}
+@keyframes save-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+@media (hover: none) {
+  /* On touch the idle "Saved · xm ago" text adds noise without much value —
+     trim it so the top bar stays compact, but keep the brief Saved ✓ pulse. */
+  .save-indicator-idle { display: none; }
 }
 
 /* ============================================================
@@ -510,6 +662,67 @@ body {
 .scenario-menu-item-delete:hover {
   color: var(--red);
   background: var(--red-dim);
+}
+
+/* === Per-row action cluster (rename, duplicate, delete) === */
+/* Revealed on hover (desktop) — keeps the menu calm. Always visible on touch
+   via the @media (hover: none) block. */
+.scenario-menu-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+.scenario-menu-item-row:hover .scenario-menu-item-actions,
+.scenario-menu-item-row.editing .scenario-menu-item-actions {
+  opacity: 1;
+}
+
+.scenario-menu-item-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s;
+}
+.scenario-menu-item-action:hover {
+  color: var(--text);
+  background: var(--panel-hover);
+}
+
+/* === Inline rename (replaces the row when editing) === */
+.scenario-rename-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 6px;
+}
+.scenario-rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.scenario-rename-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-dim);
 }
 
 /* === Two-step inline delete confirmation (in-menu) === */
@@ -1793,6 +2006,45 @@ tr.drag-over {
   letter-spacing: 0.5px;
 }
 
+/* Chart header row: title + segmented toggle on the right */
+.chart-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.chart-header-row h3 { margin-bottom: 0; }
+
+/* Segmented toggle (Today's $ / Nominal) */
+.seg-toggle {
+  display: inline-flex;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px;
+  gap: 2px;
+}
+.seg-btn {
+  background: none;
+  border: none;
+  padding: 4px 12px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: calc(var(--radius) - 2px);
+  transition: all 0.15s;
+  font-family: var(--font-sans);
+}
+.seg-btn:hover { color: var(--text); }
+.seg-btn.active {
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
 /* ============================================================
    NAVIGATION TABS — tab row + inline context stats (one line)
    ============================================================ */
@@ -2055,6 +2307,40 @@ tr.drag-over {
   opacity: 0.5;
   font-size: 10px;
 }
+
+/* ---- Resources footer (moved out of the sidebar) ---- */
+.resources-footer {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.resources-footer summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  padding: 6px 0;
+  list-style: none;
+  transition: color 0.15s;
+}
+.resources-footer summary::-webkit-details-marker { display: none; }
+.resources-footer summary:hover { color: var(--text); }
+.resources-footer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  padding: 14px 0 4px;
+}
+.resources-footer-group { min-width: 0; }
+.resources-footer-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+/* In the footer, links go full-width rows rather than the sidebar's indented look. */
+.resources-footer .resource-link { padding: 4px 0; }
 
 /* ============================================================
    EVENT CARDS
@@ -2558,14 +2844,21 @@ tr.drag-over {
   transition: all 0.15s;
 }
 
+/* Active state is unambiguous: filled accent (orange) with white text, so the
+   on/off distinction is obvious at a glance — not the near-invisible tint the
+   old bg-subtle/border-strong swap produced. */
 .income-flag.active {
-  background: var(--bg-subtle);
-  color: var(--text);
-  border-color: var(--border-strong);
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
 }
 
 .income-flag:hover {
   border-color: var(--border-strong);
+}
+.income-flag.active:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .income-row-summary {
@@ -3619,22 +3912,36 @@ tr.drag-over {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  width: 52px;
+  min-width: 52px;
   height: 52px;
-  border-radius: 50%;
+  padding: 0 18px;
+  border-radius: 26px;
   border: none;
   background: var(--accent);
   color: #ffffff;
-  font-size: 22px;
+  font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   transition: transform 0.2s, box-shadow 0.2s;
   font-family: var(--font-sans);
 }
+/* When closed, the FAB shows emoji + label ("🤖 Ask AI"). When open it shows
+   just ✕ and shrinks back to a circle. */
+.ai-chat-fab[aria-expanded='true'] {
+  min-width: 52px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 22px;
+  font-weight: 400;
+}
+.ai-chat-fab-label { white-space: nowrap; }
+.ai-chat-fab[aria-expanded='true'] .ai-chat-fab-label { display: none; }
 
 .ai-chat-fab:hover {
   transform: scale(1.08);
@@ -4224,5 +4531,157 @@ tr.drag-over {
   .upcoming-event-amount,
   .upcoming-event-ongoing {
     grid-column: 2;
+  }
+}
+
+/* ============================================================
+   MOBILE TOP BAR (≤ 600px)
+   ============================================================
+   On phones the top bar's full set (logo + scenario + save + theme + menu)
+   wraps into 2-3 sticky rows, eating scarce vertical space. Collapse the
+   set-once Theme picker into the Menu dropdown (it's duplicated there), and
+   keep the top bar to a single row: logo, scenario, menu. The save indicator
+   and standalone theme trigger are hidden on narrow screens. */
+
+@media (max-width: 600px) {
+  .app-topbar {
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 8px 14px;
+  }
+  .app-logo { height: 30px; }
+  .app-topbar-left { gap: 10px; min-width: 0; }
+  /* Trim the scenario switcher: hide the "Scenarios" kicker label and the
+     redundant "＋ New" button (create is still available in the dropdown). */
+  .scenario-group-label { display: none; }
+  .scenario-add-btn { display: none; }
+  /* The standalone theme picker + idle save text are gone on mobile; theme
+     lives in the Menu dropdown now, and the save pulse is less useful here. */
+  .theme-picker { display: none; }
+  .save-indicator { display: none; }
+  /* Let the scenario trigger shrink rather than forcing a wrap. */
+  .scenario-trigger { max-width: 46vw; }
+  .scenario-trigger-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* ---- Theme swatches inside the Menu dropdown ---- */
+.menu-divider-theme { margin-top: 4px; }
+.menu-theme-label {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 12px 6px;
+}
+.menu-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  padding: 0 12px 8px;
+}
+.menu-theme-swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  border: 2px solid transparent;
+  cursor: pointer;
+  font-size: 13px;
+  transition: border-color 0.15s, transform 0.1s;
+}
+.menu-theme-swatch:hover { transform: scale(1.08); }
+.menu-theme-swatch.active { border-color: var(--accent); }
+.menu-theme-icon { filter: drop-shadow(0 0 1px rgba(0,0,0,0.3)); }
+
+@media (max-width: 600px) {
+  /* On narrow screens the 6-across grid is cramped; wrap to 3×2. */
+  .menu-theme-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* ============================================================
+   TOUCH / NO-HOVER DEVICES
+   ============================================================
+   Many affordances are intentionally subtle on desktop (faint until hover)
+   to keep the UI calm. On touch there is no hover, so those affordances
+   would be invisible — surfaces them permanently here. Devices that report
+   a primary pointer of "fine" (mouse) keep the hover-reveal behavior. */
+
+@media (hover: none) {
+  /* Delete buttons: show red-tinted instead of invisible faint. */
+  .delete-btn {
+    color: var(--red);
+    background: var(--red-dim);
+  }
+  .scenario-menu-item-delete {
+    color: var(--red);
+    background: var(--red-dim);
+  }
+  /* Scenario row actions (rename/duplicate) are hover-revealed on desktop —
+     surface them on touch so users can find rename & duplicate. */
+  .scenario-menu-item-actions {
+    opacity: 1;
+  }
+
+  /* Editable table cells & selects: reveal the border so they read as
+     inputs, not plain text. */
+  .table-input,
+  .table-select {
+    border-color: var(--border);
+    background: var(--panel);
+  }
+
+  /* Expand/collapse caret: full opacity (was 0.4). */
+  .drag-handle {
+    opacity: 1;
+    color: var(--text-dim);
+  }
+
+  /* Inline-editable name fields: show a baseline border so users can tell
+     they're editable. */
+  .acct-card-name,
+  .income-row-name,
+  .prop-name-input,
+  .event-card-header .event-name input {
+    border-color: var(--border) !important;
+  }
+
+  /* Warning dismiss button: larger tap target (was tight 0 2px padding). */
+  .context-warning .cw-dismiss {
+    color: var(--text-dim);
+    padding: 6px 10px;
+    min-height: 36px;
+  }
+
+  /* Enlarge tap targets that are below the recommended 44px — small icon
+     buttons get more padding so they're easy to hit with a thumb. */
+  .delete-btn,
+  .scenario-menu-item-delete,
+  .confirm-delete-btn {
+    min-width: 36px;
+    min-height: 36px;
+  }
+}
+
+/* ============================================================
+   MOBILE YEAR-BY-YEAR TABLE (≤ 700px)
+   ============================================================
+   The 11-column results table overflows on phones. Hide the lower-priority
+   columns (Start Assets, Contrib., Deposits, Growth, Real $) so the essentials
+   — Age, Income, Withdrawals, Expenses, End Assets — fit without scrolling.
+   The detail is still available by expanding any row. Add a subtle scroll
+   hint so users on the boundary know they can swipe for more. */
+
+@media (max-width: 700px) {
+  .col-optional { display: none; }
+  .table-scroll {
+    position: relative;
+    /* Fade the right edge to hint there may be more content off-screen. */
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
   }
 }
