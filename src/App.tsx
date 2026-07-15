@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, Fragment } from 'react';
 import {
   LineChart,
   Line,
@@ -14,7 +14,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
-import { usePlanStore } from './store';
+import { usePlanStore, ASSUMPTION_BOUNDS } from './store';
 import { runProjection, getReadinessSummary, computeAnnualMortgage, mortgagePaymentAtAge } from './engine';
 import { ACCOUNT_TAX_TREATMENT } from './types';
 import type { AccountType, IncomeType, ExpenseCategory, EventType, PropertyType } from './types';
@@ -319,33 +319,34 @@ function ThemePicker({ theme, setTheme }: { theme: Theme; setTheme: (t: Theme) =
  * Save indicator — gives the user confidence their edits persist.
  *
  * Subscribes to the serialized plan (a stable JSON snapshot) so ANY nested
- * change — account balance, expense amount, scenario name — is detected. On a
- * change it flashes "Saving…" for a beat, then "Saved ✓" which fades after 2s
- * to a quiet "Saved · {relative time}" that stays visible as a trust signal.
+ * change — account balance, expense amount, scenario name — is detected.
  *
- * For a financial app where users are entering their life savings, this silent-
- * otherwise persistence is a meaningful reassurance.
+ * Honesty note: the zustand `persist` middleware writes to localStorage
+ * synchronously on every state change, so by the time this component
+ * re-renders with a new snapshot the write is already complete. There's no
+ * real "in flight" state to show, so we skip the theatrical "Saving…" phase
+ * that the previous version faked with a 250ms timer and go straight to
+ * "Saved ✓", which fades after 2s to a quiet "Saved · {relative time}" that
+ * stays visible as an ongoing trust signal.
  */
 function SaveIndicator() {
   const plan = usePlanStore((s) => s.plan);
   // Stable snapshot that changes on any (deep) plan mutation.
   const snapshot = JSON.stringify(plan);
-  const [phase, setPhase] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'saved'>('idle');
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const firstRun = useRef(true);
 
   useEffect(() => {
-    // Skip the very first run so we don't flash "Saving" on initial load.
+    // Skip the very first run so we don't flash "Saved" on initial load.
     if (firstRun.current) {
       firstRun.current = false;
       return;
     }
-    setPhase('saving');
-    const t1 = setTimeout(() => {
-      setPhase('saved');
-      setSavedAt(Date.now());
-    }, 250);
-    return () => clearTimeout(t1);
+    // The persist middleware has already written synchronously by now — no
+    // async to await, so go straight to the confirmed "Saved" state.
+    setPhase('saved');
+    setSavedAt(Date.now());
   }, [snapshot]);
 
   // After "saved", fade to idle after 2s so the checkmark doesn't linger.
@@ -372,9 +373,8 @@ function SaveIndicator() {
     );
   }
   return (
-    <span className={`save-indicator save-indicator-${phase}`}>
-      {phase === 'saving' ? <span className="save-dot" aria-hidden="true" /> : <span aria-hidden="true">✓</span>}
-      {phase === 'saving' ? 'Saving…' : 'Saved'}
+    <span className="save-indicator save-indicator-saved">
+      <span aria-hidden="true">✓</span> Saved
     </span>
   );
 }
@@ -425,6 +425,12 @@ function OnboardingBanner({ onStartFresh, onDismiss }: { onStartFresh: () => voi
 function ResourcesFooter() {
   return (
     <footer className="resources-footer">
+      <p className="disclaimer">
+        <strong>Educational tool.</strong> Projections are estimates based on the
+        assumptions you enter and are not financial, tax, or investment advice.
+        Past performance doesn't guarantee future results. Consult a qualified
+        financial advisor before making decisions.
+      </p>
       <details>
         <summary>🔗 Helpful resources — calculators, SSA, IRS, Medicare & more</summary>
         <div className="resources-footer-grid">
@@ -450,6 +456,59 @@ function ResourcesFooter() {
         </div>
       </details>
     </footer>
+  );
+}
+/**
+ * Undo toast — surfaces the single-slot undo snapshot from the store.
+ *
+ * Appears bottom-left whenever a destructive op (delete account/scenario/
+ * property/income/expense/event, or reset) leaves an undo available.
+ * Auto-dismisses after 7s (clearing the slot), and responds to the
+ * platform-standard Cmd/Ctrl+Z shortcut. The toast is kept low-key: a single
+ * line, one primary action. It must not steal focus or block interaction.
+ *
+ * Rendered once at the App root so it overlays every view.
+ */
+const UNDO_TIMEOUT_MS = 7000;
+function UndoToast() {
+  const undoState = usePlanStore((s) => s.undoState);
+  const undo = usePlanStore((s) => s.undo);
+  const dismissUndo = usePlanStore((s) => s.dismissUndo);
+
+  // Auto-dismiss after a timeout. Re-armed whenever undoState changes (i.e. a
+  // new delete extends the window). Cleared on unmount/restore.
+  useEffect(() => {
+    if (!undoState) return;
+    const t = setTimeout(() => dismissUndo(), UNDO_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, [undoState, dismissUndo]);
+
+  // Platform-standard undo shortcut: Cmd/Ctrl+Z. Ignored when focus is in a
+  // text field (input/textarea/select) so the native text-undo still works.
+  useEffect(() => {
+    if (!undoState) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+      const el = document.activeElement as HTMLElement | null;
+      const tag = el?.tagName.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || el?.isContentEditable) return;
+        e.preventDefault();
+        undo();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [undoState, undo]);
+
+  if (!undoState) return null;
+
+  return (
+    <div className="undo-toast" role="status" aria-live="polite">
+      <span className="undo-toast-label">{undoState.label}</span>
+      <button className="undo-toast-btn" onClick={undo} autoFocus>
+        Undo
+      </button>
+    </div>
   );
 }
 
@@ -671,6 +730,9 @@ export default function App() {
 
       {/* AI Chat Assistant */}
       <AiChat />
+
+      {/* Undo toast — overlays every view, single-slot */}
+      <UndoToast />
     </div>
   );
 }
@@ -1023,27 +1085,54 @@ function InputsView({ scenario, store }: {
   );
 }
 
-function AgeInput({ value, onChange, unit = 'yrs' }: { value: number; onChange: (v: number) => void; unit?: string }) {
+/** Clamp a number into [min, max]. Out-of-range values snap to the
+ *  nearest bound; NaN passes through unchanged so callers can decide. */
+function clampNum(v: number, min: number, max: number): number {
+  if (Number.isNaN(v)) return v;
+  return Math.min(max, Math.max(min, v));
+}
+
+function AgeInput({ value, onChange, unit = 'yrs', min, max }: { value: number; onChange: (v: number) => void; unit?: string; min?: number; max?: number }) {
+  // Free edit while typing; snap into bounds on blur so the user can clear
+  // the field or retype without fighting the cursor mid-keystroke.
+  const commit = () => {
+    if (min !== undefined || max !== undefined) {
+      const clamped = clampNum(value, min ?? -Infinity, max ?? Infinity);
+      if (!Number.isNaN(clamped) && clamped !== value) onChange(clamped);
+    }
+  };
   return (
     <div className="input-wrapper">
       <input
         type="number"
         value={value}
+        min={min}
+        max={max}
         onChange={(e) => { const v = parseNum(e.target.value); if (!Number.isNaN(v)) onChange(v); }}
+        onBlur={commit}
       />
       <span className="unit-suffix">{unit}</span>
     </div>
   );
 }
 
-function PctInputEnhanced({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+function PctInputEnhanced({ value, onChange, min, max }: { value: number; onChange: (v: number) => void; min?: number; max?: number }) {
+  const commit = () => {
+    if (min !== undefined || max !== undefined) {
+      const clamped = clampNum(value, min ?? -Infinity, max ?? Infinity);
+      if (!Number.isNaN(clamped) && clamped !== value) onChange(clamped);
+    }
+  };
   return (
     <div className="input-wrapper">
       <input
         type="number"
         value={+(value * 100).toFixed(2)}
         step={0.1}
+        min={min !== undefined ? +(min * 100).toFixed(2) : undefined}
+        max={max !== undefined ? +(max * 100).toFixed(2) : undefined}
         onChange={(e) => { const v = parseNum(e.target.value); if (!Number.isNaN(v)) onChange(v / 100); }}
+        onBlur={commit}
       />
       <span className="unit-suffix">%</span>
     </div>
@@ -1345,19 +1434,15 @@ function AssumptionsPanel({ scenario, store }: {
         )
       ))}
 
-      {/* Compact summary banner */}
+      {/* Compact summary — discrete chips so the row wraps cleanly at chip
+          boundaries instead of orphaning "·" separators mid-line. */}
       <div className="assumptions-summary-banner">
-        <span className="asm-summary-item"><strong>Retire at {a.retirementAge}</strong></span>
-        <span className="asm-summary-sep">·</span>
-        <span className="asm-summary-item">Plan through <strong>{a.endAge}</strong></span>
-        <span className="asm-summary-sep">·</span>
-        <span className="asm-summary-item"><strong>{formatPercent(a.inflationRate)}</strong> inflation</span>
-        <span className="asm-summary-sep">·</span>
-        <span className="asm-summary-item"><strong>{formatPercent(a.safeWithdrawalRate)}</strong> withdrawal</span>
-        <span className="asm-summary-sep">·</span>
-        <span className="asm-summary-item">{yearsToRetirement > 0 ? `${yearsToRetirement} yrs to save` : 'At retirement'}</span>
-        <span className="asm-summary-sep">·</span>
-        <span className="asm-summary-item">{yearsInRetirement} yrs in retirement</span>
+        <span className="asm-chip"><span className="asm-chip-label">Retire at</span><span className="asm-chip-value">{a.retirementAge}</span></span>
+        <span className="asm-chip"><span className="asm-chip-label">Plan through</span><span className="asm-chip-value">{a.endAge}</span></span>
+        <span className="asm-chip"><span className="asm-chip-label">Inflation</span><span className="asm-chip-value">{formatPercent(a.inflationRate)}</span></span>
+        <span className="asm-chip"><span className="asm-chip-label">Withdrawal</span><span className="asm-chip-value">{formatPercent(a.safeWithdrawalRate)}</span></span>
+        <span className="asm-chip"><span className="asm-chip-label">{yearsToRetirement > 0 ? 'To save' : 'Status'}</span><span className="asm-chip-value">{yearsToRetirement > 0 ? `${yearsToRetirement} yrs` : 'At retirement'}</span></span>
+        <span className="asm-chip"><span className="asm-chip-label">In retirement</span><span className="asm-chip-value">{yearsInRetirement} yrs</span></span>
       </div>
 
       {/* Timeline section */}
@@ -1365,21 +1450,21 @@ function AssumptionsPanel({ scenario, store }: {
         <div className="form-section-title">🗓️ Timeline</div>
         <div className="form-row-3">
           <FieldGroup label="Current Age">
-            <AgeInput value={a.currentAge} onChange={(v) => upd({ currentAge: v })} />
+            <AgeInput value={a.currentAge} onChange={(v) => upd({ currentAge: v })} min={ASSUMPTION_BOUNDS.currentAge[0]} max={ASSUMPTION_BOUNDS.currentAge[1]} />
           </FieldGroup>
           <FieldGroup
             label="Retirement Age"
             helpText={`${yearsToRetirement > 0 ? yearsToRetirement : 0} years left to save`}
             highImpact
           >
-            <AgeInput value={a.retirementAge} onChange={(v) => upd({ retirementAge: v })} />
+            <AgeInput value={a.retirementAge} onChange={(v) => upd({ retirementAge: v })} min={ASSUMPTION_BOUNDS.retirementAge[0]} max={ASSUMPTION_BOUNDS.retirementAge[1]} />
           </FieldGroup>
           <FieldGroup
             label="Plan End Age"
             helpText={`${yearsInRetirement} years of retirement`}
             highImpact
           >
-            <AgeInput value={a.endAge} onChange={(v) => upd({ endAge: v })} />
+            <AgeInput value={a.endAge} onChange={(v) => upd({ endAge: v })} min={ASSUMPTION_BOUNDS.endAge[0]} max={ASSUMPTION_BOUNDS.endAge[1]} />
           </FieldGroup>
         </div>
       </div>
@@ -1410,20 +1495,20 @@ function AssumptionsPanel({ scenario, store }: {
                 label="Spouse Current Age"
                 helpText="Your spouse's age today."
               >
-                <AgeInput value={a.spouse.currentAge} onChange={(v) => upd({ spouse: { ...a.spouse!, currentAge: v } })} />
+                <AgeInput value={a.spouse.currentAge} onChange={(v) => upd({ spouse: { ...a.spouse!, currentAge: v } })} min={ASSUMPTION_BOUNDS.currentAge[0]} max={ASSUMPTION_BOUNDS.currentAge[1]} />
               </FieldGroup>
               <FieldGroup
                 label="Spouse Retirement Age"
                 helpText="When your spouse stops working."
               >
-                <AgeInput value={a.spouse.retirementAge} onChange={(v) => upd({ spouse: { ...a.spouse!, retirementAge: v } })} />
+                <AgeInput value={a.spouse.retirementAge} onChange={(v) => upd({ spouse: { ...a.spouse!, retirementAge: v } })} min={ASSUMPTION_BOUNDS.retirementAge[0]} max={ASSUMPTION_BOUNDS.retirementAge[1]} />
               </FieldGroup>
               <FieldGroup
                 label="Spouse Plan End Age"
                 helpText="If higher than yours, the plan extends to cover your spouse's full lifespan."
                 highImpact
               >
-                <AgeInput value={a.spouse.endAge} onChange={(v) => upd({ spouse: { ...a.spouse!, endAge: v } })} />
+                <AgeInput value={a.spouse.endAge} onChange={(v) => upd({ spouse: { ...a.spouse!, endAge: v } })} min={ASSUMPTION_BOUNDS.endAge[0]} max={ASSUMPTION_BOUNDS.endAge[1]} />
               </FieldGroup>
             </div>
           </>
@@ -1443,19 +1528,19 @@ function AssumptionsPanel({ scenario, store }: {
             label="Inflation Rate"
             helpText="Annual rise in cost of living. All expenses and income (with COLA) grow at this rate. Historical US average ≈ 3%."
           >
-            <PctInputEnhanced value={a.inflationRate} onChange={(v) => upd({ inflationRate: v })} />
+            <PctInputEnhanced value={a.inflationRate} onChange={(v) => upd({ inflationRate: v })} min={ASSUMPTION_BOUNDS.inflationRate[0]} max={ASSUMPTION_BOUNDS.inflationRate[1]} />
           </FieldGroup>
           <FieldGroup
             label="Social Security COLA"
             helpText="Annual increase for Social Security benefits. Typically tracks inflation. Use 2.5–3% for a reasonable estimate."
           >
-            <PctInputEnhanced value={a.socialSecurityCola} onChange={(v) => upd({ socialSecurityCola: v })} />
+            <PctInputEnhanced value={a.socialSecurityCola} onChange={(v) => upd({ socialSecurityCola: v })} min={ASSUMPTION_BOUNDS.socialSecurityCola[0]} max={ASSUMPTION_BOUNDS.socialSecurityCola[1]} />
           </FieldGroup>
           <FieldGroup
             label="Retirement Tax Rate"
             helpText="Effective tax rate on taxable withdrawals (traditional 401k/IRA, pensions). Roth withdrawals are tax-free. 10–20% is typical."
           >
-            <PctInputEnhanced value={a.retirementTaxRate} onChange={(v) => upd({ retirementTaxRate: v })} />
+            <PctInputEnhanced value={a.retirementTaxRate} onChange={(v) => upd({ retirementTaxRate: v })} min={ASSUMPTION_BOUNDS.retirementTaxRate[0]} max={ASSUMPTION_BOUNDS.retirementTaxRate[1]} />
           </FieldGroup>
         </div>
       </div>
@@ -1473,21 +1558,21 @@ function AssumptionsPanel({ scenario, store }: {
             helpText="Annual withdrawal as a percentage of savings. The “4% rule” is a common starting point; 3.5% is more conservative."
             highImpact
           >
-            <PctInputEnhanced value={a.safeWithdrawalRate} onChange={(v) => upd({ safeWithdrawalRate: v })} />
+            <PctInputEnhanced value={a.safeWithdrawalRate} onChange={(v) => upd({ safeWithdrawalRate: v })} min={ASSUMPTION_BOUNDS.safeWithdrawalRate[0]} max={ASSUMPTION_BOUNDS.safeWithdrawalRate[1]} />
           </FieldGroup>
           <FieldGroup
             label="Pre-Retirement Return"
             helpText="Fallback annual return while saving. A growth-oriented portfolio (mostly stocks) historically averages 7–10%."
             highImpact
           >
-            <PctInputEnhanced value={a.preRetirementReturn} onChange={(v) => upd({ preRetirementReturn: v })} />
+            <PctInputEnhanced value={a.preRetirementReturn} onChange={(v) => upd({ preRetirementReturn: v })} min={ASSUMPTION_BOUNDS.preRetirementReturn[0]} max={ASSUMPTION_BOUNDS.preRetirementReturn[1]} />
           </FieldGroup>
           <FieldGroup
             label="Post-Retirement Return"
             helpText="Fallback annual return after retiring. Usually lower (more bonds/cash) to reduce volatility. 4–6% is common."
             highImpact
           >
-            <PctInputEnhanced value={a.postRetirementReturn} onChange={(v) => upd({ postRetirementReturn: v })} />
+            <PctInputEnhanced value={a.postRetirementReturn} onChange={(v) => upd({ postRetirementReturn: v })} min={ASSUMPTION_BOUNDS.postRetirementReturn[0]} max={ASSUMPTION_BOUNDS.postRetirementReturn[1]} />
           </FieldGroup>
         </div>
       </div>
@@ -2245,17 +2330,20 @@ function IncomeRow({ inc, scenario, store }: {
           <label>Start</label>
           <NumCellInput value={inc.startAge} onChange={(v) => store.updateIncome(scenario.id, inc.id, { startAge: v })} />
           <label>End</label>
-          {inc.endAge === null ? (
-            <button
-              className="income-lifetime-btn active"
-              onClick={() => store.updateIncome(scenario.id, inc.id, { endAge: inc.startAge })}
-            >Lifetime</button>
-          ) : (
-            <button
-              className="income-lifetime-btn"
-              onClick={() => store.updateIncome(scenario.id, inc.id, { endAge: null })}
-            >∞</button>
-          )}
+          {/* Two-state toggle that reads as a radio: "Lifetime" (endAge=null)
+              vs "At age" (endAge=number). Same controls in both states, so the
+              user always sees one predictable affordance — unlike the old
+              Lifetime/∞ design which swapped between different button states. */}
+          <button
+            className={`income-lifetime-btn ${inc.endAge === null ? 'active' : ''}`}
+            title="Continues for life"
+            onClick={() => store.updateIncome(scenario.id, inc.id, { endAge: null })}
+          >Lifetime</button>
+          <button
+            className={`income-lifetime-btn ${inc.endAge !== null ? 'active' : ''}`}
+            title="Ends at a specific age"
+            onClick={() => store.updateIncome(scenario.id, inc.id, { endAge: inc.endAge ?? inc.startAge })}
+          >At age</button>
           {inc.endAge !== null && (
             <NumCellInput value={inc.endAge} onChange={(v) => store.updateIncome(scenario.id, inc.id, { endAge: v || null })} />
           )}
@@ -2620,12 +2708,15 @@ function UpcomingEventsWidget({
 /* ============ RESULTS VIEW ============ */
 
 /**
- * Results tab sub-sections. Monte Carlo is the default landing — it's
- * the higher-information view (real markets vary; "on track with 7%
- * returns" tells you much less than "82% of random futures survive").
+ * Results tab sub-sections. Deterministic is the default landing because
+ * it renders fully on first view — charts, cash flow, and the year table
+ * all populate immediately. Monte Carlo is gated behind a manual "Run"
+ * (it starts idle), so defaulting to it showed a blank body beneath the
+ * summary cards. Users still land on the straight-line projection and can
+ * click into Monte Carlo for the probability view.
  */
 type ResultSection = 'monte-carlo' | 'deterministic';
-const DEFAULT_RESULT_SECTION: ResultSection = 'monte-carlo';
+const DEFAULT_RESULT_SECTION: ResultSection = 'deterministic';
 
 function ResultsView({ scenario, result, readiness }: {
   scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
@@ -2649,20 +2740,33 @@ function ResultsView({ scenario, result, readiness }: {
   );
   useEffect(() => { localStorage.setItem('retirement-nw-view', nwView); }, [nwView]);
 
+  // Headline-card → year-table drill-down. When the user clicks a headline
+  // card, we set focusAge + flip to the deterministic section; the YearTable
+  // (which only mounts under that section) consumes focusAge, scrolls the
+  // matching row into view, and flashes a highlight. Cleared after the
+  // highlight expires so re-clicking the same age re-triggers.
+  const [focusAge, setFocusAge] = useState<number | null>(null);
+  const focusOn = (age: number) => {
+    setSection('deterministic');
+    setFocusAge(age);
+  };
+
   const tooltipStyle = { background: tc.panel, border: `1px solid ${tc.border}`, borderRadius: 8 };
 
   // Net worth chart: liquid (financial accounts) + home equity, stacked.
   // `nominal` and `real` are summed totals so the user can read total net
   // worth directly from the legend. The property-component series
   // (`homeNominal`, `homeReal`) is computed per-year from the engine.
+  // NOTE: keys use the literal U+2019 (') rather than a \u2019 escape so they
+  // match the dataKey attributes in JSX (which do not process backslash escapes).
   const chartData = result.years.map((y) => ({
     age: y.age,
     'Liquid (Nominal)': Math.round(y.endingAssets),
     'Home Equity (Nominal)': Math.round(y.propertyEquity),
     'Total (Nominal)': Math.round(y.endingAssets + y.propertyEquity),
-    'Liquid (Today\u2019s $)': Math.round(y.realAssets),
-    'Home Equity (Today\u2019s $)': Math.round(y.realPropertyEquity),
-    'Total (Today\u2019s $)': Math.round(y.realAssets + y.realPropertyEquity),
+    'Liquid (Today’s $)': Math.round(y.realAssets),
+    'Home Equity (Today’s $)': Math.round(y.realPropertyEquity),
+    'Total (Today’s $)': Math.round(y.realAssets + y.realPropertyEquity),
   }));
 
   const cashFlowData = result.years.filter((y) => y.age >= scenario.assumptions.retirementAge).map((y) => ({
@@ -2681,7 +2785,7 @@ function ResultsView({ scenario, result, readiness }: {
     },
     {
       id: 'deterministic',
-      label: 'Deterministic Projection',
+      label: 'Straight-Line Projection',
       icon: '📊',
       help: 'Single-trajectory view at your expected returns.',
     },
@@ -2689,20 +2793,26 @@ function ResultsView({ scenario, result, readiness }: {
 
   return (
     <div>
-      {/* === Headline summary cards — always visible across sections === */}
+      {/* === Headline summary cards — always visible across sections ===
+          The "Nest Egg" and "Final Assets" cards are clickable: they drill
+          down into the year-by-year table at the relevant age so the user
+          can see how the number was derived. The "Plan Outcome" card jumps
+          to the depletion age (if the plan runs out) or the end age. */}
       <div className="summary-grid">
-        <div className="summary-card">
+        <button className="summary-card summary-card-drilldown" onClick={() => focusOn(scenario.assumptions.retirementAge)} title="See the year-by-year breakdown at retirement">
           <div className="label">Nest Egg at Retirement</div>
           <div className="value">{formatCurrency(readiness.nestEggAtRetirement, { compact: true })}</div>
           <div className="sub">{formatCurrency(readiness.nestEggAtRetirementReal, { compact: true })} in today's dollars</div>
-        </div>
-        <div className="summary-card">
+          <span className="summary-card-drilldown-hint" aria-hidden="true">View breakdown →</span>
+        </button>
+        <button className="summary-card summary-card-drilldown" onClick={() => focusOn(result.depletionAge ?? scenario.assumptions.endAge)} title="See the year the plan depletes (or the final year)">
           <div className="label">Plan Outcome</div>
           <div className={`value ${result.success ? 'value-good' : 'value-bad'}`}>
             {result.success ? '✓ Sustainable' : '✗ Runs Out'}
           </div>
           <div className="sub">{result.success ? `Lasts to age ${scenario.assumptions.endAge}` : `Depleted at age ${formatAge(result.depletionAge)}`}</div>
-        </div>
+          <span className="summary-card-drilldown-hint" aria-hidden="true">View breakdown →</span>
+        </button>
         <div className="summary-card">
           <div className="label">Year-1 Withdrawal Rate</div>
           <div className={`value ${readiness.neededWithdrawalRate <= scenario.assumptions.safeWithdrawalRate ? 'value-good' : 'value-bad'}`}>
@@ -2710,11 +2820,12 @@ function ResultsView({ scenario, result, readiness }: {
           </div>
           <div className="sub">Safe rate: {formatPercent(scenario.assumptions.safeWithdrawalRate)}</div>
         </div>
-        <div className="summary-card">
+        <button className="summary-card summary-card-drilldown" onClick={() => focusOn(scenario.assumptions.endAge)} title="See the final-year breakdown">
           <div className="label">Final Assets (age {scenario.assumptions.endAge})</div>
           <div className="value">{formatCurrency(result.finalAssets, { compact: true })}</div>
           <div className="sub">{formatCurrency(result.finalAssetsReal, { compact: true })} in today's dollars</div>
-        </div>
+          <span className="summary-card-drilldown-hint" aria-hidden="true">View breakdown →</span>
+        </button>
       </div>
 
       {/* === Sidebar layout: chart panels live behind a left rail === */}
@@ -2816,8 +2927,8 @@ function ResultsView({ scenario, result, readiness }: {
                       </>
                     ) : (
                       <>
-                        <Area type="monotone" dataKey="Liquid (Today\u2019s $)" stackId="real" stroke={tc.chart2} fill="url(#detGradientLiquidReal)" strokeWidth={1.5} />
-                        <Area type="monotone" dataKey="Home Equity (Today\u2019s $)" stackId="real" stroke={tc.chart4} fill="url(#detGradientHomeReal)" strokeWidth={1.5} />
+                        <Area type="monotone" dataKey="Liquid (Today’s $)" stackId="real" stroke={tc.chart2} fill="url(#detGradientLiquidReal)" strokeWidth={1.5} />
+                        <Area type="monotone" dataKey="Home Equity (Today’s $)" stackId="real" stroke={tc.chart4} fill="url(#detGradientHomeReal)" strokeWidth={1.5} />
                       </>
                     )}
                     <ReferenceLine x={scenario.assumptions.retirementAge} stroke={tc.yellow} strokeDasharray="5 5" label={{ value: 'Retire', fill: tc.yellow, fontSize: 11 }} />
@@ -2864,7 +2975,7 @@ function ResultsView({ scenario, result, readiness }: {
               </div>
 
               {/* Year-by-year table */}
-              <YearTable result={result} retirementAge={scenario.assumptions.retirementAge} scenario={scenario} />
+              <YearTable result={result} retirementAge={scenario.assumptions.retirementAge} scenario={scenario} focusAge={focusAge} onFocusConsumed={() => setFocusAge(null)} />
             </>
           )}
         </div>
@@ -2944,10 +3055,39 @@ function getExpenseBreakdown(scenario: NonNullable<ReturnType<typeof usePlanStor
   return items;
 }
 
-function YearTable({ result, retirementAge, scenario }: { result: NonNullable<ReturnType<typeof runProjection>>; retirementAge: number; scenario: NonNullable<ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]> }) {
+function YearTable({ result, retirementAge, scenario, focusAge, onFocusConsumed }: { result: NonNullable<ReturnType<typeof runProjection>>; retirementAge: number; scenario: NonNullable<ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]>; focusAge?: number | null; onFocusConsumed?: () => void }) {
   const [showAll, setShowAll] = useState(false);
   const [expandedAge, setExpandedAge] = useState<number | null>(null);
-  const data = showAll ? result.years : result.years.filter((y) => y.age >= retirementAge - 5 && y.age <= retirementAge + 15);
+  // If a focusAge arrives that falls outside the default summary window,
+  // widen the view so the row is actually rendered and scrollable to.
+  const focusOutsideWindow = focusAge !== null && focusAge !== undefined && (focusAge < retirementAge - 5 || focusAge > retirementAge + 15);
+  const data = (showAll || focusOutsideWindow) ? result.years : result.years.filter((y) => y.age >= retirementAge - 5 && y.age <= retirementAge + 15);
+
+  // Refs to each year row so we can scrollIntoView when a headline card
+  // drills down to a specific age.
+  const rowRefs = useRef<Record<number, HTMLTableRowElement | null>>({});
+  const [highlightAge, setHighlightAge] = useState<number | null>(null);
+
+  // When a focusAge arrives (from a headline card click), expand the row,
+  // scroll it into view, and flash a highlight so the user sees exactly
+  // which row backs the number they clicked.
+  useEffect(() => {
+    if (focusAge === null || focusAge === undefined) return;
+    setExpandedAge(focusAge);
+    setHighlightAge(focusAge);
+    // Defer the scroll until React has rendered the row (and potentially
+    // widened the data range via focusOutsideWindow).
+    const t = setTimeout(() => {
+      rowRefs.current[focusAge]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 60);
+    // Clear the highlight after ~2.5s and tell the parent we consumed it.
+    const t2 = setTimeout(() => {
+      setHighlightAge(null);
+      onFocusConsumed?.();
+    }, 2500);
+    return () => { clearTimeout(t); clearTimeout(t2); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusAge]);
 
   return (
     <div className="panel">
@@ -2974,11 +3114,11 @@ function YearTable({ result, retirementAge, scenario }: { result: NonNullable<Re
           </thead>
           <tbody>
             {data.map((y) => (
-              <>
+              <Fragment key={y.age}>
                 <tr
-                  key={y.age}
+                  ref={(el) => { rowRefs.current[y.age] = el; }}
                   style={y.depleted ? { color: 'var(--red)' } : {}}
-                  className="year-row"
+                  className={`year-row${highlightAge === y.age ? ' year-row-highlight' : ''}`}
                   tabIndex={0}
                   role="button"
                   aria-expanded={expandedAge === y.age}
@@ -3067,7 +3207,7 @@ function YearTable({ result, retirementAge, scenario }: { result: NonNullable<Re
                     </td>
                   </tr>
                 )}
-              </>
+              </Fragment>
             ))}
           </tbody>
         </table>
@@ -3081,6 +3221,11 @@ function YearTable({ result, retirementAge, scenario }: { result: NonNullable<Re
 function CompareView({ results, scenarios }: { results: NonNullable<ReturnType<typeof runProjection>>[]; scenarios: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'] }) {
   const tc = useThemeColors();
   const tooltipStyle = { background: tc.panel, border: `1px solid ${tc.border}`, borderRadius: 8 };
+  // Need the store to offer a one-click "duplicate" from the empty state so a
+  // user landing on Compare with a single scenario isn't staring at a lonely
+  // card and a hidden diff table — they get a clear path to a 2nd scenario.
+  const duplicateScenario = usePlanStore((s) => s.duplicateScenario);
+  const activeScenarioId = usePlanStore((s) => s.activeScenarioId);
 
   // Assumption fields to compare, with label + formatter. Only fields that
   // DIFFER across scenarios are shown — identical values add noise, not signal.
@@ -3127,6 +3272,27 @@ function CompareView({ results, scenarios }: { results: NonNullable<ReturnType<t
 
   return (
     <div>
+      {results.length < 2 && (
+        <div className="panel mb-16 compare-empty">
+          <div className="compare-empty-icon" aria-hidden="true">⚖️</div>
+          <div className="compare-empty-body">
+            <h3>Compare needs at least two scenarios</h3>
+            <p className="section-help" style={{ marginBottom: 0 }}>
+              You currently have {results.length === 1 ? 'one' : 'none'}. Duplicate your active scenario and tweak an
+              assumption (retirement age, withdrawal rate, returns) to see how the outcome changes side by side.
+            </p>
+          </div>
+          {results.length === 1 && (
+            <button
+              className="btn"
+              onClick={() => duplicateScenario(activeScenarioId)}
+            >
+              ⧉ Duplicate “{scenarios.find((s) => s.id === activeScenarioId)?.name ?? 'scenario'}”
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="summary-grid">
         {results.map((r, i) => (
           <div key={r.scenarioId} className="summary-card">
@@ -3225,7 +3391,14 @@ function PctCellInput({ value, onChange }: { value: number; onChange: (v: number
   );
 }
 
-function CurrencyCellInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+function CurrencyCellInput({ value, onChange, min = 0 }: { value: number; onChange: (v: number) => void; min?: number }) {
+  // Currency amounts default to a 0 floor; negative balances/amounts are
+  // almost never meaningful here and silently corrupt the projection.
+  // The floor is enforced on blur so the user can still clear and retype.
+  const commit = () => {
+    const clamped = clampNum(value, min, Infinity);
+    if (!Number.isNaN(clamped) && clamped !== value) onChange(clamped);
+  };
   return (
     <div className="input-with-unit">
       <span className="unit">$</span>
@@ -3233,7 +3406,9 @@ function CurrencyCellInput({ value, onChange }: { value: number; onChange: (v: n
         className="table-input text-right"
         type="number"
         value={value}
+        min={min}
         onChange={(e) => { const v = parseNum(e.target.value); if (!Number.isNaN(v)) onChange(v); }}
+        onBlur={commit}
       />
     </div>
   );

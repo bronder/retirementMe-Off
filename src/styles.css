@@ -1551,7 +1551,7 @@ input[type='checkbox'] {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   padding: 12px 16px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
@@ -1562,14 +1562,28 @@ input[type='checkbox'] {
   color: var(--text-dim);
 }
 
-.asm-summary-item strong {
-  color: var(--text);
-  font-weight: 700;
+/* Each fact is a self-contained chip with a muted label + bold value, so
+   the row wraps at chip boundaries cleanly (no orphaned separators). */
+.asm-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  white-space: nowrap;
 }
 
-.asm-summary-sep {
+.asm-chip-label {
+  font-size: var(--text-xs);
   color: var(--text-faint);
-  font-size: 11px;
+  font-weight: 500;
+}
+
+.asm-chip-value {
+  color: var(--text);
+  font-weight: 700;
 }
 
 .form-section-collapsed {
@@ -1984,6 +1998,98 @@ tr.drag-over {
 .value-bad { color: var(--red) !important; }
 .value-warn { color: var(--yellow) !important; }
 
+/* Clickable drill-down cards — used on the Results headline cards to jump
+   into the year-by-year table at the relevant age. Reset button defaults so
+   the card reads as a card, with a subtle hover + hint to signal it's
+   interactive. */
+.summary-card-drilldown {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.summary-card-drilldown:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+}
+
+.summary-card-drilldown-hint {
+  margin-top: 8px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--accent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+/* Keep the hint visible on touch devices (no hover) so the affordance is
+   discoverable without a mouse. */
+@media (hover: none) {
+  .summary-card-drilldown-hint {
+    opacity: 0.7;
+  }
+}
+
+.summary-card-drilldown:hover .summary-card-drilldown-hint {
+  opacity: 1;
+}
+
+/* Year-table row highlight — flashes briefly when a headline card drills
+   down to it, so the user can see exactly which row backs the number. */
+.year-row-highlight {
+  animation: year-row-flash 2.5s ease-out;
+}
+
+@keyframes year-row-flash {
+  0%   { background: var(--accent-dim); }
+  30%  { background: var(--accent-dim); }
+  100% { background: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .year-row-highlight {
+    animation: none;
+    background: var(--accent-dim);
+  }
+}
+
+/* Empty-state prompt shown on the Compare tab when fewer than two scenarios
+   exist. Keeps the panel from looking broken and gives a one-click path to a
+   second scenario. */
+.compare-empty {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.compare-empty-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.compare-empty-body {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.compare-empty-body h3 {
+  margin: 0 0 4px;
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+@media (max-width: 540px) {
+  .compare-empty {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 /* ============================================================
    CHARTS
    ============================================================ */
@@ -2127,7 +2233,7 @@ tr.drag-over {
 .inputs-layout,
 .results-layout {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: 220px minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
@@ -2190,23 +2296,102 @@ tr.drag-over {
   min-width: 0;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   .inputs-layout,
   .results-layout {
-    grid-template-columns: 1fr;
+    /* minmax(0, 1fr) — NOT plain 1fr. A grid track's default minimum is
+       `auto` (= content's intrinsic size), so a wide child (a form label,
+       a non-wrapping number) inflates the track beyond the viewport and the
+       whole column overflows. minmax(0, 1fr) lets the track shrink below
+       content size so the grid actually respects the viewport width. */
+    grid-template-columns: minmax(0, 1fr);
   }
   .inputs-sidebar,
   .results-sidebar {
     position: static;
+    /* Visually contain the horizontal strip so it reads as a nav, not
+       floating buttons. The -1px top margin offsets the body padding so
+       the strip's top border sits flush with the panel below. */
+    margin: 0 -4px 14px;
+    min-width: 0;
   }
   .inputs-nav,
   .results-nav {
+    /* Single-row scrollable strip — no wrapping, so all sections stay on
+       one line and the user swipes/scrolls to reach the rest. */
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     overflow-x: auto;
+    gap: 4px;
+    padding: 4px;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    /* Fade the right edge to hint there may be more items off-screen. */
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
   }
-  .inputs-nav-item {
+  .inputs-nav-item,
+  .results-nav-item {
+    flex: 0 0 auto;
     white-space: nowrap;
+    padding: 8px 14px;
+  }
+  /* Hide sidebar filler on mobile — the divider, "About" label, and
+     explanation paragraph are desktop-rail niceties that just add scroll
+     length on a phone. The help text already lives in each panel. */
+  .sidebar-divider,
+  .sidebar-resources-label,
+  .results-sidebar > p {
+    display: none;
+  }
+}
+
+/* ============================================================
+   CONSOLIDATED MOBILE LAYOUT (≤768px)
+   ============================================================
+   The grids above are sized for desktop and many have no responsive
+   fallback, so at narrow widths they force horizontal overflow and the
+   page reads as broken. This block collapses every fixed-width multi-
+   column grid to a single column and tightens the page padding. Kept in
+   one place so the narrow-width contract is easy to audit. */
+@media (max-width: 768px) {
+  /* Tighter page gutters on small screens. */
+  .app {
+    padding: 10px 12px 20px;
+  }
+
+  /* The topbar bleeds negative margins equal to the .app padding to go
+     full-width — re-derive those for the tighter mobile padding. */
+  .app-topbar {
+    margin: -10px -12px 8px;
+    padding: 8px 12px;
+  }
+
+  /* Assumptions forms: 3 fields per row → stack. */
+  .form-row-3 {
+    grid-template-columns: 1fr;
+  }
+
+  /* Overview wellness: fixed 280px gauge column → stack the gauge above
+     the checklist. */
+  .overview-wellness-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Monte Carlo: headline cards + drill-down stats → 1 column. */
+  .mc-summary-grid {
+    grid-template-columns: 1fr;
+  }
+  .mc-drilldown-stats {
+    grid-template-columns: 1fr;
+  }
+
+  /* Year-detail drill-down (income vs expenses) and account card bodies:
+     2 columns → 1. */
+  .year-detail-grid,
+  .acct-card-body {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2313,6 +2498,12 @@ tr.drag-over {
   margin-top: 24px;
   padding-top: 16px;
   border-top: 1px solid var(--border);
+}
+.disclaimer {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  line-height: 1.5;
+  margin: 0 0 12px;
 }
 .resources-footer summary {
   cursor: pointer;
@@ -4695,12 +4886,89 @@ tr.drag-over {
    The detail is still available by expanding any row. Add a subtle scroll
    hint so users on the boundary know they can swipe for more. */
 
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   .col-optional { display: none; }
   .table-scroll {
     position: relative;
     /* Fade the right edge to hint there may be more content off-screen. */
     -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
     mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  }
+}
+
+/* ============================================================
+   UNDO TOAST
+   ============================================================
+   Single-slot transient undo for destructive ops. Fixed bottom-left
+   (the AI chat FAB owns bottom-right) so they never overlap. Uses the
+   accent surface for high visibility without an aggressive error tone —
+   a delete is recoverable, so it shouldn't read as an alarm. */
+.undo-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(420px, calc(100vw - 48px));
+  padding: 12px 14px 12px 16px;
+  background: var(--text);
+  color: var(--bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--text-sm);
+  animation: undo-toast-in 0.2s ease-out;
+}
+
+.undo-toast-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.undo-toast-btn {
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.undo-toast-btn:hover {
+  background: var(--accent-hover);
+}
+
+/* Honor reduced-motion: skip the entrance animation. */
+@media (prefers-reduced-motion: reduce) {
+  .undo-toast {
+    animation: none;
+  }
+}
+
+@keyframes undo-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 540px) {
+  .undo-toast {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    max-width: none;
   }
 }
