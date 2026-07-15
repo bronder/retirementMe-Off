@@ -43,14 +43,14 @@ export function AiChat() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [apiKeyInput, setApiKeyInput] = useState(store.aiApiKey);
+  const [apiKeyInput, setApiKeyInput] = useState(store.aiApiKeys[store.aiProvider] ?? '');
   const [providerInput, setProviderInput] = useState(store.aiProvider);
   const [modelInput, setModelInput] = useState(store.aiModel);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const hasApiKey = store.aiApiKey.length > 0;
+  const hasApiKey = (store.aiApiKeys[store.aiProvider] ?? '').length > 0;
 
   // Validate that the stored model exists for the current provider.
   useEffect(() => {
@@ -74,7 +74,8 @@ export function AiChat() {
   const sendMessage = useCallback(
     async (text: string) => {
       if (!text.trim() || loading) return;
-      if (!store.aiApiKey) {
+      const activeKey = store.aiApiKeys[store.aiProvider] ?? '';
+      if (!activeKey) {
         setShowSettings(true);
         return;
       }
@@ -108,7 +109,7 @@ export function AiChat() {
           ...historyForApi,
         ];
 
-        const response = await callAI(store.aiProvider, store.aiApiKey, store.aiModel, apiMessages);
+        const response = await callAI(store.aiProvider, activeKey, store.aiModel, apiMessages);
 
         const suggestion = parseScenarioSuggestion(response);
         const displayContent = stripScenarioBlock(stripThinkBlocks(response));
@@ -146,7 +147,7 @@ export function AiChat() {
 
   const handleSaveSettings = () => {
     store.setAiProvider(providerInput);
-    store.setAiApiKey(apiKeyInput.trim());
+    store.setAiApiKey(providerInput, apiKeyInput.trim());
     store.setAiModel(modelInput);
     setShowSettings(false);
   };
@@ -154,6 +155,9 @@ export function AiChat() {
   const handleProviderChange = (newProviderId: string) => {
     setProviderInput(newProviderId);
     setModelInput(getDefaultModel(newProviderId));
+    // Load the key the user previously entered for this provider (or empty),
+    // so switching providers never silently drops a saved key.
+    setApiKeyInput(store.aiApiKeys[newProviderId] ?? '');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

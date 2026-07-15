@@ -37,10 +37,14 @@ interface PlanStore {
 
   // AI settings (stored separately, not in plan JSON)
   aiProvider: string;
-  aiApiKey: string;
+  /** Per-provider API keys, keyed by provider id (e.g. { openai: 'sk-...' }).
+   *  Switching providers no longer overwrites the previous key — each
+   *  provider keeps its own. */
+  aiApiKeys: Record<string, string>;
   aiModel: string;
   setAiProvider: (provider: string) => void;
-  setAiApiKey: (key: string) => void;
+  /** Set the API key for a specific provider. */
+  setAiApiKey: (provider: string, key: string) => void;
   setAiModel: (model: string) => void;
 
   // Scenario operations
@@ -149,11 +153,12 @@ export const usePlanStore = create<PlanStore>()(
       activeScenarioId: '',
       undoState: null,
       aiProvider: 'openai',
-      aiApiKey: '',
+      aiApiKeys: {},
       aiModel: 'gpt-4o-mini',
 
       setAiProvider: (provider) => set({ aiProvider: provider }),
-      setAiApiKey: (key) => set({ aiApiKey: key }),
+      setAiApiKey: (provider, key) =>
+        set((state) => ({ aiApiKeys: { ...state.aiApiKeys, [provider]: key } })),
       setAiModel: (model) => set({ aiModel: model }),
 
       undo: () =>
@@ -671,12 +676,12 @@ export const usePlanStore = create<PlanStore>()(
     }),
     {
       name: 'retirement-planner',
-      version: 6,
+      version: 7,
       partialize: (state) => ({
         plan: state.plan,
         activeScenarioId: state.activeScenarioId,
         aiProvider: state.aiProvider,
-        aiApiKey: state.aiApiKey,
+        aiApiKeys: state.aiApiKeys,
         aiModel: state.aiModel,
         // NOTE: undoState is intentionally excluded — undo is a transient
         // session gesture, not something to restore across refreshes.
@@ -772,6 +777,15 @@ export const usePlanStore = create<PlanStore>()(
             scenario.expenses = scenario.expenses.filter(
               (e) => !e._propertyId?.endsWith(':mortgage'),
             );
+          }
+        }
+        // v6→v7: API keys are now per-provider (Record<string, string>) instead
+        // of a single shared string. Migrate any existing shared key into the
+        // map under the active provider so the user doesn't lose it.
+        if (version < 7 && state) {
+          const legacy = (state as { aiApiKey?: string }).aiApiKey;
+          if (legacy && state.aiProvider) {
+            state.aiApiKeys = { [state.aiProvider]: legacy };
           }
         }
         return state;
