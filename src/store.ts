@@ -2,7 +2,12 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Plan, Scenario, Account, IncomeSource, Expense, LifeEvent, Assumptions, Property } from './types';
 import { defaultPlan, defaultScenario, createId, PLAN_VERSION } from './defaults';
-import type { ScenarioSuggestion } from './ai';
+import type { ChatMessage, ScenarioSuggestion } from './ai';
+
+/** Hard cap on persisted chat history. Last 20 turns (40 messages) are kept;
+ *  older turns are dropped on append. Matches the cap applied at send time
+ *  so the API request and the visible / persisted history agree. */
+export const MAX_CHAT_HISTORY = 40;
 
 /**
  * Single-slot undo for destructive operations (delete + reset). We snapshot
@@ -52,6 +57,15 @@ interface PlanStore {
   setAiModel: (model: string) => void;
   setAiCustomEndpoint: (endpoint: string) => void;
   setAiCustomModel: (model: string) => void;
+
+  // AI chat history (persisted; capped at MAX_CHAT_HISTORY entries).
+  chatHistory: ChatMessage[];
+  /** Replace chat history wholesale (capped at MAX_CHAT_HISTORY). */
+  setChatHistory: (history: ChatMessage[]) => void;
+  /** Append a message; older entries beyond the cap are dropped. */
+  appendChatMessage: (msg: ChatMessage) => void;
+  /** Clear all chat history. */
+  clearChat: () => void;
 
   // Scenario operations
   setActiveScenario: (id: string) => void;
@@ -163,6 +177,7 @@ export const usePlanStore = create<PlanStore>()(
       aiModel: 'MiniMax-M3',
       aiCustomEndpoint: '',
       aiCustomModel: '',
+      chatHistory: [],
 
       setAiProvider: (provider) => set({ aiProvider: provider }),
       setAiApiKey: (provider, key) =>
@@ -170,6 +185,14 @@ export const usePlanStore = create<PlanStore>()(
       setAiModel: (model) => set({ aiModel: model }),
       setAiCustomEndpoint: (endpoint) => set({ aiCustomEndpoint: endpoint }),
       setAiCustomModel: (model) => set({ aiCustomModel: model }),
+
+      setChatHistory: (history) =>
+        set({ chatHistory: history.slice(-MAX_CHAT_HISTORY) }),
+      appendChatMessage: (msg) =>
+        set((state) => ({
+          chatHistory: [...state.chatHistory, msg].slice(-MAX_CHAT_HISTORY),
+        })),
+      clearChat: () => set({ chatHistory: [] }),
 
       undo: () =>
         set((state) => {
@@ -686,7 +709,7 @@ export const usePlanStore = create<PlanStore>()(
     }),
     {
       name: 'retirement-planner',
-      version: 7,
+      version: 8,
       partialize: (state) => ({
         plan: state.plan,
         activeScenarioId: state.activeScenarioId,
@@ -695,6 +718,7 @@ export const usePlanStore = create<PlanStore>()(
         aiModel: state.aiModel,
         aiCustomEndpoint: state.aiCustomEndpoint,
         aiCustomModel: state.aiCustomModel,
+        chatHistory: state.chatHistory,
         // NOTE: undoState is intentionally excluded — undo is a transient
         // session gesture, not something to restore across refreshes.
       }),
@@ -798,6 +822,14 @@ export const usePlanStore = create<PlanStore>()(
           const legacy = (state as { aiApiKey?: string }).aiApiKey;
           if (legacy && state.aiProvider) {
             state.aiApiKeys = { [state.aiProvider]: legacy };
+          }
+        }
+        // v7→v8: AI chat history is now persisted across refreshes. Initialize
+        // an empty array for older installs — there's nothing to migrate, and
+        // fresh installs get [] from the default state.
+        if (version < 8 && state) {
+          if (!Array.isArray((state as { chatHistory?: unknown }).chatHistory)) {
+            state.chatHistory = [];
           }
         }
         return state;

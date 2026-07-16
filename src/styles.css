@@ -4609,6 +4609,77 @@ tr.drag-over {
   border: 1px solid var(--red);
 }
 
+/* Suggestions popover shown when the user clicks 💡 in the header.
+   Reuses the .ai-chat-quick-actions / .ai-chat-quick-btn rules above for
+   consistent chip styling between welcome state and this panel. */
+.ai-chat-suggestions-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+}
+
+.ai-chat-suggestions-label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Inline two-step confirm bar matching the red palette of .ai-chat-error so
+   the destructive action reads as such at a glance. */
+.ai-chat-clear-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid var(--red);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.ai-chat-clear-confirm-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ai-chat-clear-confirm-yes,
+.ai-chat-clear-confirm-no {
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid var(--red);
+  background: transparent;
+  color: var(--red);
+  transition: all 0.15s;
+}
+
+.ai-chat-clear-confirm-yes {
+  background: var(--red);
+  color: var(--panel);
+}
+
+.ai-chat-clear-confirm-yes:hover {
+  filter: brightness(1.08);
+}
+
+.ai-chat-clear-confirm-no:hover {
+  background: var(--red-dim);
+}
+
 .ai-chat-suggestion {
   margin-top: 8px;
   padding: 12px;

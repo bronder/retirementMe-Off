@@ -4,6 +4,7 @@ import { runProjection } from './engine';
 import {
   AI_PROVIDERS,
   CUSTOM_PROVIDER_ID,
+  QUICK_ACTIONS,
   SYSTEM_PROMPT,
   buildPlanContext,
   callAI,
@@ -37,10 +38,15 @@ function loadStored<T>(key: string, fallback: T): T {
  */
 export function AiChat() {
   const store = usePlanStore();
+  const messages = usePlanStore((s) => s.chatHistory);
+  const appendChatMessage = usePlanStore((s) => s.appendChatMessage);
+  const setChatHistory = usePlanStore((s) => s.setChatHistory);
+  const clearChat = usePlanStore((s) => s.clearChat);
   const [isOpen, setIsOpen] = useState(false);
   const [pinned, setPinned] = useState(() => loadStored<boolean>(PIN_STORAGE_KEY, false));
   const [showSettings, setShowSettings] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [confirmingClear, setConfirmingClear] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +59,18 @@ export function AiChat() {
   const panelRef = useRef<HTMLDivElement>(null);
 
   const hasApiKey = (store.aiApiKeys[store.aiProvider] ?? '').length > 0;
+
+  // Auto-dismiss transient UI states when their precondition stops holding,
+  // so the user never sees stale chips or a half-cleared confirm.
+  useEffect(() => {
+    if (messages.length === 0) {
+      setShowSuggestions(false);
+      setConfirmingClear(false);
+    }
+  }, [messages.length]);
+  useEffect(() => {
+    if (showSettings) setShowSuggestions(false);
+  }, [showSettings]);
 
   // Validate that the stored model exists for the current provider.
   // The custom provider has no model list, so skip validation for it.
@@ -90,7 +108,7 @@ export function AiChat() {
         timestamp: Date.now(),
       };
 
-      setMessages((prev) => [...prev, userMsg]);
+      appendChatMessage(userMsg);
       setInput('');
       setLoading(true);
       setError(null);
@@ -126,7 +144,7 @@ export function AiChat() {
           suggestion,
         };
 
-        setMessages((prev) => [...prev, assistantMsg]);
+        appendChatMessage(assistantMsg);
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Failed to get AI response';
         setError(msg);
@@ -134,19 +152,35 @@ export function AiChat() {
         setLoading(false);
       }
     },
-    [messages, loading, store],
+    [messages, loading, store, appendChatMessage],
   );
 
   const handleApplySuggestion = () => {
     const lastMsg = messages[messages.length - 1];
     if (lastMsg?.suggestion) {
       store.applyScenarioSuggestion(lastMsg.suggestion);
-      setMessages((prev) =>
-        prev.map((m, i) =>
-          i === prev.length - 1 ? { ...m, suggestion: undefined } : m,
+      // Persist that the suggestion has been applied so it doesn't render again.
+      setChatHistory(
+        messages.map((m, i) =>
+          i === messages.length - 1 ? { ...m, suggestion: undefined } : m,
         ),
       );
     }
+  };
+
+  // Apply a quick-action prompt: fill the textarea (don't auto-send, so the
+  // user can edit before committing). Works for both welcome chips and the
+  // header Suggestions panel.
+  const handlePromptClick = (prompt: string) => {
+    setInput(prompt);
+    setShowSuggestions(false);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  // Clear-history two-step: 🗑️ reveals a ✓/✕ confirm bar; ✓ clears.
+  const handleClearConfirm = () => {
+    clearChat();
+    setConfirmingClear(false);
   };
 
   const handleSaveSettings = () => {
@@ -274,7 +308,34 @@ export function AiChat() {
               >
                 {pinned ? '📌' : '📍'}
               </button>
-              <button className="ai-chat-icon-btn" onClick={() => setShowSettings(!showSettings)} title="Settings" aria-label="AI settings">⚙️</button>
+              <button
+                className={`ai-chat-icon-btn${showSuggestions ? ' active' : ''}`}
+                onClick={() => { setShowSettings(false); setShowSuggestions(!showSuggestions); }}
+                title="Show prompt suggestions"
+                aria-label="Show prompt suggestions"
+                aria-expanded={showSuggestions}
+              >
+                💡
+              </button>
+              <button
+                className="ai-chat-icon-btn"
+                onClick={() => setShowSettings(!showSettings)}
+                title="Settings"
+                aria-label="AI settings"
+              >
+                ⚙️
+              </button>
+              {messages.length > 0 && (
+                <button
+                  className={`ai-chat-icon-btn${confirmingClear ? ' active' : ''}`}
+                  onClick={() => setConfirmingClear(!confirmingClear)}
+                  title="Clear conversation"
+                  aria-label="Clear conversation"
+                  aria-expanded={confirmingClear}
+                >
+                  🗑️
+                </button>
+              )}
               <button className="ai-chat-icon-btn" onClick={() => { setIsOpen(false); setPinned(false); try { localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(false)); } catch { /* ignore */ } }} title="Close" aria-label="Close AI Assistant">✕</button>
             </div>
           </div>
@@ -319,6 +380,33 @@ export function AiChat() {
           )}
 
           <div className="ai-chat-messages">
+            {confirmingClear && (
+              <div className="ai-chat-clear-confirm" role="alert">
+                Clear all messages? This cannot be undone.
+                <div className="ai-chat-clear-confirm-actions">
+                  <button className="ai-chat-clear-confirm-yes" onClick={handleClearConfirm} aria-label="Confirm clear conversation">✓ Yes</button>
+                  <button className="ai-chat-clear-confirm-no" onClick={() => setConfirmingClear(false)} aria-label="Cancel clear">✕</button>
+                </div>
+              </div>
+            )}
+
+            {showSuggestions && messages.length > 0 && !showSettings && (
+              <div className="ai-chat-suggestions-panel">
+                <div className="ai-chat-suggestions-label">Try asking</div>
+                <div className="ai-chat-quick-actions">
+                  {QUICK_ACTIONS.map((qa) => (
+                    <button
+                      key={qa.id}
+                      className="ai-chat-quick-btn"
+                      onClick={() => handlePromptClick(qa.prompt)}
+                    >
+                      {qa.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {messages.length === 0 && !showSettings && (
               <div className="ai-chat-welcome">
                 <p className="ai-chat-welcome-title">
@@ -328,6 +416,19 @@ export function AiChat() {
                   <button className="ai-chat-quick-btn" onClick={() => setShowSettings(true)}>
                     ⚙️ Configure API Key
                   </button>
+                )}
+                {hasApiKey && (
+                  <div className="ai-chat-quick-actions">
+                    {QUICK_ACTIONS.map((qa) => (
+                      <button
+                        key={qa.id}
+                        className="ai-chat-quick-btn"
+                        onClick={() => handlePromptClick(qa.prompt)}
+                      >
+                        {qa.label}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
             )}
