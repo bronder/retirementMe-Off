@@ -1539,7 +1539,7 @@ function OverviewPanel({ scenario, store }: {
 
       <div className="chart-container">
         <h3>📈 Projected Net Worth (Today's Dollars)</h3>
-        <ResponsiveContainer width="100%" height="clamp(220px, 32vh, 360px)" aria-label={`Projected net worth in today's dollars, ${miniChartData.length} yearly data points from age ${miniChartData[0]?.age ?? ''} to ${miniChartData[miniChartData.length - 1]?.age ?? ''}`}>
+        <ResponsiveContainer width="100%" height={300} aria-label={`Projected net worth in today's dollars, ${miniChartData.length} yearly data points from age ${miniChartData[0]?.age ?? ''} to ${miniChartData[miniChartData.length - 1]?.age ?? ''}`}>
           <AreaChart data={miniChartData}>
             <defs>
               <linearGradient id="overviewGradientLiquid" x1="0" y1="0" x2="0" y2="1">
@@ -3163,7 +3163,7 @@ function ResultsView({ scenario, result, readiness }: {
                     <button className={`seg-btn${nwView === 'nominal' ? ' active' : ''}`} onClick={() => setNwView('nominal')}>Nominal</button>
                   </div>
                 </div>
-                <ResponsiveContainer width="100%" height="clamp(260px, 38vh, 420px)" aria-label={`Projected net worth over time, ${chartData.length} yearly data points from age ${chartData[0]?.age ?? ''} to ${chartData[chartData.length - 1]?.age ?? ''}`}>
+                <ResponsiveContainer width="100%" height={400} aria-label={`Projected net worth over time, ${chartData.length} yearly data points from age ${chartData[0]?.age ?? ''} to ${chartData[chartData.length - 1]?.age ?? ''}`}>
                   <AreaChart data={chartData}>
                     <defs>
                       <linearGradient id="detGradientLiquidNom" x1="0" y1="0" x2="0" y2="1">
@@ -3243,7 +3243,7 @@ function ResultsView({ scenario, result, readiness }: {
               {/* Cash flow chart */}
               <div className="chart-container">
                 <h3>Retirement Cash Flow (Income vs Expenses vs Withdrawals)</h3>
-                <ResponsiveContainer width="100%" height="clamp(240px, 36vh, 380px)" aria-label={`Retirement cash flow from age ${cashFlowData[0]?.age ?? ''} onwards, ${cashFlowData.length} yearly data points`}>
+                <ResponsiveContainer width="100%" height={340} aria-label={`Retirement cash flow from age ${cashFlowData[0]?.age ?? ''} onwards, ${cashFlowData.length} yearly data points`}>
                   <BarChart data={cashFlowData}>
                     <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
                     <XAxis dataKey="age" stroke={tc.textDim} />
@@ -3695,7 +3695,7 @@ function CompareView({ results, scenarios }: { results: NonNullable<ReturnType<t
 
       <div className="chart-container">
         <h3>Net Worth Comparison (Today's Dollars)</h3>
-        <ResponsiveContainer width="100%" height="clamp(280px, 42vh, 480px)" aria-label={`Net worth comparison across ${orderedScenarios.length} scenario${orderedScenarios.length === 1 ? '' : 's'}, in today's dollars, ${compareData.length} yearly data points`}>
+        <ResponsiveContainer width="100%" height={480} aria-label={`Net worth comparison across ${orderedScenarios.length} scenario${orderedScenarios.length === 1 ? '' : 's'}, in today's dollars, ${compareData.length} yearly data points`}>
           <LineChart data={compareData}>
             <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
             <XAxis dataKey="age" stroke={tc.textDim} />

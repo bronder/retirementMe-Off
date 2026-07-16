@@ -458,7 +458,7 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
           {/* Confidence band chart */}
           <div className="chart-container">
             <h3>Confidence bands — net worth in today's dollars</h3>
-            <ResponsiveContainer width="100%" height="clamp(260px, 36vh, 400px)" aria-label={`Monte Carlo confidence bands for net worth in today's dollars, ${bandData.length} yearly data points`}>
+            <ResponsiveContainer width="100%" height={380} aria-label={`Monte Carlo confidence bands for net worth in today's dollars, ${bandData.length} yearly data points`}>
               <AreaChart data={bandData}>
                 <defs>
                   <linearGradient id="mcBandGradient" x1="0" y1="0" x2="0" y2="1">
