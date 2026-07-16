@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, Fragment } from 'react';
+import { useState, useMemo, useRef, useEffect, Fragment, Component } from 'react';
 import {
   LineChart,
   Line,
@@ -22,6 +22,7 @@ import { formatCurrency, formatPercent, formatAge, prettify, parseNum, decideSna
 import { exportMarkdown } from './markdown';
 import { AiChat } from './AiChat';
 import { MonteCarloPanel } from './MonteCarloPanel';
+import { defaultScenario } from './defaults';
 
 const ACCOUNT_TYPES: AccountType[] = [
   'checking_savings',
@@ -425,6 +426,32 @@ function OnboardingBanner({ onStartFresh, onDismiss }: { onStartFresh: () => voi
   );
 }
 
+/** Last-resort fallback for any render-time error in App. Replaces the
+ *  previous `return null` guard at App.tsx:659 with a recoverable error UI
+ *  so a bad projection result or malformed store data doesn't leave the
+ *  user with a blank page and no path forward. */
+class AppErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    // Surface to devtools; could be wired to a real error sink later.
+    // eslint-disable-next-line no-console
+    console.error('App render error:', error, info.componentStack);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="error-boundary-fallback">
+          <h2>Something went wrong</h2>
+          <p>{this.state.error.message || 'An unexpected error occurred while rendering this page.'}</p>
+          <button className="btn btn-primary" onClick={() => window.location.reload()}>Reload</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 /**
  * Collapsible resource links, shown as a footer so they're accessible from any
  * tab without cluttering the data-entry sidebar. Collapsed by default — a
@@ -600,6 +627,9 @@ export default function App() {
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('retirement-theme') as Theme) || 'light');
   const [menuOpen, setMenuOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem(ONBOARD_KEY) === null);
+  /** Inline error message surfaced when an Import Plan file fails to parse.
+   *  Lives next to the menu trigger so it doesn't interrupt the flow. */
+  const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -687,8 +717,12 @@ export default function App() {
       try {
         const plan = JSON.parse(ev.target?.result as string);
         store.loadPlan(plan);
+        setImportError(null);
       } catch {
-        alert('Invalid plan file.');
+        // Inline error surfaced to the user as an unobtrusive chip next to
+        // the menu trigger — replaces the previous blocking window.alert()
+        // which interrupted the flow and looked broken in modern browsers.
+        setImportError(`Couldn't read "${file.name}". The file isn't valid JSON, or doesn't match the plan schema.`);
       }
     };
     reader.readAsText(file);
@@ -700,12 +734,21 @@ export default function App() {
     setShowOnboarding(false);
   };
 
+  /** Re-open the welcome banner — used by the menu "Show welcome tour" item
+   *  so users who dismissed it can still see it later. */
+  const restartOnboarding = () => {
+    localStorage.removeItem(ONBOARD_KEY);
+    setShowOnboarding(true);
+    setMenuOpen(false);
+  };
+
   const startFresh = () => {
     store.resetPlan();
     dismissOnboarding();
   };
 
   return (
+    <AppErrorBoundary>
     <div className="app">
       {/* Compact top bar — logo, scenario tabs, and actions in a single row */}
       <div className="app-topbar">
@@ -748,10 +791,20 @@ export default function App() {
                   📝 Export Notes
                 </button>
                 <div className="menu-divider" />
+                <button className="menu-item" onClick={restartOnboarding}>
+                  👋 Show welcome tour
+                </button>
                 <ResetPlanMenuItem onReset={() => { store.resetPlan(); setMenuOpen(false); }} />
               </div>
             )}
           </div>
+          {importError && (
+            <div className="inline-error" role="alert">
+              <span aria-hidden="true">⚠️</span>
+              {importError}
+              <button className="inline-error-dismiss" onClick={() => setImportError(null)} aria-label="Dismiss error">✕</button>
+            </div>
+          )}
           <input ref={fileInputRef} type="file" accept=".json" onChange={handleImport} style={{ display: 'none' }} />
         </div>
       </div>
@@ -817,6 +870,7 @@ export default function App() {
       {/* Undo toast — overlays every view, single-slot */}
       <UndoToast />
     </div>
+    </AppErrorBoundary>
   );
 }
 
@@ -1485,7 +1539,7 @@ function OverviewPanel({ scenario, store }: {
 
       <div className="chart-container">
         <h3>📈 Projected Net Worth (Today's Dollars)</h3>
-        <ResponsiveContainer width="100%" height={240} aria-label={`Projected net worth in today's dollars, ${miniChartData.length} yearly data points from age ${miniChartData[0]?.age ?? ''} to ${miniChartData[miniChartData.length - 1]?.age ?? ''}`}>
+        <ResponsiveContainer width="100%" height="clamp(220px, 32vh, 360px)" aria-label={`Projected net worth in today's dollars, ${miniChartData.length} yearly data points from age ${miniChartData[0]?.age ?? ''} to ${miniChartData[miniChartData.length - 1]?.age ?? ''}`}>
           <AreaChart data={miniChartData}>
             <defs>
               <linearGradient id="overviewGradientLiquid" x1="0" y1="0" x2="0" y2="1">
@@ -1978,7 +2032,23 @@ function AccountsPanel({ scenario, store }: {
       })}
 
       {scenario.accounts.length === 0 && (
-        <p className="muted" style={{ padding: '8px 0' }}>No accounts added yet. Click "Add Account" to start tracking your savings and investments.</p>
+        <div className="empty-state-cta">
+          <p className="muted">No accounts added yet. Click "Add Account" to start tracking your savings and investments, or load the baseline example to see how a typical retirement portfolio looks.</p>
+          <button
+            className="btn btn-sm"
+            onClick={() => {
+              // Pull the seeded accounts out of a fresh defaultScenario() so
+              // the user sees the same baseline values the app starts with on
+              // first run. addAccount uses createId() so the new rows get
+              // fresh ids and don't collide with anything already there.
+              for (const acct of defaultScenario().accounts) {
+                store.addAccount(scenario.id, acct);
+              }
+            }}
+          >
+            Load baseline example accounts
+          </button>
+        </div>
       )}
 
       <ContextualResources group={RESOURCE_GROUPS[4]} />
@@ -3093,7 +3163,7 @@ function ResultsView({ scenario, result, readiness }: {
                     <button className={`seg-btn${nwView === 'nominal' ? ' active' : ''}`} onClick={() => setNwView('nominal')}>Nominal</button>
                   </div>
                 </div>
-                <ResponsiveContainer width="100%" height={320} aria-label={`Projected net worth over time, ${chartData.length} yearly data points from age ${chartData[0]?.age ?? ''} to ${chartData[chartData.length - 1]?.age ?? ''}`}>
+                <ResponsiveContainer width="100%" height="clamp(260px, 38vh, 420px)" aria-label={`Projected net worth over time, ${chartData.length} yearly data points from age ${chartData[0]?.age ?? ''} to ${chartData[chartData.length - 1]?.age ?? ''}`}>
                   <AreaChart data={chartData}>
                     <defs>
                       <linearGradient id="detGradientLiquidNom" x1="0" y1="0" x2="0" y2="1">
@@ -3173,7 +3243,7 @@ function ResultsView({ scenario, result, readiness }: {
               {/* Cash flow chart */}
               <div className="chart-container">
                 <h3>Retirement Cash Flow (Income vs Expenses vs Withdrawals)</h3>
-                <ResponsiveContainer width="100%" height={280} aria-label={`Retirement cash flow from age ${cashFlowData[0]?.age ?? ''} onwards, ${cashFlowData.length} yearly data points`}>
+                <ResponsiveContainer width="100%" height="clamp(240px, 36vh, 380px)" aria-label={`Retirement cash flow from age ${cashFlowData[0]?.age ?? ''} onwards, ${cashFlowData.length} yearly data points`}>
                   <BarChart data={cashFlowData}>
                     <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
                     <XAxis dataKey="age" stroke={tc.textDim} />
@@ -3625,7 +3695,7 @@ function CompareView({ results, scenarios }: { results: NonNullable<ReturnType<t
 
       <div className="chart-container">
         <h3>Net Worth Comparison (Today's Dollars)</h3>
-        <ResponsiveContainer width="100%" height={380} aria-label={`Net worth comparison across ${orderedScenarios.length} scenario${orderedScenarios.length === 1 ? '' : 's'}, in today's dollars, ${compareData.length} yearly data points`}>
+        <ResponsiveContainer width="100%" height="clamp(280px, 42vh, 480px)" aria-label={`Net worth comparison across ${orderedScenarios.length} scenario${orderedScenarios.length === 1 ? '' : 's'}, in today's dollars, ${compareData.length} yearly data points`}>
           <LineChart data={compareData}>
             <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
             <XAxis dataKey="age" stroke={tc.textDim} />

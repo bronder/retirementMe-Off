@@ -5247,3 +5247,68 @@ tr.drag-over {
     max-width: none;
   }
 }
+
+/* ============================================================
+   POLISH (Polish-Polish): inline import error chip, empty-state CTA,
+   and the global error-boundary fallback panel. Lives at the end of the
+   file because each is small and tied to a recent feature.
+   ============================================================ */
+
+.inline-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid var(--red);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  max-width: 420px;
+}
+
+.inline-error-dismiss {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.8;
+}
+
+.inline-error-dismiss:hover { opacity: 1; }
+
+.empty-state-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.empty-state-cta .btn { align-self: flex-start; }
+
+.error-boundary-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  min-height: 60vh;
+  text-align: center;
+}
+
+.error-boundary-fallback h2 {
+  margin: 0;
+  color: var(--text);
+}
+
+.error-boundary-fallback p {
+  margin: 0;
+  color: var(--text-dim);
+  max-width: 480px;
+}
