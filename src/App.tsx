@@ -17,8 +17,8 @@ import {
 import { usePlanStore, ASSUMPTION_BOUNDS } from './store';
 import { runProjection, getReadinessSummary, computeAnnualMortgage, mortgagePaymentAtAge } from './engine';
 import { ACCOUNT_TAX_TREATMENT } from './types';
-import type { AccountType, IncomeType, ExpenseCategory, EventType, PropertyType } from './types';
-import { formatCurrency, formatPercent, formatAge, prettify, parseNum } from './format';
+import type { AccountType, IncomeType, ExpenseCategory, EventType, PropertyType, Property, LifeEvent } from './types';
+import { formatCurrency, formatPercent, formatAge, prettify, parseNum, decideSnapBack } from './format';
 import { exportMarkdown } from './markdown';
 import { AiChat } from './AiChat';
 import { MonteCarloPanel } from './MonteCarloPanel';
@@ -1159,104 +1159,155 @@ function InputsView({ scenario, store }: {
   );
 }
 
-/** Clamp a number into [min, max]. Out-of-range values snap to the
- *  nearest bound; NaN passes through unchanged so callers can decide. */
-function clampNum(v: number, min: number, max: number): number {
-  if (Number.isNaN(v)) return v;
-  return Math.min(max, Math.max(min, v));
-}
-
 /**
  * Local "draft" state for a controlled number input. Keeps the field editable
  * even when the user clears it to retype — the raw string is held locally
  * and a number is only propagated to the store when parseable. On blur, an
- * empty/invalid field snaps back to the last valid value.
+ * empty/invalid field snaps back to the last valid value and bounds are
+ * enforced, with a visible notice describing what changed.
  *
  * `toInput` / `fromInput` convert between the store's number and the input's
- * display string (e.g. percentages multiply by 100).
+ * display string (e.g. percentages multiply by 100). `formatValue` is used in
+ * the notice string (e.g. "Restored to 65 yrs"), defaulting to `toInput`
+ * when omitted.
  */
-function useEditableNumber(
-  value: number,
-  onChange: (v: number) => void,
-  toInput: (v: number) => string = String,
-  fromInput: (v: number) => number = (v) => v,
-) {
+type UseEditableNumberOptions = {
+  value: number;
+  onCommit: (v: number) => void;
+  toInput?: (v: number) => string;
+  fromInput?: (v: number) => number;
+  min?: number;
+  max?: number;
+  formatValue?: (v: number) => string;
+};
+
+const NOTICE_TIMEOUT_MS = 5000;
+
+function useEditableNumber({
+  value,
+  onCommit,
+  toInput = String,
+  fromInput = (v: number) => v,
+  min,
+  max,
+  formatValue,
+}: UseEditableNumberOptions) {
   const [draft, setDraft] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // Mirror the latest `value` into a ref so handleBlur sees the freshest
+  // committed value even when blur fires within the same tick as a keystroke
+  // (before React has flushed the store update into the prop).
+  const valueRef = useRef(value);
+  useEffect(() => { valueRef.current = value; }, [value]);
 
   // If the store value changes externally (scenario switch, undo), drop the
   // draft so the field reflects the new value.
   useEffect(() => { setDraft(null); }, [value]);
 
+  // Auto-dismiss the notice after a short window. Re-armed on every notice
+  // change (only one notice is visible at a time, so this is safe).
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), NOTICE_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, [notice]);
+
   const display = draft ?? toInput(value);
 
   const handleChange = (raw: string) => {
+    // Any new keystroke invalidates a previously-shown notice.
     setDraft(raw);
+    setNotice(null);
     const v = parseNum(raw);
-    if (!Number.isNaN(v)) onChange(fromInput(v));
+    if (!Number.isNaN(v)) onCommit(fromInput(v));
   };
 
   const handleBlur = () => {
-    // Drop the draft — if it was valid, the store already has the value;
-    // if it was empty/invalid, the field snaps back to the last valid one.
-    setDraft(null);
+    const snap = decideSnapBack(draft, valueRef.current, fromInput, min, max);
+    const fmt = formatValue ?? toInput;
+    switch (snap.kind) {
+      case 'restored':
+        setDraft(null);
+        setNotice(`Restored to ${fmt(snap.restoredTo)}`);
+        return;
+      case 'clamped-low':
+        onCommit(snap.clampedTo);
+        setDraft(null);
+        setNotice(`Minimum is ${fmt(snap.clampedTo)}`);
+        return;
+      case 'clamped-high':
+        onCommit(snap.clampedTo);
+        setDraft(null);
+        setNotice(`Maximum is ${fmt(snap.clampedTo)}`);
+        return;
+      case 'ok':
+        setDraft(null);
+        return;
+    }
   };
 
-  return { display, handleChange, handleBlur };
+  return {
+    display,
+    handleChange,
+    handleBlur,
+    notice,
+    dismissNotice: () => setNotice(null),
+  };
 }
 
 function AgeInput({ value, onChange, unit = 'yrs', min, max }: { value: number; onChange: (v: number) => void; unit?: string; min?: number; max?: number }) {
-  const { display, handleChange, handleBlur: draftBlur } = useEditableNumber(value, onChange);
-  // Free edit while typing; snap into bounds on blur so the user can clear
-  // the field or retype without fighting the cursor mid-keystroke.
-  const commit = () => {
-    draftBlur();
-    if (min !== undefined || max !== undefined) {
-      const clamped = clampNum(value, min ?? -Infinity, max ?? Infinity);
-      if (!Number.isNaN(clamped) && clamped !== value) onChange(clamped);
-    }
-  };
+  const { display, handleChange, handleBlur, notice } = useEditableNumber({
+    value,
+    onCommit: onChange,
+    min,
+    max,
+    formatValue: (v) => `${v} ${unit}`,
+  });
   return (
-    <div className="input-wrapper">
-      <input
-        type="number"
-        value={display}
-        min={min}
-        max={max}
-        onChange={(e) => handleChange(e.target.value)}
-        onBlur={commit}
-      />
-      <span className="unit-suffix">{unit}</span>
-    </div>
+    <>
+      <div className="input-wrapper">
+        <input
+          type="number"
+          value={display}
+          min={min}
+          max={max}
+          onChange={(e) => handleChange(e.target.value)}
+          onBlur={handleBlur}
+        />
+        <span className="unit-suffix">{unit}</span>
+      </div>
+      {notice && <div className="input-snapback">{notice}</div>}
+    </>
   );
 }
 
 function PctInputEnhanced({ value, onChange, min, max }: { value: number; onChange: (v: number) => void; min?: number; max?: number }) {
-  const { display, handleChange, handleBlur: draftBlur } = useEditableNumber(
+  const { display, handleChange, handleBlur, notice } = useEditableNumber({
     value,
-    onChange,
-    (v) => (v * 100).toFixed(2),
-    (v) => v / 100,
-  );
-  const commit = () => {
-    draftBlur();
-    if (min !== undefined || max !== undefined) {
-      const clamped = clampNum(value, min ?? -Infinity, max ?? Infinity);
-      if (!Number.isNaN(clamped) && clamped !== value) onChange(clamped);
-    }
-  };
+    onCommit: onChange,
+    toInput: (v) => (v * 100).toFixed(2),
+    fromInput: (v) => v / 100,
+    min,
+    max,
+    formatValue: (v) => `${(v * 100).toFixed(2)}%`,
+  });
   return (
-    <div className="input-wrapper">
-      <input
-        type="number"
-        value={display}
-        step={0.1}
-        min={min !== undefined ? +(min * 100).toFixed(2) : undefined}
-        max={max !== undefined ? +(max * 100).toFixed(2) : undefined}
-        onChange={(e) => handleChange(e.target.value)}
-        onBlur={commit}
-      />
-      <span className="unit-suffix">%</span>
-    </div>
+    <>
+      <div className="input-wrapper">
+        <input
+          type="number"
+          value={display}
+          step={0.1}
+          min={min !== undefined ? +(min * 100).toFixed(2) : undefined}
+          max={max !== undefined ? +(max * 100).toFixed(2) : undefined}
+          onChange={(e) => handleChange(e.target.value)}
+          onBlur={handleBlur}
+        />
+        <span className="unit-suffix">%</span>
+      </div>
+      {notice && <div className="input-snapback">{notice}</div>}
+    </>
   );
 }
 
@@ -1988,10 +2039,7 @@ function PropertyCard({ prop, scenario, store }: {
             <label>Annual mortgage payment (P+I)</label>
             <CurrencyCellInput value={prop.mortgagePayment ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { mortgagePayment: v })} />
           </div>
-          <div className="prop-field">
-            <label>Years remaining</label>
-            <input type="number" value={prop.mortgageYearsLeft ?? ''} placeholder="—" onChange={(e) => store.updateProperty(scenario.id, prop.id, { mortgageYearsLeft: +e.target.value || undefined })} />
-          </div>
+          <PropYearsLeftField prop={prop} scenario={scenario} store={store} />
           <div className="prop-field">
             <label>Property tax /yr</label>
             <CurrencyCellInput value={prop.annualPropertyTax} onChange={(v) => store.updateProperty(scenario.id, prop.id, { annualPropertyTax: v })} />
@@ -2072,10 +2120,7 @@ function PropertyCard({ prop, scenario, store }: {
         <div className="prop-step prop-step-conditional">
           <div className="prop-step-label">③ Sale Details</div>
           <div className="prop-zone-grid">
-            <div className="prop-field">
-              <label>Sell at age</label>
-              <input type="number" value={prop.saleAge ?? ''} placeholder="—" onChange={(e) => { const val = +e.target.value || null; store.updateProperty(scenario.id, prop.id, { saleAge: val, saleProceeds: val ? equity : (prop.saleProceeds ?? 0) }); }} />
-            </div>
+            <PropSaleAgeField prop={prop} scenario={scenario} store={store} equity={equity} />
             <div className="prop-field">
               <label>Net proceeds after mortgage payoff</label>
               <CurrencyCellInput value={prop.saleProceeds ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { saleProceeds: v })} />
@@ -2088,10 +2133,7 @@ function PropertyCard({ prop, scenario, store }: {
         <div className="prop-step prop-step-conditional">
           <div className="prop-step-label">④ New Home Purchase</div>
           <div className="prop-zone-grid">
-            <div className="prop-field">
-              <label>Buy at age</label>
-              <input type="number" value={prop.purchaseAge ?? ''} placeholder="—" onChange={(e) => store.updateProperty(scenario.id, prop.id, { purchaseAge: +e.target.value || null })} />
-            </div>
+            <PropPurchaseAgeField prop={prop} scenario={scenario} store={store} />
             <div className="prop-field">
               <label>Purchase price</label>
               <CurrencyCellInput value={prop.purchasePrice ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { purchasePrice: v })} />
@@ -2104,10 +2146,7 @@ function PropertyCard({ prop, scenario, store }: {
               <label>New mortgage rate</label>
               <PctCellInput value={prop.mortgageRate ?? 0.065} onChange={(v) => store.updateProperty(scenario.id, prop.id, { mortgageRate: v })} />
             </div>
-            <div className="prop-field">
-              <label>Mortgage term (years)</label>
-              <input type="number" value={prop.mortgageTerm ?? 30} onChange={(e) => { const v = parseNum(e.target.value); if (!Number.isNaN(v)) store.updateProperty(scenario.id, prop.id, { mortgageTerm: v }); }} />
-            </div>
+            <PropMortgageTermField prop={prop} scenario={scenario} store={store} />
           </div>
           {estMortgage > 0 && (
             <div className="prop-quick-metrics prop-quick-metrics-inline">
@@ -2696,12 +2735,7 @@ function EventsPanel({ scenario, store }: {
                   <span className="group-label">When</span>
                   <div className="field-row">
                     <label>At age</label>
-                    <input
-                      type="number"
-                      value={ev.age}
-                      onChange={(e) => { const v = parseNum(e.target.value); if (!Number.isNaN(v)) store.updateEvent(scenario.id, ev.id, { age: v }); }}
-                      style={{ width: 70 }}
-                    />
+                    <EventAgeField ev={ev} scenario={scenario} store={store} />
                   </div>
                 </div>
 
@@ -2731,13 +2765,7 @@ function EventsPanel({ scenario, store }: {
                   <div className="field-row">
                     <CurrencyCellInput value={ev.ongoingAnnualImpact} onChange={(v) => store.updateEvent(scenario.id, ev.id, { ongoingAnnualImpact: v })} />
                     <label>/yr for</label>
-                    <input
-                      type="number"
-                      value={ev.ongoingDurationYears ?? 0}
-                      placeholder="∞"
-                      onChange={(e) => store.updateEvent(scenario.id, ev.id, { ongoingDurationYears: +e.target.value || null })}
-                      style={{ width: 60 }}
-                    />
+                    <EventDurationField ev={ev} scenario={scenario} store={store} />
                     <span className="muted" style={{ fontSize: 12 }}>yrs</span>
                   </div>
                 </div>
@@ -3546,61 +3574,243 @@ function CompareView({ results, scenarios }: { results: NonNullable<ReturnType<t
 /* ============ SHARED INPUT COMPONENTS ============ */
 
 function PctCellInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const { display, handleChange, handleBlur } = useEditableNumber(
+  const { display, handleChange, handleBlur, notice } = useEditableNumber({
     value,
-    onChange,
-    (v) => (v * 100).toFixed(1),
-    (v) => v / 100,
-  );
+    onCommit: onChange,
+    toInput: (v) => (v * 100).toFixed(1),
+    fromInput: (v) => v / 100,
+  });
   return (
-    <div className="input-with-unit">
-      <input
-        className="table-input text-right"
-        type="number"
-        value={display}
-        step={0.5}
-        onChange={(e) => handleChange(e.target.value)}
-        onBlur={handleBlur}
-      />
-      <span className="unit">%</span>
-    </div>
+    <>
+      <div className="input-with-unit">
+        <input
+          className="table-input text-right"
+          type="number"
+          value={display}
+          step={0.5}
+          onChange={(e) => handleChange(e.target.value)}
+          onBlur={handleBlur}
+        />
+        <span className="unit">%</span>
+      </div>
+      {notice && <div className="input-snapback">{notice}</div>}
+    </>
   );
 }
 
 function CurrencyCellInput({ value, onChange, min = 0 }: { value: number; onChange: (v: number) => void; min?: number }) {
-  const { display, handleChange, handleBlur: draftBlur } = useEditableNumber(value, onChange);
-  // Currency amounts default to a 0 floor; negative balances/amounts are
-  // almost never meaningful here and silently corrupt the projection.
-  // The floor is enforced on blur so the user can still clear and retype.
-  const commit = () => {
-    draftBlur();
-    const clamped = clampNum(value, min, Infinity);
-    if (!Number.isNaN(clamped) && clamped !== value) onChange(clamped);
-  };
+  const { display, handleChange, handleBlur, notice } = useEditableNumber({
+    value,
+    onCommit: onChange,
+    min,
+    formatValue: formatCurrency,
+  });
   return (
-    <div className="input-with-unit">
-      <span className="unit">$</span>
-      <input
-        className="table-input text-right"
-        type="number"
-        value={display}
-        min={min}
-        onChange={(e) => handleChange(e.target.value)}
-        onBlur={commit}
-      />
-    </div>
+    <>
+      <div className="input-with-unit">
+        <span className="unit">$</span>
+        <input
+          className="table-input text-right"
+          type="number"
+          value={display}
+          min={min}
+          onChange={(e) => handleChange(e.target.value)}
+          onBlur={handleBlur}
+        />
+      </div>
+      {notice && <div className="input-snapback">{notice}</div>}
+    </>
   );
 }
 
 function NumCellInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const { display, handleChange, handleBlur } = useEditableNumber(value, onChange);
+  const { display, handleChange, handleBlur, notice } = useEditableNumber({
+    value,
+    onCommit: onChange,
+  });
   return (
-    <input
-      className="table-input text-right"
-      type="number"
-      value={display}
-      onChange={(e) => handleChange(e.target.value)}
-      onBlur={handleBlur}
-    />
+    <>
+      <input
+        className="table-input text-right"
+        type="number"
+        value={display}
+        onChange={(e) => handleChange(e.target.value)}
+        onBlur={handleBlur}
+      />
+      {notice && <div className="input-snapback">{notice}</div>}
+    </>
+  );
+}
+
+/* ---------- Bare numeric field helpers (for property + events panels) ----------
+ * Each one wraps useEditableNumber and handles its own nullable-aware storage
+ * so callers don't have to. They render the same labeled input + snap-back
+ * notice pattern as the other cell components above. */
+
+type ScenarioStore = ReturnType<typeof usePlanStore.getState>;
+
+function PropYearsLeftField({ prop, scenario, store }: {
+  prop: Property; scenario: Scenario; store: ScenarioStore;
+}) {
+  const { display, handleChange, handleBlur, notice } = useEditableNumber({
+    value: prop.mortgageYearsLeft ?? 0,
+    onCommit: (v) => store.updateProperty(scenario.id, prop.id, { mortgageYearsLeft: v }),
+    min: 0, max: 50,
+  });
+  // When the prop is unset, render the input as empty (matches the old
+  // `value={prop.mortgageYearsLeft ?? ''}` UX) even though the hook holds 0.
+  const shown = prop.mortgageYearsLeft == null ? '' : display;
+  return (
+    <div className="prop-field">
+      <label>Years remaining</label>
+      <input
+        type="number"
+        value={shown}
+        placeholder="—"
+        min={0}
+        max={50}
+        onChange={(e) => handleChange(e.target.value)}
+        onBlur={handleBlur}
+      />
+      {notice && <div className="input-snapback">{notice}</div>}
+    </div>
+  );
+}
+
+function PropSaleAgeField({ prop, scenario, store, equity }: {
+  prop: Property; scenario: Scenario; store: ScenarioStore; equity: number;
+}) {
+  const { display, handleChange, handleBlur, notice } = useEditableNumber({
+    value: prop.saleAge ?? 0,
+    // Side-effect: when saleAge transitions to "unset" (committed 0 from a
+    // previously-set value) clear saleProceeds back to whatever it was; when
+    // saleAge is set, recompute saleProceeds from current equity.
+    onCommit: (v) => {
+      const goingToNull = v === 0 && prop.saleAge !== 0;
+      store.updateProperty(scenario.id, prop.id, {
+        saleAge: goingToNull ? null : v,
+        saleProceeds: goingToNull ? (prop.saleProceeds ?? 0) : equity,
+      });
+    },
+    formatValue: (v) => (v === 0 ? 'unset' : `${v}`),
+  });
+  const shown = prop.saleAge == null ? '' : display;
+  return (
+    <div className="prop-field">
+      <label>Sell at age</label>
+      <input
+        type="number"
+        value={shown}
+        placeholder="—"
+        onChange={(e) => handleChange(e.target.value)}
+        onBlur={handleBlur}
+      />
+      {notice && <div className="input-snapback">{notice}</div>}
+    </div>
+  );
+}
+
+function PropPurchaseAgeField({ prop, scenario, store }: {
+  prop: Property; scenario: Scenario; store: ScenarioStore;
+}) {
+  const { display, handleChange, handleBlur, notice } = useEditableNumber({
+    value: prop.purchaseAge ?? 0,
+    onCommit: (v) => {
+      const goingToNull = v === 0 && prop.purchaseAge !== 0;
+      store.updateProperty(scenario.id, prop.id, {
+        purchaseAge: goingToNull ? null : v,
+      });
+    },
+    formatValue: (v) => (v === 0 ? 'unset' : `${v}`),
+  });
+  const shown = prop.purchaseAge == null ? '' : display;
+  return (
+    <div className="prop-field">
+      <label>Buy at age</label>
+      <input
+        type="number"
+        value={shown}
+        placeholder="—"
+        onChange={(e) => handleChange(e.target.value)}
+        onBlur={handleBlur}
+      />
+      {notice && <div className="input-snapback">{notice}</div>}
+    </div>
+  );
+}
+
+function PropMortgageTermField({ prop, scenario, store }: {
+  prop: Property; scenario: Scenario; store: ScenarioStore;
+}) {
+  const { display, handleChange, handleBlur, notice } = useEditableNumber({
+    value: prop.mortgageTerm ?? 30,
+    onCommit: (v) => store.updateProperty(scenario.id, prop.id, { mortgageTerm: v }),
+    min: 1, max: 50,
+  });
+  return (
+    <div className="prop-field">
+      <label>Mortgage term (years)</label>
+      <input
+        type="number"
+        value={display}
+        onChange={(e) => handleChange(e.target.value)}
+        onBlur={handleBlur}
+      />
+      {notice && <div className="input-snapback">{notice}</div>}
+    </div>
+  );
+}
+
+function EventAgeField({ ev, scenario, store }: {
+  ev: LifeEvent; scenario: Scenario; store: ScenarioStore;
+}) {
+  const { display, handleChange, handleBlur, notice } = useEditableNumber({
+    value: ev.age,
+    onCommit: (v) => store.updateEvent(scenario.id, ev.id, { age: v }),
+    min: scenario.assumptions.currentAge,
+    max: scenario.assumptions.endAge,
+  });
+  return (
+    <>
+      <input
+        type="number"
+        value={display}
+        style={{ width: 70 }}
+        onChange={(e) => handleChange(e.target.value)}
+        onBlur={handleBlur}
+      />
+      {notice && <div className="input-snapback">{notice}</div>}
+    </>
+  );
+}
+
+function EventDurationField({ ev, scenario, store }: {
+  ev: LifeEvent; scenario: Scenario; store: ScenarioStore;
+}) {
+  const { display, handleChange, handleBlur, notice } = useEditableNumber({
+    value: ev.ongoingDurationYears ?? 0,
+    onCommit: (v) => {
+      // Translate 0 → null when going from a previously-set value to "forever".
+      const goingToNull = v === 0 && ev.ongoingDurationYears !== 0;
+      store.updateEvent(scenario.id, ev.id, {
+        ongoingDurationYears: goingToNull ? null : v,
+      });
+    },
+    min: 0, max: 100,
+    formatValue: (v) => (v === 0 ? '∞' : `${v}`),
+  });
+  const shown = ev.ongoingDurationYears == null ? '' : display;
+  return (
+    <>
+      <input
+        type="number"
+        value={shown}
+        placeholder="∞"
+        style={{ width: 60 }}
+        onChange={(e) => handleChange(e.target.value)}
+        onBlur={handleBlur}
+      />
+      {notice && <div className="input-snapback">{notice}</div>}
+    </>
   );
 }

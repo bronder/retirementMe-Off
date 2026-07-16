@@ -1670,6 +1670,18 @@ input[type='checkbox'] {
   color: var(--red);
 }
 
+/* Inline snap-back/clamp feedback for bare number inputs (events, properties,
+ * cell inputs) that don't sit inside a FieldGroup. Mirrors the yellow text
+ * style of .validation-msg so the notice reads as informational, not a
+ * blocking error. The component renders this just below the input. */
+.input-snapback {
+  font-size: var(--text-xs);
+  color: var(--yellow);
+  margin-top: 4px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
 /* ============================================================
    TABLES
    ============================================================ */
