@@ -186,6 +186,12 @@ export interface ThemeColors {
   chart2: string;
   chart3: string;
   chart4: string;
+  /** 5th scenario palette color — reuses --red so depleting-savings
+   *  trajectories read as "at risk" without an explicit legend. */
+  chart5: string;
+  /** 6th scenario palette color — reuses --yellow so marginal outcomes
+   *  read as a warning accent. */
+  chart6: string;
   green: string;
   red: string;
   yellow: string;
@@ -200,6 +206,8 @@ const DEFAULT_THEME_COLORS: ThemeColors = {
   chart2: '#0e7490',
   chart3: '#7c3aed',
   chart4: '#ca8a04',
+  chart5: '#dc2626',
+  chart6: '#b45309',
   green: '#15803d',
   red: '#dc2626',
   yellow: '#b45309',
@@ -221,6 +229,8 @@ function useThemeColors(): ThemeColors {
         chart2: style.getPropertyValue('--chart-2').trim() || '#0e7490',
         chart3: style.getPropertyValue('--chart-3').trim() || '#7c3aed',
         chart4: style.getPropertyValue('--chart-4').trim() || '#ca8a04',
+        chart5: style.getPropertyValue('--red').trim() || '#dc2626',
+        chart6: style.getPropertyValue('--yellow').trim() || '#b45309',
         green: style.getPropertyValue('--green').trim() || '#15803d',
         red: style.getPropertyValue('--red').trim() || '#dc2626',
         yellow: style.getPropertyValue('--yellow').trim() || '#b45309',
@@ -3464,7 +3474,12 @@ function CompareView({ results, scenarios }: { results: NonNullable<ReturnType<t
     return data;
   }, [results]);
 
-  const colors = ['#0d9488', '#0e7490', '#7c3aed', '#ca8a04', '#dc2626', '#d97706'];
+  // Scenario palette: derived from the active theme so switching themes
+  // recolors these lines along with the rest of the chart. Slots 1–4 take the
+  // four `--chart` tokens; slots 5–6 reuse `--red` / `--yellow` so a
+  // scenario that's depleting its savings lands visually as "at risk" without
+  // needing an extra legend.
+  const colors = [tc.chart, tc.chart2, tc.chart3, tc.chart4, tc.chart5, tc.chart6];
 
   return (
     <div>
