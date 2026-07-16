@@ -22,7 +22,7 @@ import {
 import { runMonteCarloProjection } from './engine';
 import type { MonteCarloOptions, MonteCarloResult, Scenario } from './types';
 import { formatCurrency } from './format';
-import { DataTable, ChartDataDisclosure } from './App';
+import { DataTable, ChartDataDisclosure, useResponsiveChartHeight } from './App';
 
 type ThemeColor = string;
 interface ThemeColors {
@@ -74,6 +74,7 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
   const [numRuns, setNumRuns] = useState<number>(DEFAULT_RUNS);
   const [returnStdDev, setReturnStdDev] = useState<number>(DEFAULT_SIGMA);
   const [run, setRun] = useState<RunState>({ status: 'idle', result: null, error: null });
+  const bandsChartHeight = useResponsiveChartHeight({ min: 260, max: 400, vhFraction: 0.36 });
   // Depletion histogram drill-down: when the user clicks a bar, we surface
   // the per-run final-asset values for that depletion age in a small table.
   const [selectedBin, setSelectedBin] = useState<number | null>(null);
@@ -458,7 +459,7 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
           {/* Confidence band chart */}
           <div className="chart-container">
             <h3>Confidence bands — net worth in today's dollars</h3>
-            <ResponsiveContainer width="100%" height={380} aria-label={`Monte Carlo confidence bands for net worth in today's dollars, ${bandData.length} yearly data points`}>
+            <ResponsiveContainer width="100%" height={bandsChartHeight} aria-label={`Monte Carlo confidence bands for net worth in today's dollars, ${bandData.length} yearly data points`}>
               <AreaChart data={bandData}>
                 <defs>
                   <linearGradient id="mcBandGradient" x1="0" y1="0" x2="0" y2="1">

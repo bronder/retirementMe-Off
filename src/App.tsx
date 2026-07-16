@@ -247,6 +247,45 @@ function useThemeColors(): ThemeColors {
   return colors;
 }
 
+/** Resize-driven chart height. Returns a number that's computed from the
+ *  viewport height on mount (so the initial paint already has the right
+ *  size — no flash), and recomputes on every window resize. The result
+ *  is clamped to [min, max] so charts never collapse to postage-stamp size
+ *  on a phone or spill off a 4K display.
+ *
+ *  Why this exists: Recharts parses its `height` prop with parseFloat and
+ *  collapses to 0 when given a CSS function like `clamp(...)`. Giving it a
+ *  real number that *originates* from a CSS-like clamp is the only way to
+ *  get viewport-responsive chart heights that actually render. */
+export function useResponsiveChartHeight(opts: {
+  /** Lower bound in px. */
+  min: number;
+  /** Upper bound in px. */
+  max: number;
+  /** What fraction of the viewport height to use as the target. Defaults to 0.35. */
+  vhFraction?: number;
+}): number {
+  const { min, max, vhFraction = 0.35 } = opts;
+  const clamp = (v: number) => Math.min(max, Math.max(min, v));
+  const compute = () => clamp(Math.round(window.innerHeight * vhFraction));
+  const [height, setHeight] = useState(() =>
+    typeof window !== 'undefined' ? compute() : min,
+  );
+
+  useEffect(() => {
+    const onResize = () => setHeight(compute());
+    window.addEventListener('resize', onResize);
+    // Recompute once after mount in case `innerHeight` changed between the
+    // initial-state read and the effect running (e.g., a viewport rotation
+    // landed mid-render).
+    onResize();
+    return () => window.removeEventListener('resize', onResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [min, max, vhFraction]);
+
+  return height;
+}
+
 type Tab = 'inputs' | 'results' | 'compare';
 type InputSection = 'overview' | 'assumptions' | 'accounts' | 'properties' | 'expenses' | 'income' | 'events';
 type Theme = 'dark' | 'light' | 'sepia' | 'nord' | 'warm-gray' | 'dracula';
@@ -1413,6 +1452,7 @@ function OverviewPanel({ scenario, store }: {
 }) {
   void store;
   const tc = useThemeColors();
+  const miniChartHeight = useResponsiveChartHeight({ min: 220, max: 360, vhFraction: 0.32 });
   const result = useMemo(() => runProjection(scenario), [scenario]);
   const readiness = useMemo(
     () => getReadinessSummary(result, scenario.assumptions.retirementAge, scenario.assumptions.safeWithdrawalRate),
@@ -1539,7 +1579,7 @@ function OverviewPanel({ scenario, store }: {
 
       <div className="chart-container">
         <h3>📈 Projected Net Worth (Today's Dollars)</h3>
-        <ResponsiveContainer width="100%" height={300} aria-label={`Projected net worth in today's dollars, ${miniChartData.length} yearly data points from age ${miniChartData[0]?.age ?? ''} to ${miniChartData[miniChartData.length - 1]?.age ?? ''}`}>
+        <ResponsiveContainer width="100%" height={miniChartHeight} aria-label={`Projected net worth in today's dollars, ${miniChartData.length} yearly data points from age ${miniChartData[0]?.age ?? ''} to ${miniChartData[miniChartData.length - 1]?.age ?? ''}`}>
           <AreaChart data={miniChartData}>
             <defs>
               <linearGradient id="overviewGradientLiquid" x1="0" y1="0" x2="0" y2="1">
@@ -2997,6 +3037,8 @@ function ResultsView({ scenario, result, readiness }: {
   readiness: NonNullable<ReturnType<typeof getReadinessSummary>>;
 }) {
   const tc = useThemeColors();
+  const nwChartHeight = useResponsiveChartHeight({ min: 260, max: 420, vhFraction: 0.38 });
+  const cashFlowChartHeight = useResponsiveChartHeight({ min: 240, max: 380, vhFraction: 0.36 });
 
   const [section, setSection] = useState<ResultSection>(
     () => (localStorage.getItem('retirement-result-section') as ResultSection) || DEFAULT_RESULT_SECTION,
@@ -3163,7 +3205,7 @@ function ResultsView({ scenario, result, readiness }: {
                     <button className={`seg-btn${nwView === 'nominal' ? ' active' : ''}`} onClick={() => setNwView('nominal')}>Nominal</button>
                   </div>
                 </div>
-                <ResponsiveContainer width="100%" height={400} aria-label={`Projected net worth over time, ${chartData.length} yearly data points from age ${chartData[0]?.age ?? ''} to ${chartData[chartData.length - 1]?.age ?? ''}`}>
+                <ResponsiveContainer width="100%" height={nwChartHeight} aria-label={`Projected net worth over time, ${chartData.length} yearly data points from age ${chartData[0]?.age ?? ''} to ${chartData[chartData.length - 1]?.age ?? ''}`}>
                   <AreaChart data={chartData}>
                     <defs>
                       <linearGradient id="detGradientLiquidNom" x1="0" y1="0" x2="0" y2="1">
@@ -3243,7 +3285,7 @@ function ResultsView({ scenario, result, readiness }: {
               {/* Cash flow chart */}
               <div className="chart-container">
                 <h3>Retirement Cash Flow (Income vs Expenses vs Withdrawals)</h3>
-                <ResponsiveContainer width="100%" height={340} aria-label={`Retirement cash flow from age ${cashFlowData[0]?.age ?? ''} onwards, ${cashFlowData.length} yearly data points`}>
+                <ResponsiveContainer width="100%" height={cashFlowChartHeight} aria-label={`Retirement cash flow from age ${cashFlowData[0]?.age ?? ''} onwards, ${cashFlowData.length} yearly data points`}>
                   <BarChart data={cashFlowData}>
                     <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
                     <XAxis dataKey="age" stroke={tc.textDim} />
@@ -3569,6 +3611,7 @@ function YearTable({ result, retirementAge, scenario, focusAge, onFocusConsumed 
 function CompareView({ results, scenarios }: { results: NonNullable<ReturnType<typeof runProjection>>[]; scenarios: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'] }) {
   const tc = useThemeColors();
   const tooltipStyle = { background: tc.panel, border: `1px solid ${tc.border}`, borderRadius: 8 };
+  const compareChartHeight = useResponsiveChartHeight({ min: 280, max: 480, vhFraction: 0.42 });
   // Need the store to offer a one-click "duplicate" from the empty state so a
   // user landing on Compare with a single scenario isn't staring at a lonely
   // card and a hidden diff table — they get a clear path to a 2nd scenario.
@@ -3695,7 +3738,7 @@ function CompareView({ results, scenarios }: { results: NonNullable<ReturnType<t
 
       <div className="chart-container">
         <h3>Net Worth Comparison (Today's Dollars)</h3>
-        <ResponsiveContainer width="100%" height={480} aria-label={`Net worth comparison across ${orderedScenarios.length} scenario${orderedScenarios.length === 1 ? '' : 's'}, in today's dollars, ${compareData.length} yearly data points`}>
+        <ResponsiveContainer width="100%" height={compareChartHeight} aria-label={`Net worth comparison across ${orderedScenarios.length} scenario${orderedScenarios.length === 1 ? '' : 's'}, in today's dollars, ${compareData.length} yearly data points`}>
           <LineChart data={compareData}>
             <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
             <XAxis dataKey="age" stroke={tc.textDim} />
