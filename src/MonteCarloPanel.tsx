@@ -22,6 +22,7 @@ import {
 import { runMonteCarloProjection } from './engine';
 import type { MonteCarloOptions, MonteCarloResult, Scenario } from './types';
 import { formatCurrency } from './format';
+import { DataTable, ChartDataDisclosure } from './App';
 
 type ThemeColor = string;
 interface ThemeColors {
@@ -457,7 +458,7 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
           {/* Confidence band chart */}
           <div className="chart-container">
             <h3>Confidence bands — net worth in today's dollars</h3>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={300} aria-label={`Monte Carlo confidence bands for net worth in today's dollars, ${bandData.length} yearly data points`}>
               <AreaChart data={bandData}>
                 <defs>
                   <linearGradient id="mcBandGradient" x1="0" y1="0" x2="0" y2="1">
@@ -505,6 +506,19 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
                 <Area type="monotone" dataKey="p50" stroke={colors.chart} strokeWidth={2} fill="none" />
               </AreaChart>
             </ResponsiveContainer>
+            <ChartDataDisclosure summaryLabel="View percentile bands as table" rowCount={bandData.length}>
+              <DataTable
+                rows={bandData as unknown as Record<string, unknown>[]}
+                caption="Confidence bands: P10 / P25 / P50 / P75 / P90 net worth by age, in today's dollars"
+                pageSize={60}
+                columns={[
+                  { key: 'age', label: 'Age' },
+                  { key: 'p10', label: 'P10', format: (v) => formatCurrency(v as number) },
+                  { key: 'p50', label: 'P50 (median)', format: (v) => formatCurrency(v as number) },
+                  { key: 'p90', label: 'P90', format: (v) => formatCurrency(v as number) },
+                ]}
+              />
+            </ChartDataDisclosure>
             <div className="mc-legend">
               <span className="mc-legend-swatch" style={{ background: 'linear-gradient(180deg, var(--chart), transparent)' }} />
               <span className="muted">P10–P90 band (80% of outcomes)</span>
@@ -520,7 +534,7 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
           {depletionHistogram.length > 0 && (
             <div className="chart-container">
               <h3>When do failed runs run out of money?</h3>
-              <ResponsiveContainer width="100%" height={200}>
+              <ResponsiveContainer width="100%" height={200} aria-label={`Depletion histogram: number of failed runs by age, ${depletionHistogram.length} bins`}>
                 <BarChart data={depletionHistogram}>
                   <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
                   <XAxis
@@ -550,6 +564,16 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
                   />
                 </BarChart>
               </ResponsiveContainer>
+              <ChartDataDisclosure summaryLabel="View depletion histogram as table" rowCount={depletionHistogram.length}>
+                <DataTable
+                  rows={depletionHistogram as unknown as Record<string, unknown>[]}
+                  caption="Depletion histogram: number of Monte Carlo runs that ran out of money at each age"
+                  columns={[
+                    { key: 'age', label: 'Depletion Age' },
+                    { key: 'count', label: '# of Runs', format: (v) => String(v) },
+                  ]}
+                />
+              </ChartDataDisclosure>
 
               {/* Drill-down: per-bin run table when a bar is selected. */}
               {selectedBinDetails && (
@@ -666,7 +690,7 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
           {successHistogram.length > 0 && (
             <div className="chart-container">
               <h3>What does a typical successful run look like?</h3>
-              <ResponsiveContainer width="100%" height={200}>
+              <ResponsiveContainer width="100%" height={200} aria-label={`Final-assets distribution: how much money successful runs ended with, ${successHistogram.length} bins`}>
                 <BarChart data={successHistogram}>
                   <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
                   <XAxis
@@ -693,6 +717,16 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
                   />
                 </BarChart>
               </ResponsiveContainer>
+              <ChartDataDisclosure summaryLabel="View final-assets distribution as table" rowCount={successHistogram.length}>
+                <DataTable
+                  rows={successHistogram as unknown as Record<string, unknown>[]}
+                  caption="Final-assets distribution: how much money successful runs ended with, in today's dollars"
+                  columns={[
+                    { key: 'label', label: 'Final Assets Band' },
+                    { key: 'count', label: '# of Runs', format: (v) => String(v) },
+                  ]}
+                />
+              </ChartDataDisclosure>
 
               {selectedSuccessBinDetails && (
                 <div className="mc-drilldown">

@@ -1485,7 +1485,7 @@ function OverviewPanel({ scenario, store }: {
 
       <div className="chart-container">
         <h3>📈 Projected Net Worth (Today's Dollars)</h3>
-        <ResponsiveContainer width="100%" height={240}>
+        <ResponsiveContainer width="100%" height={240} aria-label={`Projected net worth in today's dollars, ${miniChartData.length} yearly data points from age ${miniChartData[0]?.age ?? ''} to ${miniChartData[miniChartData.length - 1]?.age ?? ''}`}>
           <AreaChart data={miniChartData}>
             <defs>
               <linearGradient id="overviewGradientLiquid" x1="0" y1="0" x2="0" y2="1">
@@ -1525,6 +1525,18 @@ function OverviewPanel({ scenario, store }: {
             })}
           </AreaChart>
         </ResponsiveContainer>
+        <ChartDataDisclosure summaryLabel="View as data table" rowCount={miniChartData.length}>
+          <DataTable
+            rows={miniChartData}
+            caption="Projected net worth in today's dollars, by age"
+            columns={[
+              { key: 'age', label: 'Age' },
+              { key: 'liquid', label: 'Liquid Assets', format: (v) => formatCurrency(v as number) },
+              { key: 'propertyEquity', label: 'Home Equity', format: (v) => formatCurrency(v as number) },
+              { key: 'total', label: 'Total Net Worth', format: (v) => formatCurrency(v as number) },
+            ]}
+          />
+        </ChartDataDisclosure>
       </div>
 
       {/* Upcoming Life Events widget — shows the next few events so users can
@@ -3081,7 +3093,7 @@ function ResultsView({ scenario, result, readiness }: {
                     <button className={`seg-btn${nwView === 'nominal' ? ' active' : ''}`} onClick={() => setNwView('nominal')}>Nominal</button>
                   </div>
                 </div>
-                <ResponsiveContainer width="100%" height={320}>
+                <ResponsiveContainer width="100%" height={320} aria-label={`Projected net worth over time, ${chartData.length} yearly data points from age ${chartData[0]?.age ?? ''} to ${chartData[chartData.length - 1]?.age ?? ''}`}>
                   <AreaChart data={chartData}>
                     <defs>
                       <linearGradient id="detGradientLiquidNom" x1="0" y1="0" x2="0" y2="1">
@@ -3141,12 +3153,27 @@ function ResultsView({ scenario, result, readiness }: {
                     })}
                   </AreaChart>
                 </ResponsiveContainer>
+                <ChartDataDisclosure summaryLabel="View as data table" rowCount={chartData.length}>
+                  <DataTable
+                    rows={chartData}
+                    caption="Projected net worth by year, in both nominal and today's dollars"
+                    columns={[
+                      { key: 'age', label: 'Age' },
+                      { key: 'Liquid (Nominal)', label: 'Liquid (Nominal)', format: (v) => formatCurrency(v as number) },
+                      { key: 'Home Equity (Nominal)', label: 'Home Equity (Nominal)', format: (v) => formatCurrency(v as number) },
+                      { key: 'Total (Nominal)', label: 'Total (Nominal)', format: (v) => formatCurrency(v as number) },
+                      { key: 'Liquid (Today’s $)', label: 'Liquid (Today’s $)', format: (v) => formatCurrency(v as number) },
+                      { key: 'Home Equity (Today’s $)', label: 'Home Equity (Today’s $)', format: (v) => formatCurrency(v as number) },
+                      { key: 'Total (Today’s $)', label: 'Total (Today’s $)', format: (v) => formatCurrency(v as number) },
+                    ]}
+                  />
+                </ChartDataDisclosure>
               </div>
 
               {/* Cash flow chart */}
               <div className="chart-container">
                 <h3>Retirement Cash Flow (Income vs Expenses vs Withdrawals)</h3>
-                <ResponsiveContainer width="100%" height={280}>
+                <ResponsiveContainer width="100%" height={280} aria-label={`Retirement cash flow from age ${cashFlowData[0]?.age ?? ''} onwards, ${cashFlowData.length} yearly data points`}>
                   <BarChart data={cashFlowData}>
                     <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
                     <XAxis dataKey="age" stroke={tc.textDim} />
@@ -3164,6 +3191,18 @@ function ResultsView({ scenario, result, readiness }: {
                     <Bar dataKey="Expenses" fill={tc.red} />
                   </BarChart>
                 </ResponsiveContainer>
+                <ChartDataDisclosure summaryLabel="View as data table" rowCount={cashFlowData.length}>
+                  <DataTable
+                    rows={cashFlowData}
+                    caption="Retirement cash flow: income vs expenses vs withdrawals, by age"
+                    columns={[
+                      { key: 'age', label: 'Age' },
+                      { key: 'Income', label: 'Income', format: (v) => formatCurrency(v as number) },
+                      { key: 'Withdrawals', label: 'Withdrawals', format: (v) => formatCurrency(v as number) },
+                      { key: 'Expenses', label: 'Expenses', format: (v) => formatCurrency(v as number) },
+                    ]}
+                  />
+                </ChartDataDisclosure>
               </div>
 
               {/* Year-by-year table */}
@@ -3586,7 +3625,7 @@ function CompareView({ results, scenarios }: { results: NonNullable<ReturnType<t
 
       <div className="chart-container">
         <h3>Net Worth Comparison (Today's Dollars)</h3>
-        <ResponsiveContainer width="100%" height={380}>
+        <ResponsiveContainer width="100%" height={380} aria-label={`Net worth comparison across ${orderedScenarios.length} scenario${orderedScenarios.length === 1 ? '' : 's'}, in today's dollars, ${compareData.length} yearly data points`}>
           <LineChart data={compareData}>
             <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
             <XAxis dataKey="age" stroke={tc.textDim} />
@@ -3614,6 +3653,19 @@ function CompareView({ results, scenarios }: { results: NonNullable<ReturnType<t
             })}
           </LineChart>
         </ResponsiveContainer>
+        <ChartDataDisclosure summaryLabel="View as data table" rowCount={compareData.length}>
+          <DataTable
+            rows={compareData}
+            caption="Net worth comparison across scenarios in today's dollars"
+            columns={[
+              { key: 'age', label: 'Age' },
+              ...orderedScenarios.flatMap((s) => [
+                { key: `${s.name} (Liquid)` as never, label: `${s.name} (Liquid)`, format: (v: unknown) => formatCurrency(v as number) },
+                { key: `${s.name} (Total)` as never, label: `${s.name} (Total, incl. home)`, format: (v: unknown) => formatCurrency(v as number) },
+              ]),
+            ]}
+          />
+        </ChartDataDisclosure>
       </div>
     </div>
   );
@@ -3687,6 +3739,166 @@ function NumCellInput({ value, onChange }: { value: number; onChange: (v: number
       />
       {notice && <div className="input-snapback">{notice}</div>}
     </>
+  );
+}
+
+/** Accessible table that mirrors a Recharts chart's underlying data — the
+ *  screen-reader / low-vision / "let me copy the numbers" path. Used in
+ *  tandem with the chart above it via a <details> wrapper so the data is
+ *  always just one click away without dominating the page. */
+export type DataTableColumn<Row> = {
+  /** Object key to read from each row. */
+  key: keyof Row & string;
+  /** Column header text. */
+  label: string;
+  /** Optional formatter for the cell value. Defaults to String(value). */
+  format?: (v: Row[keyof Row & string]) => string;
+  /** Whether the user can click this column header to sort. Default true. */
+  sortable?: boolean;
+  /** Right-align numeric columns (Default true when format is provided). */
+  align?: 'left' | 'right';
+};
+
+export function DataTable<Row extends Record<string, unknown>>({
+  rows,
+  columns,
+  pageSize,
+  caption,
+  emptyMessage = 'No data.',
+}: {
+  rows: Row[];
+  columns: DataTableColumn<Row>[];
+  /** Rows per page. If undefined, no pagination. The "Show all" toggle
+   *  appears in the footer when pageSize is set. */
+  pageSize?: number;
+  caption?: string;
+  emptyMessage?: string;
+}) {
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [showAll, setShowAll] = useState(false);
+
+  // Sort a copy of the rows by the current sort key (numeric compare when
+  // both sides are numbers, otherwise lexical). Stable on ties.
+  const sorted = (() => {
+    if (!sortKey) return rows;
+    const copy = [...rows];
+    copy.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      let cmp: number;
+      if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv;
+      else cmp = String(av ?? '').localeCompare(String(bv ?? ''));
+      if (cmp === 0) return 0;
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return copy;
+  })();
+
+  // Pagination: if a pageSize is set and showAll is false, slice to the
+  // current page. Otherwise show everything.
+  const visible = (() => {
+    if (pageSize === undefined || showAll) return sorted;
+    return sorted.slice(0, pageSize);
+  })();
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  if (rows.length === 0) {
+    return <p className="muted">{emptyMessage}</p>;
+  }
+
+  return (
+    <div className="data-table-disclosure">
+      <table className="data-table data-table-chart-mirror">
+        {caption && <caption className="visually-hidden">{caption}</caption>}
+        <thead>
+          <tr>
+            {columns.map((col) => {
+              const sortable = col.sortable !== false;
+              const align = col.align ?? (col.format ? 'right' : 'left');
+              const isSorted = sortKey === col.key;
+              const ariaSort = !sortable ? undefined : isSorted ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none';
+              return (
+                <th key={col.key} scope="col" className={align === 'right' ? 'text-right' : undefined} aria-sort={ariaSort}>
+                  {sortable ? (
+                    <button
+                      type="button"
+                      className="data-table-sort-btn"
+                      onClick={() => handleSort(col.key)}
+                      aria-label={`Sort by ${col.label}, currently ${isSorted ? sortDir + 'ending' : 'unsorted'}`}
+                    >
+                      {col.label}
+                      <span className="data-table-sort-indicator" aria-hidden="true">
+                        {isSorted ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+                      </span>
+                    </button>
+                  ) : col.label}
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {visible.map((row, i) => (
+            <tr key={i}>
+              {columns.map((col) => {
+                const raw = row[col.key];
+                const text = col.format ? col.format(raw) : String(raw ?? '');
+                const align = col.align ?? (col.format ? 'right' : 'left');
+                return (
+                  <td key={col.key} className={align === 'right' ? 'text-right' : undefined}>
+                    {text}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {pageSize !== undefined && sorted.length > pageSize && (
+        <div className="data-table-pagination">
+          <span className="muted">
+            Showing {visible.length} of {sorted.length} rows
+          </span>
+          <button type="button" className="btn btn-sm" onClick={() => setShowAll(!showAll)}>
+            {showAll ? 'Show first ' + pageSize : 'Show all ' + sorted.length}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Wraps a chart's mirror table in a <details> so the table is collapsed
+ *  by default and doesn't compete with the chart visually. Helper for
+ *  consistent presentation across all 7 charts. */
+export function ChartDataDisclosure({
+  summaryLabel,
+  rowCount,
+  children,
+}: {
+  summaryLabel: string;
+  rowCount: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="chart-data-disclosure">
+      <summary>
+        <span aria-hidden="true">📋</span> {summaryLabel}
+        {rowCount > 0 && <span className="muted"> ({rowCount} rows)</span>}
+      </summary>
+      <div className="chart-data-disclosure-body">
+        {children}
+      </div>
+    </details>
   );
 }
 

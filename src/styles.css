@@ -1721,6 +1721,103 @@ input[type='checkbox'] {
   background: var(--panel-hover);
 }
 
+/* ============================================================
+   CHART-MIRROR DATA TABLES
+   Below every Recharts chart, a <details>-wrapped accessible HTML table
+   that exposes the same data the chart draws. Inherits .data-table
+   styling; the rules below add:
+   - The collapsed disclosure wrapper.
+   - Sortable header buttons (rendered as plain buttons; the cells inside
+     are styled by .data-table th/td above).
+   - Pagination footer.
+   ============================================================ */
+
+.chart-data-disclosure {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.chart-data-disclosure > summary {
+  padding: 8px 12px;
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-data-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.chart-data-disclosure > summary:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+.chart-data-disclosure[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.chart-data-disclosure-body {
+  padding: 4px;
+  overflow-x: auto;
+}
+
+.data-table-chart-mirror {
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table-sort-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.data-table-sort-btn:hover {
+  color: var(--text);
+}
+
+.data-table-sort-indicator {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.data-table-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  font-size: var(--text-xs);
+  border-top: 1px solid var(--border);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Table inputs */
 .table-input {
   width: 100%;
