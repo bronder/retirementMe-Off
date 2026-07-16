@@ -497,23 +497,27 @@ export function AiChat() {
             </div>
           )}
 
-          <div className="ai-chat-messages">
-            {showSuggestions && messages.length > 0 && !showSettings && (
-              <div className="ai-chat-suggestions-panel">
-                <div className="ai-chat-suggestions-label">Try asking</div>
-                <div className="ai-chat-quick-actions">
-                  {QUICK_ACTIONS.map((qa) => (
-                    <button
-                      key={qa.id}
-                      className="ai-chat-quick-btn"
-                      onClick={() => handlePromptClick(qa.prompt)}
-                    >
-                      {qa.label}
-                    </button>
-                  ))}
-                </div>
+          {/* Suggestions popover — pinned OUTSIDE the scrollable messages
+              region (same fix as the clear-confirm bar above) so the 💡
+              button stays useful in a long, scrolled conversation. */}
+          {showSuggestions && messages.length > 0 && !showSettings && (
+            <div className="ai-chat-suggestions-panel">
+              <div className="ai-chat-suggestions-label">Try asking</div>
+              <div className="ai-chat-quick-actions">
+                {QUICK_ACTIONS.map((qa) => (
+                  <button
+                    key={qa.id}
+                    className="ai-chat-quick-btn"
+                    onClick={() => handlePromptClick(qa.prompt)}
+                  >
+                    {qa.label}
+                  </button>
+                ))}
               </div>
-            )}
+            </div>
+          )}
+
+          <div className="ai-chat-messages">
 
             {messages.length === 0 && !showSettings && (
               <div className="ai-chat-welcome">
