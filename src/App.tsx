@@ -3283,26 +3283,40 @@ function YearTable({ result, retirementAge, scenario, focusAge, onFocusConsumed 
   const rowRefs = useRef<Record<number, HTMLTableRowElement | null>>({});
   const [highlightAge, setHighlightAge] = useState<number | null>(null);
 
+  // Toggle a row open/closed. When the user collapses the row that was just
+  // highlighted by a card click, also clear the highlight — the persistent
+  // outline otherwise has no obvious way to be dismissed.
+  const toggleRow = (age: number) => {
+    if (expandedAge === age) {
+      setExpandedAge(null);
+      if (highlightAge === age) setHighlightAge(null);
+    } else {
+      setExpandedAge(age);
+    }
+  };
+
   // When a focusAge arrives (from a headline card click), expand the row,
-  // scroll it into view, and flash a highlight so the user sees exactly
-  // which row backs the number they clicked.
+  // scroll it into view, and attach a highlight so the user sees exactly
+  // which row backs the number they clicked. The highlight is now persistent
+  // (no auto-clear timer) — it's only removed when the user clicks another
+  // card OR manually collapses the highlighted row. Previously a 2.5s timer
+  // raced screen-reader announcements and slow-scroll users.
   useEffect(() => {
     if (focusAge === null || focusAge === undefined) return;
     setExpandedAge(focusAge);
     setHighlightAge(focusAge);
     // Defer the scroll until React has rendered the row (and potentially
     // widened the data range via focusOutsideWindow).
-    const t = setTimeout(() => {
+    const scrollT = setTimeout(() => {
       rowRefs.current[focusAge]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 60);
-    // Clear the highlight after ~2.5s and tell the parent we consumed it.
-    const t2 = setTimeout(() => {
-      setHighlightAge(null);
-      onFocusConsumed?.();
-    }, 2500);
-    return () => { clearTimeout(t); clearTimeout(t2); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusAge]);
+    // Reset the parent's focusAge shortly after so re-clicking the same card
+    // can re-fire this effect (without this, focusAge stays at the same
+    // value and React skips the effect). The visual highlight is independent
+    // of focusAge, so it persists across the reset.
+    const consumeT = setTimeout(() => onFocusConsumed?.(), 800);
+    return () => { clearTimeout(scrollT); clearTimeout(consumeT); };
+  }, [focusAge, onFocusConsumed]);
 
   return (
     <div className="panel">
@@ -3338,11 +3352,11 @@ function YearTable({ result, retirementAge, scenario, focusAge, onFocusConsumed 
                   role="button"
                   aria-expanded={expandedAge === y.age}
                   aria-label={`Age ${y.age}, ${expandedAge === y.age ? 'collapse' : 'expand'} details`}
-                  onClick={() => setExpandedAge(expandedAge === y.age ? null : y.age)}
+                  onClick={() => toggleRow(y.age)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      setExpandedAge(expandedAge === y.age ? null : y.age);
+                      toggleRow(y.age);
                     }
                   }}
                 >
