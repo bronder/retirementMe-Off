@@ -29,6 +29,9 @@ npm-debug.log*
 # ZCode agent session data (local only)
 .zcode/
 
+# Playwright MCP browser-test artifacts (local only)
+.playwright-mcp/
+
 # Captured dev-server output from parallel sessions
 dev*-out.txt
 dev*-err.txt
