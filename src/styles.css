@@ -3949,6 +3949,16 @@ tr.drag-over {
   line-height: 1.5;
 }
 
+/* Inline hint text shown below confusing property-card fields (mortgage
+ * rate, term, appreciation, plan-action). Mirrors the muted look used
+ * elsewhere for guidance text. */
+.prop-hint {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
 /* === Impact summary sentence === */
 .prop-impact-summary {
   font-size: var(--text-sm);

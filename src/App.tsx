@@ -2062,6 +2062,7 @@ function PropertyCard({ prop, scenario, store }: {
           <div className="prop-field">
             <label>Expected annual home value growth</label>
             <PctCellInput value={prop.annualAppreciation} onChange={(v) => store.updateProperty(scenario.id, prop.id, { annualAppreciation: v })} />
+            <div className="prop-hint">Historical US average is ~3%. Above 5% is optimistic.</div>
           </div>
         </div>
       </div>
@@ -2087,6 +2088,9 @@ function PropertyCard({ prop, scenario, store }: {
       {/* === Step 2: Plan decision (moved UP) === */}
       <div className="prop-step prop-step-decision">
         <div className="prop-step-label">② What's your plan for this property?</div>
+        <div className="prop-hint" style={{ marginBottom: 10 }}>
+          <strong>Keep</strong> holds it through retirement. <strong>Sell</strong> ends ownership at a chosen age. <strong>Sell &amp; Buy</strong> moves you to a different home (adds purchase fields). <strong>Undecided</strong> pauses the projection until you choose.
+        </div>
         <div className="prop-plan-grid">
           {PLAN_ACTION_LABELS.map((opt) => (
             <button
@@ -2156,6 +2160,7 @@ function PropertyCard({ prop, scenario, store }: {
             <div className="prop-field">
               <label>New mortgage rate</label>
               <PctCellInput value={prop.mortgageRate ?? 0.065} onChange={(v) => store.updateProperty(scenario.id, prop.id, { mortgageRate: v })} />
+              <div className="prop-hint">Typical 15–30 year fixed: ~5–7%. Older loans may be lower.</div>
             </div>
             <PropMortgageTermField prop={prop} scenario={scenario} store={store} />
           </div>
@@ -3800,6 +3805,7 @@ function PropMortgageTermField({ prop, scenario, store }: {
         onBlur={handleBlur}
       />
       {notice && <div className="input-snapback">{notice}</div>}
+      <div className="prop-hint">Most US mortgages are 15 or 30 years.</div>
     </div>
   );
 }
