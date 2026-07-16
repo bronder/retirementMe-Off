@@ -14,7 +14,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
-import { usePlanStore, ASSUMPTION_BOUNDS } from './store';
+import { usePlanStore, ASSUMPTION_BOUNDS, flushDebouncedStorage } from './store';
 import { runProjection, getReadinessSummary, computeAnnualMortgage, mortgagePaymentAtAge } from './engine';
 import { ACCOUNT_TAX_TREATMENT } from './types';
 import type { AccountType, IncomeType, ExpenseCategory, EventType, PropertyType, Property, LifeEvent } from './types';
@@ -326,65 +326,64 @@ function ThemePicker({ theme, setTheme }: { theme: Theme; setTheme: (t: Theme) =
 }
 
 /**
- * Save indicator — gives the user confidence their edits persist.
+ * Save indicator — gives the user confidence their edits persist, without
+ * flickering on every keystroke.
  *
- * Subscribes to the serialized plan (a stable JSON snapshot) so ANY nested
- * change — account balance, expense amount, scenario name — is detected.
+ * Subscribes to a JSON snapshot of the plan so any nested change — account
+ * balance, expense amount, scenario name — is detected.
  *
- * Honesty note: the zustand `persist` middleware writes to localStorage
- * synchronously on every state change, so by the time this component
- * re-renders with a new snapshot the write is already complete. There's no
- * real "in flight" state to show, so we skip the theatrical "Saving…" phase
- * that the previous version faked with a 250ms timer and go straight to
- * "Saved ✓", which fades after 2s to a quiet "Saved · {relative time}" that
- * stays visible as an ongoing trust signal.
+ * Visual model:
+ * - Before the user's first edit, render nothing (don't fake a "saved" state).
+ * - During active typing, render a dim "Saved · 3s ago" label (the store's
+ *   storage layer is also debounced, so nothing has actually hit disk yet —
+ *   we don't lie about it).
+ * - After a 500ms quiet pause following a change, transition to a bright
+ *   "✓ Saved" for 2s, then back to the dim label with the updated timestamp.
+ *   Single 500ms gate keeps the UI from flashing per keystroke.
+ *
+ * The `beforeunload` listener in App.tsx calls flushDebouncedStorage() so
+ * the user's most recent edits still land on disk if they close the tab
+ * within the 500ms debounce window.
  */
 function SaveIndicator() {
   const plan = usePlanStore((s) => s.plan);
   // Stable snapshot that changes on any (deep) plan mutation.
   const snapshot = JSON.stringify(plan);
-  const [phase, setPhase] = useState<'idle' | 'saved'>('idle');
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const firstRun = useRef(true);
 
+  // Only mark the save after a 500ms quiet pause. If the user is still
+  // typing, each new snapshot resets the timer — so a 30-character burst
+  // produces exactly one "Saved" flash, at the end.
   useEffect(() => {
-    // Skip the very first run so we don't flash "Saved" on initial load.
     if (firstRun.current) {
       firstRun.current = false;
       return;
     }
-    // The persist middleware has already written synchronously by now — no
-    // async to await, so go straight to the confirmed "Saved" state.
-    setPhase('saved');
-    setSavedAt(Date.now());
+    const timer = setTimeout(() => setSavedAt(Date.now()), 500);
+    return () => clearTimeout(timer);
   }, [snapshot]);
 
-  // After "saved", fade to idle after 2s so the checkmark doesn't linger.
+  // Refresh the relative-time label every 30s while idle.
   useEffect(() => {
-    if (phase !== 'saved') return;
-    const t2 = setTimeout(() => setPhase('idle'), 2000);
-    return () => clearTimeout(t2);
-  }, [phase]);
+    const t = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, []);
 
-  // Relative "x ago" tick while idle, refreshed every 30s.
-  const [, force] = useState(0);
-  useEffect(() => {
-    if (phase !== 'idle') return;
-    const t3 = setInterval(() => force((n) => n + 1), 30000);
-    return () => clearInterval(t3);
-  }, [phase]);
-
-  if (phase === 'idle') {
-    if (savedAt === null) return null;
+  if (savedAt === null) return null;
+  // Fresh (< 2s since last quiet pause): bright "✓ Saved".
+  // Older: dim "✓ Saved · 3m ago" as an ongoing trust signal.
+  if (now - savedAt < 2000) {
     return (
-      <span className="save-indicator save-indicator-idle" title={`Last saved ${new Date(savedAt).toLocaleTimeString()}`}>
-        <span aria-hidden="true">✓</span> Saved · {relativeTime(savedAt)}
+      <span className="save-indicator save-indicator-saved">
+        <span aria-hidden="true">✓</span> Saved
       </span>
     );
   }
   return (
-    <span className="save-indicator save-indicator-saved">
-      <span aria-hidden="true">✓</span> Saved
+    <span className="save-indicator save-indicator-idle" title={`Last saved ${new Date(savedAt).toLocaleTimeString()}`}>
+      <span aria-hidden="true">✓</span> Saved · {relativeTime(savedAt)}
     </span>
   );
 }
@@ -614,6 +613,15 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('retirement-tab', tab);
   }, [tab]);
+
+  // Flush any pending debounced localStorage write synchronously before the
+  // page unloads. Without this, closing the tab within ~500ms of an edit
+  // could drop the most recent change on disk.
+  useEffect(() => {
+    const handler = () => { flushDebouncedStorage(); };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, []);
 
   // Close menu on outside click
   useEffect(() => {

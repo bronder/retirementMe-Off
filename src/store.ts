@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Plan, Scenario, Account, IncomeSource, Expense, LifeEvent, Assumptions, Property } from './types';
 import { defaultPlan, defaultScenario, createId, PLAN_VERSION } from './defaults';
 import type { ChatMessage, ScenarioSuggestion } from './ai';
@@ -8,6 +8,77 @@ import type { ChatMessage, ScenarioSuggestion } from './ai';
  *  older turns are dropped on append. Matches the cap applied at send time
  *  so the API request and the visible / persisted history agree. */
 export const MAX_CHAT_HISTORY = 40;
+
+/** Storage debounce in ms. Matches SaveIndicator's visual debounce so the
+ *  "✓ Saved" flash and the actual write land at the same moment. */
+export const STORAGE_DEBOUNCE_MS = 500;
+
+/** Batched localStorage adapter. The Zustand persist middleware writes on
+ *  every store mutation, which would mean one localStorage.setItem per
+ *  keystroke while a user is typing. Collapsing the writes into a single
+ *  call after a quiet pause reduces I/O dramatically and (importantly)
+ *  keeps the SaveIndicator from flickering on every character.
+ *
+ *  On `beforeunload` the pending write must be flushed synchronously, or
+ *  the user's last edits can be lost when the tab closes. Call
+ *  `flushDebouncedStorage()` from a window 'beforeunload' listener; the
+ *  store and App.tsx wire this up below. */
+let pendingWrite: { key: string; value: string } | null = null;
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+function applyWrite() {
+  if (pendingWrite && typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.setItem(pendingWrite.key, pendingWrite.value);
+    } catch {
+      /* quota or privacy mode — ignore, in-memory state still works */
+    }
+  }
+  pendingWrite = null;
+  debounceTimer = null;
+}
+
+export function flushDebouncedStorage(): void {
+  if (debounceTimer !== null) {
+    clearTimeout(debounceTimer);
+    applyWrite();
+  }
+}
+
+export function createDebouncedStorage(_delayMs: number) {
+  // The delayMs is captured at module load via STORAGE_DEBOUNCE_MS. The
+  // unused parameter keeps the createJSONStorage(() => …) factory signature
+  // forgiving if we ever want per-store timings.
+  const delay = STORAGE_DEBOUNCE_MS;
+  return {
+    getItem: (key: string) => {
+      // A read of the same key as a pending write races — flush first so the
+      // read sees the latest value rather than a stale one.
+      if (pendingWrite && pendingWrite.key === key) {
+        if (debounceTimer !== null) clearTimeout(debounceTimer);
+        applyWrite();
+      }
+      return typeof window !== 'undefined' && window.localStorage
+        ? window.localStorage.getItem(key)
+        : null;
+    },
+    setItem: (key: string, value: string) => {
+      pendingWrite = { key, value };
+      if (debounceTimer !== null) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(applyWrite, delay);
+    },
+    removeItem: (key: string) => {
+      if (pendingWrite && pendingWrite.key === key) pendingWrite = null;
+      if (debounceTimer !== null) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try { window.localStorage.removeItem(key); } catch { /* ignore */ }
+      }
+    },
+  };
+}
 
 /**
  * Single-slot undo for destructive operations (delete + reset). We snapshot
@@ -710,6 +781,11 @@ export const usePlanStore = create<PlanStore>()(
     {
       name: 'retirement-planner',
       version: 8,
+      // Batch localStorage writes through a 500ms debounced adapter so rapid
+      // edits (typing into a numeric input, for example) collapse into a single
+      // write. See createDebouncedStorage above for the flush-beforeunload
+      // contract that protects the most recent edits on tab close.
+      storage: createJSONStorage(() => createDebouncedStorage(STORAGE_DEBOUNCE_MS)),
       partialize: (state) => ({
         plan: state.plan,
         activeScenarioId: state.activeScenarioId,
