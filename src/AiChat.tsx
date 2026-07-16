@@ -14,6 +14,7 @@ import {
   stripScenarioBlock,
   stripThinkBlocks,
   type ChatMessage,
+  type ScenarioSuggestion,
 } from './ai';
 import { formatPercent } from './format';
 
@@ -108,50 +109,93 @@ export function AiChat() {
         timestamp: Date.now(),
       };
 
-      appendChatMessage(userMsg);
-      setInput('');
-      setLoading(true);
-      setError(null);
+        appendChatMessage(userMsg);
+        setInput('');
+        setLoading(true);
+        setError(null);
 
-      try {
-        const results = store.plan.scenarios.map((s) => runProjection(s));
-        const planContext = buildPlanContext(store.plan, results, store.activeScenarioId);
-
-        // Send prior turns with their ORIGINAL raw content (not the
-        // stripped display version) so the model keeps full context.
-        const historyForApi = messages.map((m) => ({
-          role: m.role as 'user' | 'assistant',
-          content: m.rawContent ?? m.content,
-        }));
-        historyForApi.push({ role: 'user', content: text.trim() });
-
-        const apiMessages = [
-          { role: 'system' as const, content: SYSTEM_PROMPT },
-          { role: 'system' as const, content: `Here is the user's current plan data:\n\n${planContext}` },
-          ...historyForApi,
-        ];
-
-        const response = await callAI(store.aiProvider, activeKey, store.aiModel, apiMessages, store.aiCustomEndpoint);
-
-        const suggestion = parseScenarioSuggestion(response);
-        const displayContent = stripScenarioBlock(stripThinkBlocks(response));
-
-        const assistantMsg: ChatMessage = {
+        // Pre-create a placeholder assistant message so the user sees a
+        // cursor immediately and tokens can stream in as they arrive.
+        const placeholder: ChatMessage = {
           role: 'assistant',
-          content: displayContent,
-          rawContent: response,
+          content: '',
           timestamp: Date.now(),
-          suggestion,
         };
+        appendChatMessage(placeholder);
 
-        appendChatMessage(assistantMsg);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Failed to get AI response';
-        setError(msg);
-      } finally {
-        setLoading(false);
-      }
-    },
+        try {
+          const results = store.plan.scenarios.map((s) => runProjection(s));
+          const planContext = buildPlanContext(store.plan, results, store.activeScenarioId);
+
+          // Send prior turns with their ORIGINAL raw content (not the
+          // stripped display version) so the model keeps full context.
+          const historyForApi = messages.map((m) => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.rawContent ?? m.content,
+          }));
+          historyForApi.push({ role: 'user', content: text.trim() });
+
+          const apiMessages = [
+            { role: 'system' as const, content: SYSTEM_PROMPT },
+            { role: 'system' as const, content: `Here is the user's current plan data:\n\n${planContext}` },
+            ...historyForApi,
+          ];
+
+          // Stream chunks from the API; update the placeholder message after
+          // each one so the user sees the answer build in real time.
+          let accumulated = '';
+          let suggestion: ScenarioSuggestion | undefined;
+          for await (const chunk of callAI(
+            store.aiProvider,
+            activeKey,
+            store.aiModel,
+            apiMessages,
+            store.aiCustomEndpoint,
+          )) {
+            accumulated += chunk;
+            // Re-check the scenario block on each chunk — the model may emit
+            // a complete <scenario> tag mid-stream and we want the "Apply"
+            // card to appear as soon as it's parseable.
+            const detected = parseScenarioSuggestion(accumulated);
+            if (detected) suggestion = detected;
+            const display = stripScenarioBlock(stripThinkBlocks(accumulated));
+            usePlanStore.setState((s) => {
+              const next = [...s.chatHistory];
+              const last = next[next.length - 1];
+              if (last) {
+                next[next.length - 1] = {
+                  ...last,
+                  content: display,
+                  rawContent: accumulated,
+                  suggestion,
+                };
+              }
+              return { chatHistory: next };
+            });
+          }
+        } catch (e) {
+          // Stream failed mid-answer. Show what we got so far plus the error
+          // footer, rather than discarding the partial response.
+          const msg = e instanceof Error ? e.message : 'Stream interrupted';
+          setError(msg);
+          usePlanStore.setState((s) => {
+            const next = [...s.chatHistory];
+            const last = next[next.length - 1];
+            if (last) {
+              const partial = stripScenarioBlock(stripThinkBlocks(last.rawContent ?? ''));
+              next[next.length - 1] = {
+                ...last,
+                content: partial
+                  ? `${partial}\n\n⚠️ ${msg}`
+                  : `⚠️ ${msg}`,
+              };
+            }
+            return { chatHistory: next };
+          });
+        } finally {
+          setLoading(false);
+        }
+      },
     [messages, loading, store, appendChatMessage],
   );
 

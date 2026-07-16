@@ -256,19 +256,29 @@ Guidelines:
 - If you notice potential issues (unrealistic returns, missing expenses, tax inefficiencies), flag them clearly.`;
 
 /**
- * Call an AI provider's chat completions API.
- * Supports MiniMax, Z.ai (GLM), and any custom OpenAI-compatible endpoint.
- * When providerId is 'custom', the customEndpoint is used as the URL and
- * model is whatever the user typed (since we can't list models for an
- * arbitrary endpoint).
+ * Call an AI provider's chat completions API in **streaming** mode.
+ *
+ * Returns an `AsyncIterable<string>` that yields content chunks as they arrive
+ * from the model — typically every 30-100ms. The caller pulls chunks via
+ * `for await (const chunk of stream)` and decides what to do with each
+ * (typically: append to a placeholder message in the chat history).
+ *
+ * Works against any OpenAI-compatible endpoint that supports server-sent
+ * events (`stream: true` in the request body). No-tool, no-tools — just text.
+ *
+ * For non-streaming callers (tests, sync code), wrap with `await streamToString()`.
+ *
+ * The HTTP error-extraction logic mirrors the pre-streaming version: a
+ * 4xx/5xx response throws before any chunks are read.
  */
-export async function callAI(
+export async function* callAI(
   providerId: string,
   apiKey: string,
   model: string,
   messages: { role: 'user' | 'assistant' | 'system'; content: string }[],
   customEndpoint = '',
-): Promise<string> {
+  signal?: AbortSignal,
+): AsyncGenerator<string, void, void> {
   const provider = getProvider(providerId);
   const endpoint = resolveEndpoint(providerId, customEndpoint);
   if (!endpoint) {
@@ -285,7 +295,9 @@ export async function callAI(
       messages,
       temperature: 0.7,
       max_tokens: 1500,
+      stream: true,
     }),
+    signal,
   });
 
   if (!response.ok) {
@@ -312,40 +324,62 @@ export async function callAI(
     throw new Error(msg);
   }
 
-  const data = await response.json();
-
-  const choices = data.choices;
-  if (choices && Array.isArray(choices) && choices.length > 0) {
-    const first = choices[0];
-    const content = first?.message?.content ?? first?.text ?? first?.delta?.content ?? '';
-    if (content) return content;
-    // Choice exists but content is empty — inspect why
-    const finishReason = first?.finish_reason ?? 'unknown';
-    throw new Error(
-      `Model returned no content. finish_reason: ${finishReason}. ` +
-      `Try a different model or increase max_tokens.`,
-    );
+  if (!response.body) {
+    throw new Error('No response body received (streaming unsupported?).');
   }
 
-  const fallbackContent = data.content ?? data.text ?? data.output ?? data.result;
-  if (typeof fallbackContent === 'string') return fallbackContent;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
 
-  if (data.created_message?.content) {
-    const msg = data.created_message.content;
-    if (typeof msg === 'string') return msg;
-    if (Array.isArray(msg)) {
-      const text = msg.map((p: { text?: string; content?: string }) => p.text ?? p.content ?? '').join('\n');
-      if (text) return text;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE events are separated by a blank line (\n\n). Each event's
+      // lines start with "data: " — parse each in turn and yield any
+      // delta.content chunks. `[DONE]` is the terminal sentinel.
+      let sep: number;
+      let safety = 0;
+      while ((sep = buffer.indexOf('\n\n')) !== -1) {
+        if (++safety > 100) break; // paranoia: avoid infinite loop on bad framing
+        const event = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        for (const line of event.split('\n')) {
+          if (!line.startsWith('data:')) continue;
+          const payload = line.slice(5).trim();
+          if (!payload || payload === '[DONE]') continue;
+          try {
+            const json = JSON.parse(payload);
+            const delta = json.choices?.[0]?.delta?.content;
+            if (typeof delta === 'string' && delta) yield delta;
+          } catch {
+            // Malformed chunk — skip silently rather than aborting mid-stream.
+          }
+        }
+      }
     }
+  } finally {
+    try { reader.releaseLock(); } catch { /* already released */ }
   }
+}
 
-  const responseKeys = Object.keys(data).join(', ');
-  const errorMsg = data.error?.message || data.message || data.base_resp?.status_msg || '';
-  throw new Error(
-    `No response content received. Response keys: [${responseKeys}]` +
-    (errorMsg ? `. Error: ${errorMsg}` : '') +
-    `. Check that your API key and model name are correct for ${provider.label}.`,
-  );
+/** Consume a callAI stream into a single string. Useful for tests, sync
+ *  code paths, or any caller that doesn't want to deal with chunks. */
+export async function streamToString(
+  providerId: string,
+  apiKey: string,
+  model: string,
+  messages: { role: 'user' | 'assistant' | 'system'; content: string }[],
+  customEndpoint = '',
+): Promise<string> {
+  let out = '';
+  for await (const chunk of callAI(providerId, apiKey, model, messages, customEndpoint)) {
+    out += chunk;
+  }
+  return out;
 }
 
 /**
