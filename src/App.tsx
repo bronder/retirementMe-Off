@@ -724,6 +724,15 @@ export default function App() {
         <div className="header-actions">
           <SaveIndicator />
           <ResourcesPicker />
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={handleExportMarkdown}
+            title="Export plan as Notes (Markdown) — works with Obsidian or any notes app"
+            aria-label="Export plan notes"
+          >
+            📝 Notes
+          </button>
           <ThemePicker theme={theme} setTheme={setTheme} />
           <div className="menu-wrapper" ref={menuRef}>
             <button className="btn btn-sm menu-trigger" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">☰ Menu</button>
@@ -735,8 +744,8 @@ export default function App() {
                 <button className="menu-item" onClick={() => { handleExport(); setMenuOpen(false); }}>
                   📄 Export JSON
                 </button>
-                <button className="menu-item" onClick={() => { handleExportMarkdown(); setMenuOpen(false); }}>
-                  📝 Export Markdown
+                <button className="menu-item" onClick={() => { handleExportMarkdown(); setMenuOpen(false); }} title="Markdown for Obsidian or any notes app">
+                  📝 Export Notes
                 </button>
                 <div className="menu-divider" />
                 <ResetPlanMenuItem onReset={() => { store.resetPlan(); setMenuOpen(false); }} />
