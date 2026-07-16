@@ -358,7 +358,7 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
         </div>
 
         <div className="mc-control">
-          <label htmlFor="mc-sigma">Return σ (volatility)</label>
+          <label htmlFor="mc-sigma">Market volatility (σ)</label>
           <select
             id="mc-sigma"
             className="table-select"
@@ -385,8 +385,9 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
       </div>
 
       <p className="mc-help muted">
-        Each run samples annual returns from a log-normal distribution calibrated to your account
-        expected returns. Showing how often your plan survives across {numRuns.toLocaleString()} trials.
+        Each run simulates a different sequence of yearly market returns around your expected average.
+        Higher volatility means a wider spread of possible outcomes. Showing how often your plan
+        survives across {numRuns.toLocaleString()} trials.
       </p>
 
       {/* === Idle state === */}
@@ -421,6 +422,15 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
                 {run.result.successCount.toLocaleString()} of {run.result.numRuns.toLocaleString()} runs funded
                 retirement through {scenario.assumptions.endAge}.
               </div>
+              {/* Sampling noise floor — the 95% Wilson CI on the success rate.
+                  Each manual re-run redraws random returns, so the headline
+                  rate naturally shifts a little between runs. Showing the CI
+                  (±X%) up front turns that shift into expected, quantified
+                  variance instead of a confusing "why did my number change?" */}
+              <div className="mc-summary-sub mc-ci" title="95% confidence interval — the range the true success rate likely falls within, given the number of runs.">
+                ±{((run.result.successRateCI.upper - run.result.successRateCI.lower) / 2 * 100).toFixed(1)}% margin
+                <span className="muted"> · 95% confidence</span>
+              </div>
               <div className="mc-tone-pill" style={{ background: tone.color }}>
                 {tone.label}
               </div>
@@ -453,7 +463,7 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
               <div className="mc-summary-label">Simulation</div>
               <div className="mc-summary-value">{run.result.numRuns.toLocaleString()} trials</div>
               <div className="mc-summary-sub muted">
-                σ = {(returnStdDev * 100).toFixed(0)}% volatility · computed in {run.result.elapsedMs.toFixed(0)} ms
+                {(returnStdDev * 100).toFixed(0)}% volatility · computed in {run.result.elapsedMs.toFixed(0)} ms
               </div>
             </div>
           </div>
@@ -512,7 +522,7 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
             <ChartDataDisclosure summaryLabel="View percentile bands as table" rowCount={bandData.length}>
               <DataTable
                 rows={bandData as unknown as Record<string, unknown>[]}
-                caption="Confidence bands: P10 / P25 / P50 / P75 / P90 net worth by age, in today's dollars"
+                caption="Confidence bands: P10 / P50 / P90 net worth by age, in today's dollars"
                 pageSize={60}
                 columns={[
                   { key: 'age', label: 'Age' },
@@ -533,8 +543,11 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
           {/* Depletion histogram — only if any runs depleted. Bars are
               clickable: selecting one surfaces a per-bin run breakdown
               beneath the chart (count, share of failures, median & range
-              of final assets, plus a per-run table). */}
-          {depletionHistogram.length > 0 && (
+              of final assets, plus a per-run table). When EVERY run
+              succeeds, we show a positive empty-state note instead of
+              letting the section vanish silently (a disappearing section
+              reads as broken, not as good news). */}
+          {depletionHistogram.length > 0 ? (
             <div className="chart-container">
               <h3>When do failed runs run out of money?</h3>
               <ResponsiveContainer width="100%" height={200} aria-label={`Depletion histogram: number of failed runs by age, ${depletionHistogram.length} bins`}>
@@ -683,14 +696,25 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
                 </div>
               )}
             </div>
+          ) : (
+            <div className="mc-empty mc-empty-good">
+              <span className="mc-empty-icon" aria-hidden="true">✓</span>
+              <div>
+                <strong>No runs ran out of money.</strong>{' '}
+                Every one of the {run.result.numRuns.toLocaleString()} trials funded retirement
+                through age {scenario.assumptions.endAge}.
+              </div>
+            </div>
           )}
 
           {/* Success runs — how much money did successful runs end with?
               Mirror of the depletion block: histogram bins by final-balance
               band, click reveals per-run table. Successful runs don't deplete
               so the "story" is growth: nest egg → peak → final. We show all
-              three so the user can see how much the run grew from retirement. */}
-          {successHistogram.length > 0 && (
+              three so the user can see how much the run grew from retirement.
+              When EVERY run fails, show an actionable empty-state note instead
+              of letting the section vanish. */}
+          {successHistogram.length > 0 ? (
             <div className="chart-container">
               <h3>What does a typical successful run look like?</h3>
               <ResponsiveContainer width="100%" height={200} aria-label={`Final-assets distribution: how much money successful runs ended with, ${successHistogram.length} bins`}>
@@ -815,6 +839,14 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
                   </div>
                 </div>
               )}
+            </div>
+          ) : (
+            <div className="mc-empty mc-empty-bad">
+              <span className="mc-empty-icon" aria-hidden="true">⚠</span>
+              <div>
+                <strong>Every run ran out of money before age {scenario.assumptions.endAge}.</strong>{' '}
+                Try lowering expenses, delaying retirement, or increasing contributions, then re-run.
+              </div>
             </div>
           )}
         </>

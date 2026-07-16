@@ -65,6 +65,24 @@ export function defaultScenario(name = 'Baseline'): Scenario {
     ],
     incomeSources: [
       {
+        // Salary is the keystone income source: without it the sample
+        // 40-year-old has ~$65k/yr of expenses but no pre-retirement income,
+        // so the projection depletes their savings before retirement (age 47)
+        // and the app opens to a "Runs Out" headline. A realistic salary from
+        // currentAge through the year before retirement makes the sample plan
+        // healthy and on-track — the whole point of shipping sample data.
+        // Values mirror the COMMON_INCOME "Salary" quick-add template in
+        // App.tsx so one-click templates stay consistent with the sample.
+        id: createId(),
+        name: 'Salary',
+        type: 'salary',
+        annualAmount: 85000,
+        startAge: 40,
+        endAge: 64,
+        cola: true,
+        taxable: true,
+      },
+      {
         id: createId(),
         name: 'Social Security',
         type: 'social_security',

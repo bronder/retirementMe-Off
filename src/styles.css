@@ -885,6 +885,60 @@ body {
   font-size: var(--text-sm);
 }
 
+/* Empty-state notes for the depletion / success histograms. These sections
+   used to vanish silently when a plan had 0 failures or 0 successes; these
+   notes keep their screen position and explain why there's no chart. */
+.mc-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 18px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+.mc-empty-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+.mc-empty-good {
+  background: var(--green-dim);
+  color: var(--text);
+  border-color: var(--green);
+}
+.mc-empty-good .mc-empty-icon {
+  background: var(--green);
+  color: #fff;
+}
+.mc-empty-bad {
+  background: var(--red-dim);
+  color: var(--text);
+  border-color: var(--red);
+}
+.mc-empty-bad .mc-empty-icon {
+  background: var(--red);
+  color: #fff;
+}
+
+/* Confidence-interval line on the success-rate hero card. Slightly smaller
+   and dimmer than the run-count line above it so it reads as supporting
+   context, not a competing headline. */
+.mc-ci {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
 /* === Headline summary cards === */
 
 .mc-summary-grid {
@@ -4720,12 +4774,34 @@ tr.drag-over {
 }
 
 .ai-chat-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   padding: 8px 12px;
   background: var(--red-dim);
   color: var(--red);
   border-radius: var(--radius-sm);
   font-size: var(--text-xs);
+  line-height: 1.45;
   border: 1px solid var(--red);
+}
+.ai-chat-error > span {
+  flex: 1;
+}
+.ai-chat-error-dismiss {
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--red);
+  font-size: var(--text-sm);
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.ai-chat-error-dismiss:hover {
+  opacity: 1;
 }
 
 /* Suggestions popover shown when the user clicks 💡 in the header.
@@ -4839,7 +4915,16 @@ tr.drag-over {
 
 .ai-chat-suggestion-actions {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 6px;
+}
+
+.ai-chat-suggestion-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  line-height: 1.4;
 }
 
 .ai-chat-apply-btn {

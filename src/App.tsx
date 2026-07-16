@@ -2897,9 +2897,9 @@ function ResultsView({ scenario, result, readiness }: {
                 </button>
               </div>
               <p className="section-help">
-                The deterministic projection above assumes your exact expected return. Real markets
-                vary year to year. This panel runs the plan many times with randomized returns to
-                estimate the <strong>probability of success</strong> across thousands of possible futures.
+                The straight-line projection shows a single future at your exact expected return. Real
+                markets vary year to year. This panel runs the plan many times with randomized returns
+                to estimate the <strong>probability of success</strong> across thousands of possible futures.
               </p>
               <MonteCarloPanel scenario={scenario} colors={tc} />
             </div>

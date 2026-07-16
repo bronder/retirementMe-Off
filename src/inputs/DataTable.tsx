@@ -128,7 +128,7 @@ export function DataTable<Row extends Record<string, unknown>>({
             Showing {visible.length} of {sorted.length} rows
           </span>
           <button type="button" className="btn btn-sm" onClick={() => setShowAll(!showAll)}>
-            {showAll ? 'Show first ' + pageSize : 'Show all ' + sorted.length}
+            {showAll ? 'Show less' : 'Show all ' + sorted.length}
           </button>
         </div>
       )}

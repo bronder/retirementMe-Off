@@ -20,6 +20,64 @@ import { formatPercent } from './format';
 
 const PIN_STORAGE_KEY = 'ai-chat-pinned';
 
+/**
+ * Translate raw API/network errors into a friendly message with an actionable
+ * hint. The underlying error from callAI() is often a status code or opaque
+ * provider string ("Failed to fetch", "401 Unauthorized") that means nothing
+ * to a non-developer. We keep the original detail but prepend a plain-English
+ * diagnosis + suggested fix so the user knows what to do next.
+ *
+ * Patterns are matched loosely so provider-specific wording still maps.
+ */
+function humanizeError(raw: string): string {
+  const lower = raw.toLowerCase();
+
+  // Network-level failures (CORS, offline, DNS, blocked). Browsers surface all
+  // of these as "Failed to fetch" or "NetworkError" — there's no status code.
+  if (
+    lower.includes('failed to fetch') ||
+    lower.includes('networkerror'.toLowerCase()) ||
+    lower.includes('load failed') ||
+    lower.includes('network request failed')
+  ) {
+    return `Couldn't reach the AI provider. This is usually a network or connection issue — check your internet connection and try again. (${raw})`;
+  }
+
+  // Auth errors — the API key is missing, invalid, or lacks permission.
+  if (
+    lower.includes('401') ||
+    lower.includes('unauthorized') ||
+    lower.includes('invalid api key') ||
+    lower.includes('login fail') ||
+    lower.includes('authentication') ||
+    lower.includes('api secret key') ||
+    lower.includes('not authorized')
+  ) {
+    return `Your API key was rejected. Check that the key is correct, hasn't been revoked, and belongs to the selected provider in Settings. (${raw})`;
+  }
+  if (lower.includes('403') || lower.includes('forbidden')) {
+    return `The provider refused access (403). Your API key may lack permission for this model, or the account may be suspended. (${raw})`;
+  }
+
+  // Rate limiting / quota.
+  if (lower.includes('429') || lower.includes('rate limit') || lower.includes('quota')) {
+    return `The provider's rate or quota limit was hit (429). Wait a moment and try again, or check your account usage. (${raw})`;
+  }
+
+  // Model not found / unavailable — common with custom endpoints or typos.
+  if (lower.includes('model') && (lower.includes('not found') || lower.includes('does not exist'))) {
+    return `That model wasn't found. Pick a different model in Settings, or check the spelling if you're using a custom endpoint. (${raw})`;
+  }
+
+  // No custom endpoint configured.
+  if (lower.includes('no api endpoint set')) {
+    return raw;
+  }
+
+  // Generic fallback — keep the original detail so nothing is hidden.
+  return raw;
+}
+
 function loadStored<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
@@ -99,6 +157,11 @@ export function AiChat() {
       if (!text.trim() || loading) return;
       const activeKey = store.aiApiKeys[store.aiProvider] ?? '';
       if (!activeKey) {
+        // Surface why nothing happened instead of silently flipping to the
+        // settings panel, which reads like a bug (textarea won't clear, no
+        // message appears). A visible error + opening settings gives the
+        // user both the explanation and the path to fix it.
+        setError(`Add an API key for ${getProvider(store.aiProvider).label} to send messages.`);
         setShowSettings(true);
         return;
       }
@@ -176,7 +239,8 @@ export function AiChat() {
         } catch (e) {
           // Stream failed mid-answer. Show what we got so far plus the error
           // footer, rather than discarding the partial response.
-          const msg = e instanceof Error ? e.message : 'Stream interrupted';
+          const raw = e instanceof Error ? e.message : 'Stream interrupted';
+          const msg = humanizeError(raw);
           setError(msg);
           usePlanStore.setState((s) => {
             const next = [...s.chatHistory];
@@ -454,7 +518,9 @@ export function AiChat() {
             {messages.length === 0 && !showSettings && (
               <div className="ai-chat-welcome">
                 <p className="ai-chat-welcome-title">
-                  {hasApiKey ? 'Ask me about your retirement plan!' : 'Set up your API key to get started'}
+                  {hasApiKey
+                    ? 'Ask me about your retirement plan!'
+                    : `Add a ${getProvider(store.aiProvider).label} API key to get started`}
                 </p>
                 {!hasApiKey && (
                   <button className="ai-chat-quick-btn" onClick={() => setShowSettings(true)}>
@@ -502,8 +568,11 @@ export function AiChat() {
                     )}
                     <div className="ai-chat-suggestion-actions">
                       <button className="ai-chat-apply-btn" onClick={handleApplySuggestion}>
-                        ✓ Apply & Create Scenario
+                        ✓ Create Scenario &amp; Switch to It
                       </button>
+                      <p className="ai-chat-suggestion-note">
+                        Creates a new scenario with these changes — your current one is kept.
+                      </p>
                     </div>
                   </div>
                 )}
@@ -521,7 +590,17 @@ export function AiChat() {
             )}
 
             {error && (
-              <div className="ai-chat-error">⚠️ {error}</div>
+              <div className="ai-chat-error" role="alert">
+                <span>⚠️ {error}</span>
+                <button
+                  className="ai-chat-error-dismiss"
+                  onClick={() => setError(null)}
+                  aria-label="Dismiss error"
+                  title="Dismiss error"
+                >
+                  ✕
+                </button>
+              </div>
             )}
 
             <div ref={messagesEndRef} />
@@ -542,6 +621,8 @@ export function AiChat() {
               className="ai-chat-send-btn"
               onClick={() => sendMessage(input)}
               disabled={loading || !input.trim() || !hasApiKey}
+              aria-label="Send message"
+              title="Send message"
             >
               ➤
             </button>
