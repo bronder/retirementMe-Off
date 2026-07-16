@@ -2994,13 +2994,14 @@ function ResultsView({ scenario, result, readiness }: {
           <div className="sub">{result.success ? `Lasts to age ${scenario.assumptions.endAge}` : `Depleted at age ${formatAge(result.depletionAge)}`}</div>
           <span className="summary-card-drilldown-hint" aria-hidden="true">View breakdown →</span>
         </button>
-        <div className="summary-card">
+        <button type="button" className="summary-card summary-card-drilldown" onClick={() => focusOn(scenario.assumptions.retirementAge)} title="See the retirement-year row showing the first year of withdrawals">
           <div className="label">Year-1 Withdrawal Rate</div>
           <div className={`value ${readiness.neededWithdrawalRate <= scenario.assumptions.safeWithdrawalRate ? 'value-good' : 'value-bad'}`}>
             {formatPercent(readiness.neededWithdrawalRate)}
           </div>
           <div className="sub">Safe rate: {formatPercent(scenario.assumptions.safeWithdrawalRate)}</div>
-        </div>
+          <span className="summary-card-drilldown-hint" aria-hidden="true">View breakdown →</span>
+        </button>
         <button type="button" className="summary-card summary-card-drilldown" onClick={() => focusOn(scenario.assumptions.endAge)} title="See the final-year breakdown">
           <div className="label">Final Assets (age {scenario.assumptions.endAge})</div>
           <div className="value">{formatCurrency(result.finalAssets, { compact: true })}</div>
