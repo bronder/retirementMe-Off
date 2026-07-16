@@ -22,7 +22,9 @@ import {
 import { runMonteCarloProjection } from './engine';
 import type { MonteCarloOptions, MonteCarloResult, Scenario } from './types';
 import { formatCurrency } from './format';
-import { DataTable, ChartDataDisclosure, useResponsiveChartHeight } from './App';
+import { DataTable } from './inputs/DataTable';
+import { ChartDataDisclosure } from './inputs/ChartDataDisclosure';
+import { useResponsiveChartHeight } from './hooks/useResponsiveChartHeight';
 
 type ThemeColor = string;
 interface ThemeColors {
