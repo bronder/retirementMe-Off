@@ -4980,31 +4980,6 @@ tr.drag-over {
   letter-spacing: 0.04em;
   padding: 4px 12px 6px;
 }
-.menu-theme-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 6px;
-  padding: 0 12px 8px;
-}
-.menu-theme-swatch {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  border: 2px solid transparent;
-  cursor: pointer;
-  font-size: 13px;
-  transition: border-color 0.15s, transform 0.1s;
-}
-.menu-theme-swatch:hover { transform: scale(1.08); }
-.menu-theme-swatch.active { border-color: var(--accent); }
-.menu-theme-icon { filter: drop-shadow(0 0 1px rgba(0,0,0,0.3)); }
-
-@media (max-width: 600px) {
-  /* On narrow screens the 6-across grid is cramped; wrap to 3×2. */
-  .menu-theme-grid { grid-template-columns: repeat(3, 1fr); }
-}
 
 /* ============================================================
    TOUCH / NO-HOVER DEVICES

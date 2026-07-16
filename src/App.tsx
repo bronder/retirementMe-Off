@@ -507,9 +507,9 @@ function ResourcesPicker() {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="true"
         aria-expanded={open}
-        title="Helpful resources"
+        title="Helpful calculators, Social Security, and other external tools"
       >
-        <span aria-hidden="true">🔗</span> Resources
+        <span aria-hidden="true">📖</span> Learn more
         <span className="resources-picker-caret" aria-hidden="true">▾</span>
       </button>
       {open && (
@@ -749,24 +749,6 @@ export default function App() {
                 </button>
                 <div className="menu-divider" />
                 <ResetPlanMenuItem onReset={() => { store.resetPlan(); setMenuOpen(false); }} />
-                <div className="menu-divider menu-divider-theme" />
-                <div className="menu-theme-label">Theme</div>
-                <div className="menu-theme-grid">
-                  {THEMES.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      className={`menu-theme-swatch${t.id === theme ? ' active' : ''}`}
-                      style={{ background: t.swatch }}
-                      onClick={() => { setTheme(t.id); setMenuOpen(false); }}
-                      title={t.label}
-                      aria-label={t.label}
-                      aria-pressed={t.id === theme}
-                    >
-                      <span className="menu-theme-icon">{t.icon}</span>
-                    </button>
-                  ))}
-                </div>
               </div>
             )}
           </div>
@@ -1812,9 +1794,11 @@ function AccountCard({ acct, scenario, store }: {
               className="acct-card-name"
               value={acct.name}
               onChange={(e) => store.updateAccount(scenario.id, acct.id, { name: e.target.value })}
+              aria-label="Account name"
+              placeholder="Account name"
             />
             <div className="acct-card-meta">
-              <select className="table-select acct-type-select" value={acct.type} onChange={(e) => store.updateAccount(scenario.id, acct.id, { type: e.target.value as AccountType })}>
+              <select className="table-select acct-type-select" value={acct.type} onChange={(e) => store.updateAccount(scenario.id, acct.id, { type: e.target.value as AccountType })} aria-label="Account type">
                 {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{prettify(t)}</option>)}
               </select>
               <span className="acct-tax-badge" style={{ color: taxColor, borderColor: taxColor }}>{taxLabel}</span>
@@ -2042,8 +2026,8 @@ function PropertyCard({ prop, scenario, store }: {
       {/* === Step 1: Property header + basics === */}
       <div className="prop-card-header">
         <span className="prop-icon">{prop.type === 'land' ? '🌳' : '🏠'}</span>
-        <input type="text" className="prop-name-input" value={prop.name} placeholder="e.g. Family Home" onChange={(e) => store.updateProperty(scenario.id, prop.id, { name: e.target.value })} />
-        <select className="table-select" value={prop.type} onChange={(e) => store.updateProperty(scenario.id, prop.id, { type: e.target.value as PropertyType })} style={{ width: 'auto', minWidth: 140 }}>
+        <input type="text" className="prop-name-input" value={prop.name} placeholder="e.g. Family Home" onChange={(e) => store.updateProperty(scenario.id, prop.id, { name: e.target.value })} aria-label="Property name" />
+        <select className="table-select" value={prop.type} onChange={(e) => store.updateProperty(scenario.id, prop.id, { type: e.target.value as PropertyType })} aria-label="Property type" style={{ width: 'auto', minWidth: 140 }}>
           {PROPERTY_TYPES.map((t) => <option key={t} value={t}>{prettify(t)}</option>)}
         </select>
         <ConfirmDelete title="Delete property" onConfirm={() => store.deleteProperty(scenario.id, prop.id)} />
@@ -2296,6 +2280,8 @@ function PropertiesPanel({ scenario, store }: {
           })}
         </div>
       )}
+
+      <ContextualResources group={RESOURCE_GROUPS[0]} />
     </div>
   );
 }
@@ -2338,11 +2324,14 @@ function ExpenseRow({ exp, scenario, store }: {
           className="income-row-name"
           value={exp.name}
           onChange={(e) => store.updateExpense(scenario.id, exp.id, { name: e.target.value })}
+          placeholder="Expense name"
+          aria-label="Expense name"
         />
         <select
           className="table-select income-row-type"
           value={exp.category}
           onChange={(e) => store.updateExpense(scenario.id, exp.id, { category: e.target.value as ExpenseCategory })}
+          aria-label="Expense category"
         >
           {EXPENSE_CATEGORIES.map((t) => <option key={t} value={t}>{prettify(t)}</option>)}
         </select>
@@ -2507,11 +2496,14 @@ function IncomeRow({ inc, scenario, store }: {
           className="income-row-name"
           value={inc.name}
           onChange={(e) => store.updateIncome(scenario.id, inc.id, { name: e.target.value })}
+          placeholder="Income source name"
+          aria-label="Income source name"
         />
         <select
           className="table-select income-row-type"
           value={inc.type}
           onChange={(e) => store.updateIncome(scenario.id, inc.id, { type: e.target.value as IncomeType })}
+          aria-label="Income type"
         >
           {INCOME_TYPES.map((t) => <option key={t} value={t}>{prettify(t)}</option>)}
         </select>
@@ -2744,12 +2736,14 @@ function EventsPanel({ scenario, store }: {
                     value={ev.name}
                     placeholder={`e.g. ${meta.example}`}
                     onChange={(e) => store.updateEvent(scenario.id, ev.id, { name: e.target.value })}
+                    aria-label="Event name"
                   />
                 </span>
                 <select
                   className="table-select"
                   value={ev.type}
                   onChange={(e) => store.updateEvent(scenario.id, ev.id, { type: e.target.value as EventType })}
+                  aria-label="Event type"
                   style={{ width: 'auto', minWidth: 140 }}
                 >
                   {EVENT_TYPES.map((t) => <option key={t} value={t}>{prettify(t)}</option>)}
@@ -2802,6 +2796,8 @@ function EventsPanel({ scenario, store }: {
           );
         })
       )}
+
+      <ContextualResources group={RESOURCE_GROUPS[2]} />
     </div>
   );
 }
