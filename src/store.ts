@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Plan, Scenario, Account, IncomeSource, Expense, LifeEvent, Assumptions, Property } from './types';
-import { defaultPlan, defaultScenario, createId, PLAN_VERSION } from './defaults';
+import { defaultPlan, defaultScenario, defaultAssumptions, createId, PLAN_VERSION } from './defaults';
 import type { ChatMessage, ScenarioSuggestion } from './ai';
 
 /** Hard cap on persisted chat history. Last 20 turns (40 messages) are kept;
@@ -100,6 +100,31 @@ export interface UndoState {
   label: string;
 }
 
+/**
+ * Payload from the scenario wizard. Everything the wizard collects up front:
+ * the user's timeline, their current savings, and a rough income/lifestyle
+ * picture. The store action turns this into a fully-formed Scenario (with sane
+ * defaults for everything the wizard doesn't ask about) so the engine can run
+ * a real projection immediately.
+ */
+export interface WizardScenarioData {
+  /** Scenario display name. */
+  name: string;
+  currentAge: number;
+  retirementAge: number;
+  endAge: number;
+  /** Total current retirement savings, in today's dollars. Becomes one
+   *  consolidated taxable account; the user can split it into real accounts
+   *  later in the editor. */
+  currentSavings: number;
+  /** Current annual salary (today's dollars). Creates a COLA + taxable salary
+   *  income source from currentAge through retirementAge − 1. */
+  annualSalary: number;
+  /** Planned annual retirement spending (today's dollars). One post-retirement
+   *  living-expenses line at this amount. */
+  retirementExpenses: number;
+}
+
 interface PlanStore {
   plan: Plan;
   activeScenarioId: string;
@@ -149,6 +174,13 @@ interface PlanStore {
   /** Create a new scenario from an AI suggestion (duplicates active scenario, applies assumption changes) */
   applyScenarioSuggestion: (suggestion: ScenarioSuggestion) => void;
 
+  /**
+   * Create a new scenario from the scenario wizard's answers. Builds a clean
+   * scenario (one consolidated savings account, one salary, a living-expenses
+   * line, and Social Security) instead of the pre-populated sample data — so a
+   * user gets a plan reflecting their own inputs, not a hypothetical 40-year-old.
+   */
+  addScenarioFromData: (data: WizardScenarioData) => void;
   // Account operations
   addAccount: (scenarioId: string, account: Omit<Account, 'id'>) => void;
   updateAccount: (scenarioId: string, accountId: string, patch: Partial<Account>) => void;
@@ -352,6 +384,90 @@ export const usePlanStore = create<PlanStore>()(
           return {
             plan: { ...state.plan, scenarios: [...state.plan.scenarios, copy] },
             activeScenarioId: copy.id,
+          };
+        }),
+
+      addScenarioFromData: (data) =>
+        set((state) => {
+          // Start from default assumptions (sane inflation/tax/return defaults)
+          // and override only the timeline the wizard asked about. The age
+          // fields run through sanitizeAssumptions so an out-of-range value
+          // (e.g. retirementAge < currentAge) is clamped, not silently stored.
+          const assumptions = {
+            ...defaultAssumptions(),
+            ...sanitizeAssumptions({
+              currentAge: data.currentAge,
+              retirementAge: data.retirementAge,
+              endAge: data.endAge,
+            }),
+          };
+          const scenario: Scenario = {
+            id: createId(),
+            name: data.name,
+            assumptions,
+            // One consolidated savings account — the user can split this into
+            // real 401k/IRA/etc. accounts later in the editor. 7% matches the
+            // long-term growth assumption used by the sample accounts.
+            accounts: data.currentSavings > 0
+              ? [{
+                  id: createId(),
+                  name: 'Retirement Savings',
+                  type: 'taxable_brokerage',
+                  balance: data.currentSavings,
+                  annualReturn: 0.07,
+                  annualContribution: 0,
+                  employerMatch: 0,
+                }]
+              : [],
+            properties: [],
+            incomeSources: [
+              // Salary covers the pre-retirement years, stopping the year
+              // before retirement so the engine switches to withdrawals.
+              ...(data.annualSalary > 0
+                ? [{
+                    id: createId(),
+                    name: 'Salary',
+                    type: 'salary' as const,
+                    annualAmount: data.annualSalary,
+                    startAge: assumptions.currentAge,
+                    endAge: Math.max(assumptions.currentAge, assumptions.retirementAge - 1),
+                    cola: true,
+                    taxable: true,
+                  }]
+                : []),
+              // Social Security at 67 (the standard full-retirement default)
+              // so post-retirement income isn't zero even if the user didn't
+              // think to add it. They can edit/remove it in the Income tab.
+              {
+                id: createId(),
+                name: 'Social Security',
+                type: 'social_security' as const,
+                annualAmount: 30000,
+                startAge: 67,
+                endAge: null,
+                cola: true,
+                taxable: false,
+              },
+            ],
+            expenses: data.retirementExpenses > 0
+              ? [{
+                  id: createId(),
+                  name: 'Living expenses',
+                  category: 'other' as const,
+                  annualAmount: data.retirementExpenses,
+                  // Active in retirement only — during working years salary
+                  // is assumed to cover living costs.
+                  preRetirement: false,
+                  postRetirement: true,
+                  startAge: null,
+                  endAge: null,
+                }]
+              : [],
+            events: [],
+          };
+          return {
+            plan: { ...state.plan, scenarios: [...state.plan.scenarios, scenario] },
+            activeScenarioId: scenario.id,
           };
         }),
 

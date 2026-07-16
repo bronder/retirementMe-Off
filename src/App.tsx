@@ -32,6 +32,7 @@ import { ContextWarning } from './inputs/ContextWarning';
 import { useEditableNumber } from './hooks/useEditableNumber';
 import { DataTable } from './inputs/DataTable';
 import { ChartDataDisclosure } from './inputs/ChartDataDisclosure';
+import { ScenarioWizard } from './inputs/ScenarioWizard';
 
 type Tab = 'inputs' | 'results' | 'compare';
 type InputSection = 'overview' | 'assumptions' | 'accounts' | 'properties' | 'expenses' | 'income' | 'events';
@@ -562,6 +563,12 @@ export default function App() {
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('retirement-theme') as Theme) || 'light');
   const [menuOpen, setMenuOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem(ONBOARD_KEY) === null);
+  /** New-scenario chooser popover (Blank / Wizard / Duplicate). Replaces the
+   *  old instant sample-drop on ＋ New so the wizard is discoverable without
+   *  forcing it on power users. */
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
+  /** Scenario wizard modal — opened from the chooser. */
+  const [wizardOpen, setWizardOpen] = useState(false);
   /** Inline error message surfaced when an Import Plan file fails to parse.
    *  Lives next to the menu trigger so it doesn't interrupt the flow. */
   const [importError, setImportError] = useState<string | null>(null);
@@ -693,7 +700,7 @@ export default function App() {
             scenarios={store.plan.scenarios}
             activeScenarioId={activeScenario.id}
             onSelect={(id) => store.setActiveScenario(id)}
-            onAdd={() => store.addScenario()}
+            onAdd={() => setNewMenuOpen(true)}
             onDelete={(id) => store.deleteScenario(id)}
             onRename={(id, name) => store.renameScenario(id, name)}
             onDuplicate={(id) => store.duplicateScenario(id)}
@@ -799,6 +806,27 @@ export default function App() {
 
       <ResourcesFooter />
 
+      {/* New-scenario chooser — opens when the user clicks ＋ New. Offers the
+          instant sample drop (Start blank), the guided wizard, or duplicating
+          the current scenario. Renders at the App level so the wizard it
+          launches can overlay everything. */}
+      {newMenuOpen && (
+        <NewScenarioMenu
+          onBlank={() => { store.addScenario(); setNewMenuOpen(false); }}
+          onWizard={() => { setWizardOpen(true); setNewMenuOpen(false); }}
+          onDuplicate={() => { store.duplicateScenario(activeScenario.id); setNewMenuOpen(false); }}
+          onCancel={() => setNewMenuOpen(false)}
+        />
+      )}
+
+      {/* Scenario wizard modal */}
+      {wizardOpen && (
+        <ScenarioWizard
+          onCreate={(data) => { store.addScenarioFromData(data); setWizardOpen(false); setTab('results'); }}
+          onCancel={() => setWizardOpen(false)}
+        />
+      )}
+
       {/* AI Chat Assistant */}
       <AiChat />
 
@@ -835,6 +863,76 @@ function ResetPlanMenuItem({ onReset }: { onReset: () => void }) {
     <button className="menu-item danger" onClick={() => setArmed(true)}>
       🗑 Reset Plan
     </button>
+  );
+}
+
+/* ============ NEW SCENARIO MENU (chooser) ============ */
+
+/**
+ * Chooser that appears when the user clicks ＋ New. Offers three creation
+ * paths so the wizard is discoverable without forcing it on power users:
+ *   - Start blank: instant sample drop (the old ＋ New behavior, preserved)
+ *   - ✨ Use the wizard: guided 3-step creator for a personalized plan
+ *   - Duplicate current: copy the active scenario for what-if analysis
+ *
+ * Rendered as a centered modal with a scrim (the app's first), matching the
+ * wizard it can launch. Escape and outside-click dismiss.
+ */
+function NewScenarioMenu({
+  onBlank,
+  onWizard,
+  onDuplicate,
+  onCancel,
+}: {
+  onBlank: () => void;
+  onWizard: () => void;
+  onDuplicate: () => void;
+  onCancel: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div
+        className="new-scenario-menu"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Create a scenario"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="new-scenario-menu-header">
+          <h2>Create a scenario</h2>
+          <button className="wizard-close" onClick={onCancel} aria-label="Close">✕</button>
+        </div>
+        <button className="new-scenario-option" onClick={onWizard}>
+          <span className="new-scenario-option-icon" aria-hidden="true">✨</span>
+          <span className="new-scenario-option-body">
+            <span className="new-scenario-option-title">Use the wizard</span>
+            <span className="new-scenario-option-desc">Answer 3 quick questions for a plan that matches your life.</span>
+          </span>
+        </button>
+        <button className="new-scenario-option" onClick={onBlank}>
+          <span className="new-scenario-option-icon" aria-hidden="true">📋</span>
+          <span className="new-scenario-option-body">
+            <span className="new-scenario-option-title">Start with sample data</span>
+            <span className="new-scenario-option-desc">A fully filled-in example you edit to match your situation.</span>
+          </span>
+        </button>
+        <button className="new-scenario-option" onClick={onDuplicate}>
+          <span className="new-scenario-option-icon" aria-hidden="true">📄</span>
+          <span className="new-scenario-option-body">
+            <span className="new-scenario-option-title">Duplicate current</span>
+            <span className="new-scenario-option-desc">Copy “{usePlanStore.getState().plan.scenarios.find((s) => s.id === usePlanStore.getState().activeScenarioId)?.name ?? 'current'}” to tweak as a what-if.</span>
+          </span>
+        </button>
+      </div>
+    </div>
   );
 }
 
