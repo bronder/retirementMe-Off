@@ -487,17 +487,17 @@ export function AiChat() {
             </div>
           )}
 
-          <div className="ai-chat-messages">
-            {confirmingClear && (
-              <div className="ai-chat-clear-confirm" role="alert">
-                Clear all messages? This cannot be undone.
-                <div className="ai-chat-clear-confirm-actions">
-                  <button className="ai-chat-clear-confirm-yes" onClick={handleClearConfirm} aria-label="Confirm clear conversation">✓ Yes</button>
-                  <button className="ai-chat-clear-confirm-no" onClick={() => setConfirmingClear(false)} aria-label="Cancel clear">✕</button>
-                </div>
+          {confirmingClear && (
+            <div className="ai-chat-clear-confirm" role="alert">
+              Clear all messages? This cannot be undone.
+              <div className="ai-chat-clear-confirm-actions">
+                <button className="ai-chat-clear-confirm-yes" onClick={handleClearConfirm} aria-label="Confirm clear conversation">✓ Yes</button>
+                <button className="ai-chat-clear-confirm-no" onClick={() => setConfirmingClear(false)} aria-label="Cancel clear">✕</button>
               </div>
-            )}
+            </div>
+          )}
 
+          <div className="ai-chat-messages">
             {showSuggestions && messages.length > 0 && !showSettings && (
               <div className="ai-chat-suggestions-panel">
                 <div className="ai-chat-suggestions-label">Try asking</div>

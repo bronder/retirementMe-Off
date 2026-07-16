@@ -4826,19 +4826,22 @@ tr.drag-over {
   letter-spacing: 0.04em;
 }
 
-/* Inline two-step confirm bar matching the red palette of .ai-chat-error so
-   the destructive action reads as such at a glance. */
+/* Clear-conversation confirm bar. Rendered as a pinned strip OUTSIDE the
+   scrollable .ai-chat-messages region (a direct flex child of .ai-chat-panel),
+   so it stays visible at the top of the chat even when the user has scrolled
+   down through a long conversation — the trash-can action they just clicked
+   must remain in view. flex-shrink:0 keeps it from being squeezed by flex. */
 .ai-chat-clear-confirm {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 12px;
-  margin-bottom: 12px;
+  padding: 10px 16px;
+  margin: 0;
   background: var(--red-dim);
   color: var(--red);
-  border: 1px solid var(--red);
-  border-radius: var(--radius-sm);
+  border-bottom: 1px solid var(--red);
   font-size: var(--text-xs);
   font-weight: 500;
 }
