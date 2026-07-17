@@ -137,6 +137,11 @@ export function AiChat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  // AbortController for the in-flight stream. Aborted on unmount and when a
+  // new send begins — without this, a stream writes to store state after the
+  // component (or the message it was filling) is gone, which manifests as
+  // the streamed text appearing and then vanishing.
+  const abortRef = useRef<AbortController | null>(null);
 
   const hasApiKey = (store.aiApiKeys[store.aiProvider] ?? '').length > 0;
 
@@ -173,6 +178,30 @@ export function AiChat() {
     }
   }, [isOpen, hasApiKey]);
 
+  // Auto-grow the textarea to fit its content. Canned prompts (the quick
+  // actions like "Fact-check my plan") are several lines long and were
+  // unreadable in the fixed 1-row box. We reset height to auto first so
+  // shrinking the text (backspace, clear, replacing a long prompt with a
+  // short one) collapses the box back down — measuring scrollHeight on a
+  // still-tall element would otherwise report the old height.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
+
+  // Abort the in-flight stream if the component unmounts (panel closed via
+  // strict-mode remount, route change, etc.). Without this, the detached
+  // `for await` loop keeps writing to the store after we're gone — its
+  // writes land on a stale message index and the visible text disappears.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+    };
+  }, []);
+
   const sendMessage = useCallback(
     async (text: string) => {
       if (!text.trim() || loading) return;
@@ -197,6 +226,13 @@ export function AiChat() {
         setInput('');
         setLoading(true);
         setError(null);
+
+        // Cancel any still-running stream before starting a new one. Two
+        // concurrent streams would both write to "the last message" and
+        // clobber each other — the loser's text vanishes mid-stream.
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
 
         // Pre-create a placeholder assistant message so the user sees a
         // cursor immediately and tokens can stream in as they arrive.
@@ -235,6 +271,7 @@ export function AiChat() {
             store.aiModel,
             apiMessages,
             store.aiCustomEndpoint,
+            controller.signal,
           )) {
             accumulated += chunk;
             // Re-check the scenario block on each chunk — the model may emit
@@ -258,6 +295,9 @@ export function AiChat() {
             });
           }
         } catch (e) {
+          // Intentional abort (unmount or new send) — keep whatever streamed
+          // so far and show no error. This is the user canceling, not a failure.
+          if (controller.signal.aborted) return;
           // Stream failed mid-answer. Show what we got so far plus the error
           // footer, rather than discarding the partial response.
           const raw = e instanceof Error ? e.message : 'Stream interrupted';
@@ -279,6 +319,9 @@ export function AiChat() {
           });
         } finally {
           setLoading(false);
+          if (abortRef.current === controller) {
+            abortRef.current = null;
+          }
         }
       },
     [messages, loading, store, appendChatMessage],
@@ -583,12 +626,18 @@ export function AiChat() {
                     {msg.suggestion.description && (
                       <p className="ai-chat-suggestion-desc">{msg.suggestion.description}</p>
                     )}
-                    {msg.suggestion.assumptions && (
+                    {msg.suggestion.assumptions &&
+                      typeof msg.suggestion.assumptions === 'object' &&
+                      Object.keys(msg.suggestion.assumptions).length > 0 && (
                       <div className="ai-chat-suggestion-changes">
                         {Object.entries(msg.suggestion.assumptions).map(([key, val]) => (
                           <span key={key} className="ai-chat-suggestion-change">
                             <strong>{key}:</strong>{' '}
-                            {typeof val === 'number' && key.includes('Rate') ? formatPercent(val) : String(val)}
+                            {typeof val === 'number' && key.includes('Rate')
+                              ? formatPercent(val)
+                              : typeof val === 'string' || typeof val === 'number'
+                                ? String(val)
+                                : JSON.stringify(val)}
                           </span>
                         ))}
                       </div>

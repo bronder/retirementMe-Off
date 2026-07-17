@@ -5124,7 +5124,11 @@ h1 svg, h2 svg, h3 svg {
   font-family: var(--font-sans);
   resize: none;
   line-height: 1.4;
-  max-height: 80px;
+  /* Grows with content (see the auto-grow effect in AiChat.tsx). Capped so a
+     very long canned prompt can't crowd out the whole conversation — 180px
+     is ~9 lines, enough to read the longest quick-action prompt in full. */
+  max-height: 180px;
+  overflow-y: auto;
 }
 
 .ai-chat-textarea:focus {
