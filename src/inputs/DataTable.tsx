@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 
 /** Accessible table that mirrors a Recharts chart's underlying data — the
  *  screen-reader / low-vision / "let me copy the numbers" path. Used in
@@ -16,6 +16,10 @@ export type DataTableColumn<Row> = {
   sortable?: boolean;
   /** Right-align numeric columns (Default true when format is provided). */
   align?: 'left' | 'right';
+  /** Optional accent color for the column — paints a top border on the header
+   *  and a faint tint on the cells. Used by the Compare table to tie each
+   *  scenario's columns to its line color in the chart above. */
+  accentColor?: string;
 };
 
 export function DataTable<Row extends Record<string, unknown>>({
@@ -85,8 +89,20 @@ export function DataTable<Row extends Record<string, unknown>>({
               const align = col.align ?? (col.format ? 'right' : 'left');
               const isSorted = sortKey === col.key;
               const ariaSort = !sortable ? undefined : isSorted ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none';
+              const accent = col.accentColor
+                ? {
+                    borderTop: `3px solid ${col.accentColor}`,
+                    background: `color-mix(in srgb, ${col.accentColor} 10%, transparent)`,
+                  } as CSSProperties
+                : undefined;
               return (
-                <th key={col.key} scope="col" className={align === 'right' ? 'text-right' : undefined} aria-sort={ariaSort}>
+                <th
+                  key={col.key}
+                  scope="col"
+                  className={align === 'right' ? 'text-right' : undefined}
+                  aria-sort={ariaSort}
+                  style={accent}
+                >
                   {sortable ? (
                     <button
                       type="button"
@@ -112,8 +128,14 @@ export function DataTable<Row extends Record<string, unknown>>({
                 const raw = row[col.key];
                 const text = col.format ? col.format(raw) : String(raw ?? '');
                 const align = col.align ?? (col.format ? 'right' : 'left');
+                // Faint tint of the scenario's accent color so the eye groups
+                // a scenario's columns together. Mixed with the panel bg via
+                // color-mix so it stays subtle and works on any theme.
+                const cellStyle = col.accentColor
+                  ? { background: `color-mix(in srgb, ${col.accentColor} 7%, transparent)` } as CSSProperties
+                  : undefined;
                 return (
-                  <td key={col.key} className={align === 'right' ? 'text-right' : undefined}>
+                  <td key={col.key} className={align === 'right' ? 'text-right' : undefined} style={cellStyle}>
                     {text}
                   </td>
                 );

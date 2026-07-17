@@ -1759,6 +1759,21 @@ input[type='checkbox'] {
   border-bottom: 1px solid var(--border);
 }
 
+/* Right-aligned headers must beat .data-table th's text-align:left (the `th`
+   type selector gives that rule higher specificity than .text-right alone).
+   Sortable headers wrap their label in an inline-flex <button>, which ignores
+   text-align — so we also make the <th> a flex container and push the button
+   to the trailing edge so the header sits directly above its right-aligned
+   numbers. Without this, "$" values hug the right while their header floats
+   left, and you can't tell which column a header labels. */
+.data-table th.text-right {
+  text-align: right;
+}
+.data-table th.text-right .data-table-sort-btn {
+  justify-content: flex-end;
+  width: 100%;
+}
+
 .data-table td {
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);

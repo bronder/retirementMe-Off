@@ -3661,10 +3661,15 @@ function CompareView({ results, scenarios }: { results: NonNullable<ReturnType<t
             caption="Net worth comparison across scenarios in today's dollars"
             columns={[
               { key: 'age', label: 'Age' },
-              ...orderedScenarios.flatMap((s) => [
-                { key: `${s.name} (Liquid)` as never, label: `${s.name} (Liquid)`, format: (v: unknown) => formatCurrency(v as number) },
-                { key: `${s.name} (Total)` as never, label: `${s.name} (Total, incl. home)`, format: (v: unknown) => formatCurrency(v as number) },
-              ]),
+              ...orderedScenarios.flatMap((s, i) => {
+                // Tint both of this scenario's columns with its chart color so
+                // the eye groups them together and ties them to the line above.
+                const accentColor = colors[i % colors.length];
+                return [
+                  { key: `${s.name} (Liquid)` as never, label: `${s.name} (Liquid)`, format: (v: unknown) => formatCurrency(v as number), accentColor },
+                  { key: `${s.name} (Total)` as never, label: `${s.name} (Total, incl. home)`, format: (v: unknown) => formatCurrency(v as number), accentColor },
+                ];
+              }),
             ]}
           />
         </ChartDataDisclosure>
