@@ -179,9 +179,23 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
       const bin = Math.floor(age);
       buckets.set(bin, (buckets.get(bin) ?? 0) + 1);
     }
+    const totalFailures = run.result.depletionCount || 1;
+    let cumulative = 0;
     return Array.from(buckets.entries())
       .sort(([a], [b]) => a - b)
-      .map(([age, count]) => ({ age, count }));
+      .map(([age, count]) => {
+        cumulative += count;
+        return {
+          age,
+          count,
+          // Share of all failed runs that depleted at this age, plus a
+          // running cumulative so the table conveys "by age X, Y% of
+          // failures have happened" — far more meaningful than raw counts
+          // alone, especially when most bins hold a single run.
+          pctOfFailures: count / totalFailures,
+          cumulativePct: cumulative / totalFailures,
+        };
+      });
   }, [run.result]);
 
   // Drill-down details for the currently-selected depletion-age bar.
@@ -268,8 +282,15 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
         }
       }
     }
+    const totalSuccesses = r.successCount || 1;
     return edges
-      .map(([_lo, _hi, label], j) => ({ label, count: counts[j] }))
+      .map(([_lo, _hi, label], j) => ({
+        label,
+        count: counts[j],
+        // Share of successful runs that ended in this band — gives the
+        // count meaning instead of a bare integer that just echoes a bar.
+        pctOfSuccesses: counts[j] / totalSuccesses,
+      }))
       .filter((b) => b.count > 0);
   }, [run.result]);
 
@@ -584,10 +605,12 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
               <ChartDataDisclosure summaryLabel="View depletion histogram as table" rowCount={depletionHistogram.length}>
                 <DataTable
                   rows={depletionHistogram as unknown as Record<string, unknown>[]}
-                  caption="Depletion histogram: number of Monte Carlo runs that ran out of money at each age"
+                  caption="Depletion histogram: number of Monte Carlo runs that ran out of money at each age, with share of all failures"
                   columns={[
                     { key: 'age', label: 'Depletion Age' },
-                    { key: 'count', label: '# of Runs', format: (v) => String(v) },
+                    { key: 'count', label: 'Runs', format: (v) => String(v) },
+                    { key: 'pctOfFailures', label: '% of Failures', format: (v) => `${((v as number) * 100).toFixed(1)}%` },
+                    { key: 'cumulativePct', label: 'Cumulative %', format: (v) => `${((v as number) * 100).toFixed(1)}%` },
                   ]}
                 />
               </ChartDataDisclosure>
@@ -748,10 +771,11 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
               <ChartDataDisclosure summaryLabel="View final-assets distribution as table" rowCount={successHistogram.length}>
                 <DataTable
                   rows={successHistogram as unknown as Record<string, unknown>[]}
-                  caption="Final-assets distribution: how much money successful runs ended with, in today's dollars"
+                  caption="Final-assets distribution: how much money successful runs ended with, in today's dollars, with share of successes"
                   columns={[
                     { key: 'label', label: 'Final Assets Band' },
-                    { key: 'count', label: '# of Runs', format: (v) => String(v) },
+                    { key: 'count', label: 'Runs', format: (v) => String(v) },
+                    { key: 'pctOfSuccesses', label: '% of Successes', format: (v) => `${((v as number) * 100).toFixed(1)}%` },
                   ]}
                 />
               </ChartDataDisclosure>
