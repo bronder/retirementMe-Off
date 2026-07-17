@@ -116,19 +116,19 @@ export const QUICK_ACTIONS = [
     id: 'fact-check',
     label: 'Fact-check my plan',
     prompt:
-      'Please fact-check my retirement plan. Review all assumptions (return rates, inflation, withdrawal rate, tax rate, timeline) for realism. Check if I have adequate expense coverage, appropriate account diversification, and reasonable income sources. Flag anything that seems unrealistic, missing, or potentially risky.',
+      'Fact-check my retirement plan. Output a prioritized issue list, most severe first. For EACH issue use this format:\n**[Severity] Issue title** — one-sentence problem. Current: X. Realistic range: Y. Impact: Z.\nSeverities: Critical / Warning / Minor. Review: return rates, inflation, withdrawal rate, tax rate, timeline/longevity, expense coverage, account diversification, income gaps (e.g. Social Security start vs. retirement age). Only list issues that are actually wrong or missing — do not pad with "looks good" items. If a category is fine, skip it entirely.',
   },
   {
     id: 'suggest',
     label: 'Suggest improvements',
     prompt:
-      'Review my retirement plan and suggest specific improvements. Consider: tax optimization strategies, expense gaps, savings rate adequacy, Social Security claiming strategy, account diversification, and any risks I might be overlooking. Be specific and actionable.',
+      'Suggest improvements to my retirement plan, highest-impact first. For EACH suggestion use:\n**[Area] Suggestion** — one-sentence what + why. Current: X. Recommended: Y. Estimated impact: Z.\nAreas to consider: tax optimization (Roth conversions, withdrawal sequencing), expense gaps, savings rate, Social Security claiming age, account diversification, longevity/LTC risk. Max 8 suggestions. Skip areas that are already fine.',
   },
   {
     id: 'scenario',
     label: 'Create a scenario',
     prompt:
-      'Based on my current plan, create an alternative retirement scenario. Consider a different retirement age, adjusted savings rate, or modified spending pattern. Use the createScenario JSON format to propose specific changes. Explain your reasoning.',
+      'Propose ONE alternative retirement scenario that addresses the biggest weakness in my current plan. Identify the weakness in one sentence, then output the <scenario> JSON block with specific assumption changes. One paragraph (3 sentences max) of reasoning after the block. Do not propose multiple scenarios.',
   },
 ] as const;
 
@@ -237,23 +237,33 @@ export function buildPlanContext(
   return lines.join('\n');
 }
 
-export const SYSTEM_PROMPT = `You are a knowledgeable retirement planning assistant integrated into the retirementMe-Off app. You help users analyze their retirement plan, fact-check assumptions, suggest improvements, and create alternative scenarios.
+export const SYSTEM_PROMPT = `You are a retirement planning assistant in the retirementMe-Off app. You fact-check plans, suggest improvements, and propose alternative scenarios.
 
-Guidelines:
-- Be specific and actionable. Reference actual numbers from the user's plan.
-- For financial advice, note that you are an AI assistant, not a certified financial planner.
-- Keep responses concise and well-structured. Use bullet points and bold for key findings.
-- When suggesting scenario changes, use this JSON format embedded in your response:
-  <scenario>
-  {
-    "name": "Scenario name",
-    "description": "Brief description of what changes and why",
-    "assumptions": { "retirementAge": 62, "safeWithdrawalRate": 0.035 }
-  }
-  </scenario>
-  Only include assumption fields that should change. Omit fields that stay the same.
-- Focus on realistic, evidence-based recommendations. Reference common rules of thumb (4% rule, etc.) when relevant.
-- If you notice potential issues (unrealistic returns, missing expenses, tax inefficiencies), flag them clearly.`;
+STYLE — follow strictly:
+- No preamble, no narration of your own thinking. Do NOT write "Let me think", "I'll analyze", "Oh I see", or any similar filler. Start with the answer.
+- Be terse. Short bullets and bold labels only. No paragraph intros, no "In summary", no recaps.
+- Lead with findings ranked by severity (Critical → Minor), most important first.
+- Reference actual numbers from the plan ($X, Y%, age Z). No vague claims.
+- Disqualify yourself from regulated advice: note you are an AI, not a certified financial planner, when giving recommendations.
+
+OUTPUT FORMAT:
+- Use bullet points and **bold** for key findings.
+- Hard caps: max 12 bullets per section, max 4 sections, one-line bullets.
+- If you need more than that, the user asked too broad a question — say so and ask them to scope it.
+
+SCENARIO SUGGESTIONS — when proposing scenario changes, embed this block in your response:
+<scenario>
+{
+  "name": "Scenario name",
+  "description": "Brief description of what changes and why",
+  "assumptions": { "retirementAge": 62, "safeWithdrawalRate": 0.035 }
+}
+</scenario>
+Only include assumption fields that should change. Omit fields that stay the same.
+
+CONTENT:
+- Use evidence-based rules of thumb (4% rule, asset allocation, tax diversification) where relevant.
+- Flag issues clearly: unrealistic returns, missing expenses, tax inefficiencies, longevity risk, concentration risk.`;
 
 /**
  * Call an AI provider's chat completions API in **streaming** mode.
@@ -294,7 +304,10 @@ export async function* callAI(
       model,
       messages,
       temperature: 0.7,
-      max_tokens: 1500,
+      // Generation cap. 1500 tokens (~1100 words) was cutting off thorough
+      // plan analyses mid-sentence. 4096 leaves headroom for a full fact-check
+      // while staying under every provider's output limit.
+      max_tokens: 4096,
       stream: true,
     }),
     signal,
@@ -362,6 +375,12 @@ export async function* callAI(
       }
     }
   } finally {
+    // If the caller aborted, cancel the reader to release the underlying
+    // network connection promptly. releaseLock() alone leaves the body
+    // stream open until GC. Cancel is a no-op if the stream already ended.
+    try {
+      if (signal?.aborted) await reader.cancel();
+    } catch { /* already closed */ }
     try { reader.releaseLock(); } catch { /* already released */ }
   }
 }
