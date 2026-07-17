@@ -90,10 +90,7 @@ export function DataTable<Row extends Record<string, unknown>>({
               const isSorted = sortKey === col.key;
               const ariaSort = !sortable ? undefined : isSorted ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none';
               const accent = col.accentColor
-                ? {
-                    borderTop: `3px solid ${col.accentColor}`,
-                    background: `color-mix(in srgb, ${col.accentColor} 10%, transparent)`,
-                  } as CSSProperties
+                ? { borderTop: `3px solid ${col.accentColor}` } as CSSProperties
                 : undefined;
               return (
                 <th
@@ -128,14 +125,8 @@ export function DataTable<Row extends Record<string, unknown>>({
                 const raw = row[col.key];
                 const text = col.format ? col.format(raw) : String(raw ?? '');
                 const align = col.align ?? (col.format ? 'right' : 'left');
-                // Faint tint of the scenario's accent color so the eye groups
-                // a scenario's columns together. Mixed with the panel bg via
-                // color-mix so it stays subtle and works on any theme.
-                const cellStyle = col.accentColor
-                  ? { background: `color-mix(in srgb, ${col.accentColor} 7%, transparent)` } as CSSProperties
-                  : undefined;
                 return (
-                  <td key={col.key} className={align === 'right' ? 'text-right' : undefined} style={cellStyle}>
+                  <td key={col.key} className={align === 'right' ? 'text-right' : undefined}>
                     {text}
                   </td>
                 );
