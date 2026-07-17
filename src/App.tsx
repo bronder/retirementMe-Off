@@ -1,5 +1,71 @@
 import { useState, useMemo, useRef, useEffect, Fragment, Component } from 'react';
 import {
+  LayoutDashboard,
+  Settings,
+  Wallet,
+  Landmark,
+  Home,
+  ListChecks,
+  CalendarDays,
+  ClipboardList,
+  TrendingUp,
+  Dices,
+  Table2,
+  Menu,
+  Upload,
+  FileJson,
+  FileText,
+  Wand2,
+  Sparkles,
+  BookOpen,
+  Scale,
+  Users,
+  Percent,
+  Zap,
+  CalendarClock,
+  Trash2,
+  // Category / content-marker icons
+  Utensils,
+  Car,
+  CarFront,
+  HeartPulse,
+  ShieldCheck,
+  Lightbulb,
+  Clapperboard,
+  Plane,
+  CreditCard,
+  Receipt,
+  Package,
+  Shirt,
+  Pizza,
+  Gift,
+  Pill,
+  House,
+  Hammer,
+  SprayCan,
+  Smartphone,
+  Tv,
+  PawPrint,
+  Banknote,
+  PiggyBank,
+  Building2,
+  Sprout,
+  Coins,
+  Briefcase,
+  Clock,
+  CircleDollarSign,
+  Lock,
+  Palmtree,
+  TreePine,
+  ArrowLeftRight,
+  Calculator,
+  GraduationCap,
+  BadgeDollarSign,
+  HelpCircle,
+  KeyRound,
+  type LucideIcon,
+} from 'lucide-react';
+import {
   LineChart,
   Line,
   AreaChart,
@@ -38,6 +104,15 @@ type Tab = 'inputs' | 'results' | 'compare';
 type InputSection = 'overview' | 'assumptions' | 'accounts' | 'properties' | 'expenses' | 'income' | 'events';
 type Theme = 'dark' | 'light' | 'sepia' | 'nord' | 'warm-gray' | 'dracula';
 
+/** Renders a Lucide icon component by reference. Used wherever an icon is stored
+ *  in a data structure (CATEGORY_ICONS, COMMON_EXPENSES, etc.) so the render
+ *  site stays a one-liner: `<Icon i={row.icon} />` instead of a lookup +
+ *  conditional render. Inherits color from its parent via lucide's currentColor. */
+function Glyph({ i, size = 16 }: { i: LucideIcon; size?: number }) {
+  const I = i;
+  return <I size={size} aria-hidden="true" />;
+}
+
 const ACCOUNT_TYPES: AccountType[] = [
   'checking_savings',
   'taxable_brokerage',
@@ -62,54 +137,54 @@ const INCOME_TYPES: IncomeType[] = [
   'other',
 ];
 
-const COMMON_EXPENSES: { name: string; icon: string; category: ExpenseCategory; annualAmount: number; preRetirement: boolean; postRetirement: boolean; startAge: number | null; endAge: number | null }[] = [
+const COMMON_EXPENSES: { name: string; icon: LucideIcon; category: ExpenseCategory; annualAmount: number; preRetirement: boolean; postRetirement: boolean; startAge: number | null; endAge: number | null }[] = [
   // Based on BLS Consumer Expenditure Survey national averages (sorted alphabetically)
-  { name: 'Clothing & Apparel', icon: '👕', category: 'other', annualAmount: 1833, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
-  { name: 'Dining Out', icon: '🍕', category: 'food', annualAmount: 3639, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
-  { name: 'Entertainment', icon: '🎬', category: 'entertainment', annualAmount: 3458, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
-  { name: 'Food & Groceries', icon: '🍽️', category: 'food', annualAmount: 9985, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
-  { name: 'Gifts & Donations', icon: '🎁', category: 'other', annualAmount: 2551, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
-  { name: 'Healthcare (Medicare)', icon: '💊', category: 'healthcare', annualAmount: 4392, preRetirement: false, postRetirement: true, startAge: 65, endAge: null },
-  { name: 'Healthcare (pre-Medicare)', icon: '🏥', category: 'healthcare', annualAmount: 6194, preRetirement: true, postRetirement: true, startAge: null, endAge: 64 },
-  { name: 'Home Insurance', icon: '🏡', category: 'insurance', annualAmount: 1716, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
-  { name: 'Home Maintenance & Repairs', icon: '🔧', category: 'housing', annualAmount: 2208, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
-  { name: 'Life Insurance', icon: '📋', category: 'insurance', annualAmount: 680, preRetirement: true, postRetirement: false, startAge: null, endAge: null },
-  { name: 'Miscellaneous', icon: '📦', category: 'other', annualAmount: 1820, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
-  { name: 'Mortgage / Rent', icon: '🏠', category: 'housing', annualAmount: 22032, preRetirement: true, postRetirement: false, startAge: null, endAge: null },
-  { name: 'Personal Care', icon: '🧴', category: 'other', annualAmount: 1010, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
-  { name: 'Pet Expenses', icon: '🐾', category: 'other', annualAmount: 1464, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
-  { name: 'Phone & Internet', icon: '📱', category: 'utilities', annualAmount: 1680, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
-  { name: 'Subscriptions (streaming, etc.)', icon: '📺', category: 'entertainment', annualAmount: 1272, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
-  { name: 'Travel & Vacations', icon: '✈️', category: 'travel', annualAmount: 4500, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
-  { name: 'Utilities (gas, electric, water)', icon: '💡', category: 'utilities', annualAmount: 4725, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
-  { name: 'Vehicle Insurance', icon: '🛡️', category: 'insurance', annualAmount: 1905, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
-  { name: 'Vehicle Payment & Gas', icon: '🚗', category: 'transportation', annualAmount: 12285, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Clothing & Apparel', icon: Shirt, category: 'other', annualAmount: 1833, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Dining Out', icon: Pizza, category: 'food', annualAmount: 3639, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Entertainment', icon: Clapperboard, category: 'entertainment', annualAmount: 3458, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Food & Groceries', icon: Utensils, category: 'food', annualAmount: 9985, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Gifts & Donations', icon: Gift, category: 'other', annualAmount: 2551, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Healthcare (Medicare)', icon: Pill, category: 'healthcare', annualAmount: 4392, preRetirement: false, postRetirement: true, startAge: 65, endAge: null },
+  { name: 'Healthcare (pre-Medicare)', icon: HeartPulse, category: 'healthcare', annualAmount: 6194, preRetirement: true, postRetirement: true, startAge: null, endAge: 64 },
+  { name: 'Home Insurance', icon: House, category: 'insurance', annualAmount: 1716, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Home Maintenance & Repairs', icon: Hammer, category: 'housing', annualAmount: 2208, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Life Insurance', icon: ClipboardList, category: 'insurance', annualAmount: 680, preRetirement: true, postRetirement: false, startAge: null, endAge: null },
+  { name: 'Miscellaneous', icon: Package, category: 'other', annualAmount: 1820, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Mortgage / Rent', icon: Home, category: 'housing', annualAmount: 22032, preRetirement: true, postRetirement: false, startAge: null, endAge: null },
+  { name: 'Personal Care', icon: SprayCan, category: 'other', annualAmount: 1010, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Pet Expenses', icon: PawPrint, category: 'other', annualAmount: 1464, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Phone & Internet', icon: Smartphone, category: 'utilities', annualAmount: 1680, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Subscriptions (streaming, etc.)', icon: Tv, category: 'entertainment', annualAmount: 1272, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Travel & Vacations', icon: Plane, category: 'travel', annualAmount: 4500, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Utilities (gas, electric, water)', icon: Lightbulb, category: 'utilities', annualAmount: 4725, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Vehicle Insurance', icon: ShieldCheck, category: 'insurance', annualAmount: 1905, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Vehicle Payment & Gas', icon: CarFront, category: 'transportation', annualAmount: 12285, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
 ];
 
 /** Quick-add templates for accounts — sensible defaults per type (typical
  *  long-term return + contribution). Mirrors the Expenses Quick Add pattern so
  *  all three data panels offer one-click setup. */
-const COMMON_ACCOUNTS: { name: string; icon: string; type: AccountType; balance: number; annualReturn: number; annualContribution: number; employerMatch: number; hint: string }[] = [
-  { name: 'Checking', icon: '🏦', type: 'checking_savings', balance: 10000, annualReturn: 0.01, annualContribution: 0, employerMatch: 0, hint: 'Cash' },
-  { name: 'Savings', icon: '💰', type: 'checking_savings', balance: 25000, annualReturn: 0.03, annualContribution: 3600, employerMatch: 0, hint: 'Emergency fund' },
-  { name: 'Taxable Brokerage', icon: '📈', type: 'taxable_brokerage', balance: 50000, annualReturn: 0.07, annualContribution: 6000, employerMatch: 0, hint: 'Invested' },
-  { name: 'Traditional 401(k)', icon: '🏛️', type: 'traditional_401k', balance: 120000, annualReturn: 0.07, annualContribution: 12000, employerMatch: 4000, hint: '+ match' },
-  { name: 'Roth 401(k)', icon: '🌿', type: 'roth_401k', balance: 0, annualReturn: 0.07, annualContribution: 12000, employerMatch: 0, hint: 'Tax-free' },
-  { name: 'Traditional IRA', icon: '📕', type: 'traditional_ira', balance: 30000, annualReturn: 0.07, annualContribution: 7000, employerMatch: 0, hint: 'Tax-deferred' },
-  { name: 'Roth IRA', icon: '🌱', type: 'roth_ira', balance: 60000, annualReturn: 0.07, annualContribution: 7000, employerMatch: 0, hint: 'Tax-free' },
-  { name: 'HSA (invested)', icon: '🏥', type: 'hsa', balance: 8000, annualReturn: 0.06, annualContribution: 4150, employerMatch: 0, hint: 'Triple-tax-free' },
+const COMMON_ACCOUNTS: { name: string; icon: LucideIcon; type: AccountType; balance: number; annualReturn: number; annualContribution: number; employerMatch: number; hint: string }[] = [
+  { name: 'Checking', icon: Banknote, type: 'checking_savings', balance: 10000, annualReturn: 0.01, annualContribution: 0, employerMatch: 0, hint: 'Cash' },
+  { name: 'Savings', icon: PiggyBank, type: 'checking_savings', balance: 25000, annualReturn: 0.03, annualContribution: 3600, employerMatch: 0, hint: 'Emergency fund' },
+  { name: 'Taxable Brokerage', icon: TrendingUp, type: 'taxable_brokerage', balance: 50000, annualReturn: 0.07, annualContribution: 6000, employerMatch: 0, hint: 'Invested' },
+  { name: 'Traditional 401(k)', icon: Landmark, type: 'traditional_401k', balance: 120000, annualReturn: 0.07, annualContribution: 12000, employerMatch: 4000, hint: '+ match' },
+  { name: 'Roth 401(k)', icon: Sprout, type: 'roth_401k', balance: 0, annualReturn: 0.07, annualContribution: 12000, employerMatch: 0, hint: 'Tax-free' },
+  { name: 'Traditional IRA', icon: FileText, type: 'traditional_ira', balance: 30000, annualReturn: 0.07, annualContribution: 7000, employerMatch: 0, hint: 'Tax-deferred' },
+  { name: 'Roth IRA', icon: Coins, type: 'roth_ira', balance: 60000, annualReturn: 0.07, annualContribution: 7000, employerMatch: 0, hint: 'Tax-free' },
+  { name: 'HSA (invested)', icon: HeartPulse, type: 'hsa', balance: 8000, annualReturn: 0.06, annualContribution: 4150, employerMatch: 0, hint: 'Triple-tax-free' },
 ];
 
 /** Quick-add templates for income sources — typical amounts and ages so the
  *  user can populate a realistic plan in a few clicks. */
-const COMMON_INCOME: { name: string; icon: string; type: IncomeType; annualAmount: number; startAge: number; endAge: number | null; cola: boolean; taxable: boolean; hint: string }[] = [
-  { name: 'Salary', icon: '💼', type: 'salary', annualAmount: 85000, startAge: 0, endAge: 64, cola: true, taxable: true, hint: 'Pre-retirement' },
-  { name: 'Social Security', icon: '🏛️', type: 'social_security', annualAmount: 36000, startAge: 67, endAge: null, cola: true, taxable: false, hint: 'COLA' },
-  { name: 'Pension', icon: '📄', type: 'pension', annualAmount: 18000, startAge: 65, endAge: null, cola: false, taxable: true, hint: 'Fixed' },
-  { name: 'Part-time', icon: '🕒', type: 'part_time', annualAmount: 15000, startAge: 65, endAge: 70, cola: false, taxable: true, hint: 'Bridge' },
-  { name: 'Rental Income', icon: '🏠', type: 'rental', annualAmount: 24000, startAge: 0, endAge: null, cola: true, taxable: true, hint: 'Property' },
-  { name: 'Dividends', icon: '💹', type: 'dividends', annualAmount: 6000, startAge: 0, endAge: null, cola: false, taxable: true, hint: 'Investments' },
-  { name: 'Annuity', icon: '🔒', type: 'annuity', annualAmount: 12000, startAge: 65, endAge: null, cola: false, taxable: true, hint: 'Guaranteed' },
+const COMMON_INCOME: { name: string; icon: LucideIcon; type: IncomeType; annualAmount: number; startAge: number; endAge: number | null; cola: boolean; taxable: boolean; hint: string }[] = [
+  { name: 'Salary', icon: Briefcase, type: 'salary', annualAmount: 85000, startAge: 0, endAge: 64, cola: true, taxable: true, hint: 'Pre-retirement' },
+  { name: 'Social Security', icon: Landmark, type: 'social_security', annualAmount: 36000, startAge: 67, endAge: null, cola: true, taxable: false, hint: 'COLA' },
+  { name: 'Pension', icon: FileText, type: 'pension', annualAmount: 18000, startAge: 65, endAge: null, cola: false, taxable: true, hint: 'Fixed' },
+  { name: 'Part-time', icon: Clock, type: 'part_time', annualAmount: 15000, startAge: 65, endAge: 70, cola: false, taxable: true, hint: 'Bridge' },
+  { name: 'Rental Income', icon: Home, type: 'rental', annualAmount: 24000, startAge: 0, endAge: null, cola: true, taxable: true, hint: 'Property' },
+  { name: 'Dividends', icon: CircleDollarSign, type: 'dividends', annualAmount: 6000, startAge: 0, endAge: null, cola: false, taxable: true, hint: 'Investments' },
+  { name: 'Annuity', icon: Lock, type: 'annuity', annualAmount: 12000, startAge: 65, endAge: null, cola: false, taxable: true, hint: 'Guaranteed' },
 ];
 
 const EXPENSE_CATEGORIES: ExpenseCategory[] = [
@@ -137,52 +212,52 @@ const EVENT_TYPES: EventType[] = [
 /** Curated external resources (calculators, SSA, IRS, Medicare, investing).
  *  Shown in a collapsible footer so they're accessible without cluttering the
  *  data-entry sidebar on every Inputs screen. */
-const RESOURCE_GROUPS: { label: string; links: { icon: string; name: string; url: string }[] }[] = [
+const RESOURCE_GROUPS: { label: string; links: { icon: LucideIcon; name: string; url: string }[] }[] = [
   {
     label: 'Calculators',
     links: [
-      { icon: '🏦', name: 'SSA Retirement Estimator', url: 'https://www.ssa.gov/benefits/retirement/estimator.html' },
-      { icon: '📅', name: 'SSA Benefit Calculator', url: 'https://www.ssa.gov/OACT/quickcalc/' },
-      { icon: '💰', name: 'Fidelity Retirement Score', url: 'https://www.fidelity.com/calculators-tools/retirement-score' },
-      { icon: '📊', name: 'Vanguard Retirement Nest Egg', url: 'https://retirementplans.vanguard.com/VGApp/pe/pubeducation/calculators/RetirementNestEggCalc.jsf' },
-      { icon: '🧮', name: 'AARP Retirement Calculator', url: 'https://www.aarp.org/work/retirement-calculator/' },
-      { icon: '📈', name: 'Bankrate 401k Calculator', url: 'https://www.bankrate.com/retirement/401-k-calculator/' },
+      { icon: Landmark, name: 'SSA Retirement Estimator', url: 'https://www.ssa.gov/benefits/retirement/estimator.html' },
+      { icon: CalendarClock, name: 'SSA Benefit Calculator', url: 'https://www.ssa.gov/OACT/quickcalc/' },
+      { icon: CircleDollarSign, name: 'Fidelity Retirement Score', url: 'https://www.fidelity.com/calculators-tools/retirement-score' },
+      { icon: Table2, name: 'Vanguard Retirement Nest Egg', url: 'https://retirementplans.vanguard.com/VGApp/pe/pubeducation/calculators/RetirementNestEggCalc.jsf' },
+      { icon: Calculator, name: 'AARP Retirement Calculator', url: 'https://www.aarp.org/work/retirement-calculator/' },
+      { icon: TrendingUp, name: 'Bankrate 401k Calculator', url: 'https://www.bankrate.com/retirement/401-k-calculator/' },
     ],
   },
   {
     label: 'Social Security',
     links: [
-      { icon: '💳', name: 'my Social Security Account', url: 'https://www.ssa.gov/myaccount/' },
-      { icon: '📋', name: 'SSA Benefit Formulas', url: 'https://www.ssa.gov/oact/cola/Benefits.html' },
-      { icon: '⏰', name: 'SS Claiming Age Guide', url: 'https://www.ssa.gov/benefits/retirement/planner/agereduction.html' },
-      { icon: '👥', name: 'Spousal Benefits', url: 'https://www.ssa.gov/oact/quickcalc/spouse.html' },
+      { icon: CreditCard, name: 'my Social Security Account', url: 'https://www.ssa.gov/myaccount/' },
+      { icon: ClipboardList, name: 'SSA Benefit Formulas', url: 'https://www.ssa.gov/oact/cola/Benefits.html' },
+      { icon: Clock, name: 'SS Claiming Age Guide', url: 'https://www.ssa.gov/benefits/retirement/planner/agereduction.html' },
+      { icon: Users, name: 'Spousal Benefits', url: 'https://www.ssa.gov/oact/quickcalc/spouse.html' },
     ],
   },
   {
     label: 'Taxes',
     links: [
-      { icon: '🧾', name: 'IRS Tax Bracket Calculator', url: 'https://www.irs.gov/help/ita/whats-my-tax-bracket' },
-      { icon: '📕', name: 'IRS Pub 590-B (IRA Withdrawals)', url: 'https://www.irs.gov/publications/p590b' },
-      { icon: '🏢', name: 'IRS Pub 560 (401k Limits)', url: 'https://www.irs.gov/publications/p560' },
-      { icon: '💲', name: 'RMD Calculator (IRS)', url: 'https://www.irs.gov/retirement-plans/required-minimum-distribution-calculators' },
+      { icon: Receipt, name: 'IRS Tax Bracket Calculator', url: 'https://www.irs.gov/help/ita/whats-my-tax-bracket' },
+      { icon: FileText, name: 'IRS Pub 590-B (IRA Withdrawals)', url: 'https://www.irs.gov/publications/p590b' },
+      { icon: Building2, name: 'IRS Pub 560 (401k Limits)', url: 'https://www.irs.gov/publications/p560' },
+      { icon: BadgeDollarSign, name: 'RMD Calculator (IRS)', url: 'https://www.irs.gov/retirement-plans/required-minimum-distribution-calculators' },
     ],
   },
   {
     label: 'Medicare & Healthcare',
     links: [
-      { icon: '🏥', name: 'Medicare.gov Official Site', url: 'https://www.medicare.gov/' },
-      { icon: '🩺', name: 'Medicare Eligibility Tool', url: 'https://www.medicare.gov/eligibilitypremiumcalc/' },
-      { icon: '💊', name: 'Plan Finder (Drug Coverage)', url: 'https://www.medicare.gov/plan-compare/' },
-      { icon: '📚', name: 'Medicare & You Handbook', url: 'https://www.medicare.gov/medicare-and-you' },
+      { icon: HeartPulse, name: 'Medicare.gov Official Site', url: 'https://www.medicare.gov/' },
+      { icon: HeartPulse, name: 'Medicare Eligibility Tool', url: 'https://www.medicare.gov/eligibilitypremiumcalc/' },
+      { icon: Pill, name: 'Plan Finder (Drug Coverage)', url: 'https://www.medicare.gov/plan-compare/' },
+      { icon: BookOpen, name: 'Medicare & You Handbook', url: 'https://www.medicare.gov/medicare-and-you' },
     ],
   },
   {
     label: 'Investing & Education',
     links: [
-      { icon: '🎓', name: 'Investor.gov (SEC)', url: 'https://www.investor.gov/' },
-      { icon: '📖', name: 'Compound Interest Calc', url: 'https://www.investor.gov/financial-tools-calculators/calculators/compound-interest-calculator' },
-      { icon: '⚖️', name: 'FINRA Broker Check', url: 'https://brokercheck.finra.org/' },
-      { icon: '🔒', name: 'SIPC Protection Info', url: 'https://www.sipc.org/for-investors/what-sipc-protects' },
+      { icon: GraduationCap, name: 'Investor.gov (SEC)', url: 'https://www.investor.gov/' },
+      { icon: BookOpen, name: 'Compound Interest Calc', url: 'https://www.investor.gov/financial-tools-calculators/calculators/compound-interest-calculator' },
+      { icon: Scale, name: 'FINRA Broker Check', url: 'https://brokercheck.finra.org/' },
+      { icon: Lock, name: 'SIPC Protection Info', url: 'https://www.sipc.org/for-investors/what-sipc-protects' },
     ],
   },
 ];
@@ -190,13 +265,13 @@ const RESOURCE_GROUPS: { label: string; links: { icon: string; name: string; url
 /** Theme picker config. Short labels for the popover, swatch for visual. */
 type ThemeId = 'light' | 'dark' | 'sepia' | 'nord' | 'warm-gray' | 'dracula';
 
-const THEMES: { id: ThemeId; label: string; icon: string; swatch: string }[] = [
-  { id: 'light',     label: 'Light',    icon: '☀',  swatch: '#f7f6f3' },
-  { id: 'dark',      label: 'Dark',     icon: '☾',  swatch: '#1a1816' },
-  { id: 'sepia',     label: 'Sepia',    icon: '☕', swatch: '#f4ecd8' },
-  { id: 'warm-gray', label: 'Warm Gray', icon: '◆',  swatch: '#3a3a3a' },
-  { id: 'nord',      label: 'Nord',     icon: '❄',  swatch: '#2e3440' },
-  { id: 'dracula',   label: 'Dracula',  icon: '🦇', swatch: '#282a36' },
+const THEMES: { id: ThemeId; label: string; swatch: string }[] = [
+  { id: 'light',     label: 'Light',     swatch: '#f7f6f3' },
+  { id: 'dark',      label: 'Dark',      swatch: '#1a1816' },
+  { id: 'sepia',     label: 'Sepia',     swatch: '#f4ecd8' },
+  { id: 'warm-gray', label: 'Warm Gray', swatch: '#3a3a3a' },
+  { id: 'nord',      label: 'Nord',      swatch: '#2e3440' },
+  { id: 'dracula',   label: 'Dracula',   swatch: '#282a36' },
 ];
 
 /* Compact popover theme picker — matches the Menu button styling. */
@@ -349,7 +424,7 @@ const ONBOARD_KEY = 'retirement-onboarded';
 function OnboardingBanner({ onStartFresh, onDismiss }: { onStartFresh: () => void; onDismiss: () => void }) {
   return (
     <div className="onboarding-banner" role="status">
-      <span className="onboarding-icon" aria-hidden="true">👋</span>
+      <span className="onboarding-icon" aria-hidden="true"><Sparkles size={20} /></span>
       <div className="onboarding-body">
         <strong>Welcome!</strong> This is sample data to show how the app works.
         Edit the numbers to match your life, or start with a blank plan.
@@ -413,10 +488,10 @@ function ResourcesFooter() {
  * tax links on Assumptions). Collapsed by default so it adds one line of
  * height until the user expands it. Reuses the shared .resource-link styling.
  */
-function ContextualResources({ group }: { group: { label: string; links: { icon: string; name: string; url: string }[] } }) {
+function ContextualResources({ group }: { group: { label: string; links: { icon: LucideIcon; name: string; url: string }[] } }) {
   return (
     <details className="contextual-resources">
-      <summary>🔗 {group.label} resources</summary>
+      <summary><BookOpen size={15} aria-hidden="true" /> {group.label} resources</summary>
       <div className="contextual-resources-grid">
         {group.links.map((link) => (
           <a
@@ -427,7 +502,7 @@ function ContextualResources({ group }: { group: { label: string; links: { icon:
             className="resource-link"
             title={link.name}
           >
-            <span className="resource-icon" aria-hidden="true">{link.icon}</span>
+            <span className="resource-icon" aria-hidden="true"><Glyph i={link.icon} /></span>
             <span className="resource-name">{link.name}</span>
             <span className="resource-ext" aria-hidden="true">↗</span>
           </a>
@@ -472,7 +547,7 @@ function ResourcesPicker() {
         aria-expanded={open}
         title="Helpful calculators, Social Security, and other external tools"
       >
-        <span aria-hidden="true">📖</span> Learn more
+        <span aria-hidden="true"><BookOpen size={16} /></span> Learn more
         <span className="resources-picker-caret" aria-hidden="true">▾</span>
       </button>
       {open && (
@@ -490,7 +565,7 @@ function ResourcesPicker() {
                   title={link.name}
                   onClick={() => setOpen(false)}
                 >
-                  <span className="resource-icon" aria-hidden="true">{link.icon}</span>
+                  <span className="resource-icon" aria-hidden="true"><Glyph i={link.icon} /></span>
                   <span className="resource-name">{link.name}</span>
                   <span className="resource-ext" aria-hidden="true">↗</span>
                 </a>
@@ -716,25 +791,25 @@ export default function App() {
             title="Export plan as Notes (Markdown) — works with Obsidian or any notes app"
             aria-label="Export plan notes"
           >
-            📝 Notes
+            <FileText size={16} aria-hidden="true" /> Notes
           </button>
           <ThemePicker theme={theme} setTheme={setTheme} />
           <div className="menu-wrapper" ref={menuRef}>
-            <button className="btn btn-sm menu-trigger" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">☰ Menu</button>
+            <button className="btn btn-sm menu-trigger" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu"><Menu size={16} aria-hidden="true" /> Menu</button>
             {menuOpen && (
               <div className="menu-dropdown">
                 <button className="menu-item" onClick={() => { fileInputRef.current?.click(); setMenuOpen(false); }}>
-                  📥 Import Plan
+                  <Upload size={16} aria-hidden="true" /> Import Plan
                 </button>
                 <button className="menu-item" onClick={() => { handleExport(); setMenuOpen(false); }}>
-                  📄 Export JSON
+                  <FileJson size={16} aria-hidden="true" /> Export JSON
                 </button>
                 <button className="menu-item" onClick={() => { handleExportMarkdown(); setMenuOpen(false); }} title="Markdown for Obsidian or any notes app">
-                  📝 Export Notes
+                  <FileText size={16} aria-hidden="true" /> Export Notes
                 </button>
                 <div className="menu-divider" />
                 <button className="menu-item" onClick={restartOnboarding}>
-                  👋 Show welcome tour
+                  <Sparkles size={16} aria-hidden="true" /> Show welcome tour
                 </button>
                 <ResetPlanMenuItem onReset={() => { store.resetPlan(); setMenuOpen(false); }} />
               </div>
@@ -861,7 +936,7 @@ function ResetPlanMenuItem({ onReset }: { onReset: () => void }) {
 
   return (
     <button className="menu-item danger" onClick={() => setArmed(true)}>
-      🗑 Reset Plan
+      <Trash2 size={16} aria-hidden="true" /> Reset Plan
     </button>
   );
 }
@@ -911,21 +986,21 @@ function NewScenarioMenu({
           <button className="wizard-close" onClick={onCancel} aria-label="Close">✕</button>
         </div>
         <button className="new-scenario-option" onClick={onWizard}>
-          <span className="new-scenario-option-icon" aria-hidden="true">✨</span>
+          <span className="new-scenario-option-icon" aria-hidden="true"><Wand2 size={20} /></span>
           <span className="new-scenario-option-body">
             <span className="new-scenario-option-title">Use the wizard</span>
             <span className="new-scenario-option-desc">Answer 3 quick questions for a plan that matches your life.</span>
           </span>
         </button>
         <button className="new-scenario-option" onClick={onBlank}>
-          <span className="new-scenario-option-icon" aria-hidden="true">📋</span>
+          <span className="new-scenario-option-icon" aria-hidden="true"><ClipboardList size={20} /></span>
           <span className="new-scenario-option-body">
             <span className="new-scenario-option-title">Start with sample data</span>
             <span className="new-scenario-option-desc">A fully filled-in example you edit to match your situation.</span>
           </span>
         </button>
         <button className="new-scenario-option" onClick={onDuplicate}>
-          <span className="new-scenario-option-icon" aria-hidden="true">📄</span>
+          <span className="new-scenario-option-icon" aria-hidden="true"><FileText size={20} /></span>
           <span className="new-scenario-option-body">
             <span className="new-scenario-option-title">Duplicate current</span>
             <span className="new-scenario-option-desc">Copy “{usePlanStore.getState().plan.scenarios.find((s) => s.id === usePlanStore.getState().activeScenarioId)?.name ?? 'current'}” to tweak as a what-if.</span>
@@ -973,7 +1048,7 @@ function ConfirmDelete({ onConfirm, title }: { onConfirm: () => void; title: str
       title={title}
       onClick={(e) => { e.stopPropagation(); setArmed(true); }}
     >
-      🗑
+      <Trash2 size={15} aria-hidden="true" />
     </button>
   );
 }
@@ -1215,31 +1290,34 @@ function InputsView({ scenario, store }: {
     localStorage.setItem('retirement-input-section', section);
   }, [section]);
 
-  const navItems: { id: InputSection; label: string; icon: string }[] = [
-    { id: 'overview', label: 'Overview', icon: '📊' },
-    { id: 'assumptions', label: 'Assumptions', icon: '⚙️' },
-    { id: 'income', label: 'Income Sources', icon: '💵' },
-    { id: 'accounts', label: 'Accounts & Savings', icon: '🏦' },
-    { id: 'properties', label: 'Homes & Property', icon: '🏠' },
-    { id: 'expenses', label: 'Expenses', icon: '📋' },
-    { id: 'events', label: 'Life Events', icon: '📅' },
+  const navItems: { id: InputSection; label: string; icon: LucideIcon }[] = [
+    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'assumptions', label: 'Assumptions', icon: Settings },
+    { id: 'income', label: 'Income Sources', icon: Wallet },
+    { id: 'accounts', label: 'Accounts & Savings', icon: Landmark },
+    { id: 'properties', label: 'Homes & Property', icon: Home },
+    { id: 'expenses', label: 'Expenses', icon: ListChecks },
+    { id: 'events', label: 'Life Events', icon: CalendarDays },
   ];
 
   return (
     <div className="inputs-layout">
       <aside className="inputs-sidebar">
         <ul className="inputs-nav">
-          {navItems.map((item) => (
-            <li key={item.id}>
-              <button
-                className={`inputs-nav-item ${section === item.id ? 'active' : ''}`}
-                onClick={() => setSection(item.id)}
-              >
-                <span className="inputs-nav-icon">{item.icon}</span>
-                {item.label}
-              </button>
-            </li>
-          ))}
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <li key={item.id}>
+                <button
+                  className={`inputs-nav-item ${section === item.id ? 'active' : ''}`}
+                  onClick={() => setSection(item.id)}
+                >
+                  <Icon className="inputs-nav-icon" size={18} strokeWidth={1.75} aria-hidden="true" />
+                  {item.label}
+                </button>
+              </li>
+            );
+          })}
         </ul>
       </aside>
       <div className="inputs-content">
@@ -1364,7 +1442,7 @@ function OverviewPanel({ scenario, store }: {
 
       <div className="overview-wellness-grid">
         <div className="panel overview-gauge-card">
-          <h3 className="overview-section-title">📋 Plan Detail</h3>
+          <h3 className="overview-section-title"><ClipboardList size={16} aria-hidden="true" /> Plan Detail</h3>
           <div className="overview-gauge-container">
             <div className="overview-gauge" style={{ background: `conic-gradient(from 270deg, ${wellnessColor} 0deg ${gaugeDeg}deg, var(--bg-subtle) ${gaugeDeg}deg 180deg, transparent 180deg)` }}>
               <div className="overview-gauge-inner">
@@ -1389,7 +1467,7 @@ function OverviewPanel({ scenario, store }: {
       </div>
 
       <div className="chart-container">
-        <h3>📈 Projected Net Worth (Today's Dollars)</h3>
+        <h3><TrendingUp size={16} aria-hidden="true" /> Projected Net Worth (Today's Dollars)</h3>
         <ResponsiveContainer width="100%" height={miniChartHeight} aria-label={`Projected net worth in today's dollars, ${miniChartData.length} yearly data points from age ${miniChartData[0]?.age ?? ''} to ${miniChartData[miniChartData.length - 1]?.age ?? ''}`}>
           <AreaChart data={miniChartData}>
             <defs>
@@ -1507,7 +1585,7 @@ function AssumptionsPanel({ scenario, store }: {
   return (
     <div className="panel mb-16">
       <div className="panel-header">
-        <h2 className="assumptions-title">⚙️ Assumptions
+        <h2 className="assumptions-title"><Settings size={18} aria-hidden="true" /> Assumptions
           <span className="scenario-name-edit" title="Click to rename this scenario">
             <input
               type="text"
@@ -1547,7 +1625,7 @@ function AssumptionsPanel({ scenario, store }: {
 
       {/* Timeline section */}
       <div className="form-section">
-        <div className="form-section-title">🗓️ Timeline</div>
+        <div className="form-section-title"><CalendarClock size={15} aria-hidden="true" /> Timeline</div>
         <div className="form-row-3">
           <FieldGroup label="Current Age">
             <AgeInput value={a.currentAge} onChange={(v) => upd({ currentAge: v })} min={ASSUMPTION_BOUNDS.currentAge[0]} max={ASSUMPTION_BOUNDS.currentAge[1]} />
@@ -1573,7 +1651,7 @@ function AssumptionsPanel({ scenario, store }: {
       <div className="form-section">
         <div className="form-section-title">
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            👥 Spouse
+            <Users size={15} aria-hidden="true" /> Spouse
             <label className="spouse-toggle">
               <input
                 type="checkbox"
@@ -1621,7 +1699,7 @@ function AssumptionsPanel({ scenario, store }: {
 
       {/* Inflation & Tax section */}
       <div className="form-section">
-        <div className="form-section-title">📊 Inflation & Tax</div>
+        <div className="form-section-title"><Percent size={15} aria-hidden="true" /> Inflation & Tax</div>
         <div className="form-section-help">How the cost of living rises over time, and how much of your retirement withdrawals go to taxes.</div>
         <div className="form-row-3">
           <FieldGroup
@@ -1647,7 +1725,7 @@ function AssumptionsPanel({ scenario, store }: {
 
       {/* Investment section */}
       <div className="form-section">
-        <div className="form-section-title">📈 Investment Returns & Withdrawals</div>
+        <div className="form-section-title"><TrendingUp size={15} aria-hidden="true" /> Investment Returns & Withdrawals</div>
         <div className="form-section-help">
           <strong>High impact.</strong> These rates drive the core projection. The return rates below are used as <strong>fallbacks</strong> —
           if you set a specific return rate on an individual account (Accounts tab), that rate is used instead.
@@ -1682,11 +1760,11 @@ function AssumptionsPanel({ scenario, store }: {
   );
 }
 
-const ACCOUNT_GROUP_META: { types: AccountType[]; label: string; icon: string; hint: string }[] = [
-  { types: ['checking_savings'], label: 'Cash & Liquid', icon: '💵', hint: 'Checking and savings — easily accessible, low return' },
-  { types: ['taxable_brokerage'], label: 'Taxable Investments', icon: '📈', hint: 'Brokerage accounts — taxed on gains each year' },
-  { types: ['traditional_401k', 'roth_401k', 'traditional_ira', 'roth_ira', 'hsa'], label: 'Tax-Advantaged', icon: '🛡️', hint: '401k, IRA, HSA — tax-deferred or tax-free growth' },
-  { types: ['pension', 'other'], label: 'Other', icon: '📦', hint: 'Pensions and other account types' },
+const ACCOUNT_GROUP_META: { types: AccountType[]; label: string; icon: LucideIcon; hint: string }[] = [
+  { types: ['checking_savings'], label: 'Cash & Liquid', icon: Wallet, hint: 'Checking and savings — easily accessible, low return' },
+  { types: ['taxable_brokerage'], label: 'Taxable Investments', icon: TrendingUp, hint: 'Brokerage accounts — taxed on gains each year' },
+  { types: ['traditional_401k', 'roth_401k', 'traditional_ira', 'roth_ira', 'hsa'], label: 'Tax-Advantaged', icon: ShieldCheck, hint: '401k, IRA, HSA — tax-deferred or tax-free growth' },
+  { types: ['pension', 'other'], label: 'Other', icon: Package, hint: 'Pensions and other account types' },
 ];
 
 function AccountCard({ acct, scenario, store }: {
@@ -1704,7 +1782,7 @@ function AccountCard({ acct, scenario, store }: {
     <div className="acct-card">
       <div className="acct-card-header">
         <div className="acct-card-header-left">
-          <span className="acct-card-icon" aria-hidden="true">{acct.type === 'checking_savings' ? '💵' : acct.type === 'taxable_brokerage' ? '📈' : acct.type.includes('roth') ? '🌿' : acct.type === 'hsa' ? '🏥' : acct.type === 'pension' ? '🏢' : '🏦'}</span>
+          <span className="acct-card-icon" aria-hidden="true"><Glyph i={acct.type === 'checking_savings' ? Wallet : acct.type === 'taxable_brokerage' ? TrendingUp : acct.type.includes('roth') ? Sprout : acct.type === 'hsa' ? HeartPulse : acct.type === 'pension' ? Building2 : Landmark} /></span>
           <div className="acct-card-title-area">
             <input
               type="text"
@@ -1773,7 +1851,7 @@ function AccountsPanel({ scenario, store }: {
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2><span aria-hidden="true">🏦</span> Accounts & Savings</h2>
+        <h2><Landmark size={20} aria-hidden="true" /> Accounts & Savings</h2>
       </div>
       <p className="section-help">
         Track all your savings and investment accounts. Enter the <strong>current balance</strong>, expected <strong>annual return</strong>,
@@ -1782,13 +1860,13 @@ function AccountsPanel({ scenario, store }: {
 
       {/* Quick add common accounts */}
       <details className="quick-add-section">
-        <summary className="quick-add-label">⚡ Quick Add Common Accounts <span className="quick-add-toggle"></span></summary>
+        <summary className="quick-add-label"><Zap size={15} aria-hidden="true" /> Quick Add Common Accounts <span className="quick-add-toggle"></span></summary>
         <div className="quick-add-grid">
           {COMMON_ACCOUNTS.map((ca) => (
             <button key={ca.name} className="quick-add-btn" onClick={() => store.addAccount(scenario.id, {
               name: ca.name, type: ca.type, balance: ca.balance, annualReturn: ca.annualReturn, annualContribution: ca.annualContribution, employerMatch: ca.employerMatch,
             })}>
-              <span className="quick-add-icon" aria-hidden="true">{ca.icon}</span>
+              <span className="quick-add-icon" aria-hidden="true"><Glyph i={ca.icon} /></span>
               <span>{ca.name}</span>
               <span className="quick-add-amount">{ca.hint}</span>
             </button>
@@ -1847,7 +1925,7 @@ function AccountsPanel({ scenario, store }: {
               return (
                 <div key={g.label} className="acct-allocation-legend-item">
                   <span className="acct-allocation-dot" style={{ background: colors[i % colors.length] }} />
-                  <span>{g.icon} {g.label}</span>
+                  <span><Glyph i={g.icon} /> {g.label}</span>
                   <span className="muted" style={{ fontSize: 11 }}>{pct.toFixed(0)}%</span>
                 </div>
               );
@@ -1863,7 +1941,7 @@ function AccountsPanel({ scenario, store }: {
         return (
           <div key={g.label} className="acct-group">
             <div className="acct-group-header">
-              <span className="acct-group-icon">{g.icon}</span>
+              <span className="acct-group-icon"><Glyph i={g.icon} /></span>
               <span className="acct-group-label">{g.label}</span>
               <span className="acct-group-count">{g.accounts.length}</span>
               <span className="acct-group-total">{formatCurrency(groupTotal, { compact: true })}</span>
@@ -1912,17 +1990,17 @@ const PROPERTY_TYPES: PropertyType[] = ['primary_residence', 'vacation', 'invest
 /** Property group metadata — mirrors ACCOUNT_GROUP_META so the Properties
  *  panel groups by type with per-group headers and + Add buttons, just like
  *  Accounts & Savings. Each group lists its property types in display order. */
-const PROPERTY_GROUP_META: { label: string; icon: string; types: PropertyType[] }[] = [
-  { label: 'Primary & Residential', icon: '🏠', types: ['primary_residence'] },
-  { label: 'Vacation & Investment', icon: '🏖️', types: ['vacation', 'investment'] },
-  { label: 'Land & Other', icon: '🌳', types: ['land', 'other'] },
+const PROPERTY_GROUP_META: { label: string; icon: LucideIcon; types: PropertyType[] }[] = [
+  { label: 'Primary & Residential', icon: Home, types: ['primary_residence'] },
+  { label: 'Vacation & Investment', icon: Palmtree, types: ['vacation', 'investment'] },
+  { label: 'Land & Other', icon: TreePine, types: ['land', 'other'] },
 ];
 
-const PLAN_ACTION_LABELS: { value: string; label: string; icon: string }[] = [
-  { value: 'keep', label: 'Keep it', icon: '🏠' },
-  { value: 'sell', label: 'Sell it', icon: '🏡' },
-  { value: 'sell_and_buy', label: 'Sell and buy another', icon: '🔄' },
-  { value: 'undecided', label: 'Not sure yet', icon: '🤔' },
+const PLAN_ACTION_LABELS: { value: string; label: string; icon: LucideIcon }[] = [
+  { value: 'keep', label: 'Keep it', icon: Home },
+  { value: 'sell', label: 'Sell it', icon: House },
+  { value: 'sell_and_buy', label: 'Sell and buy another', icon: ArrowLeftRight },
+  { value: 'undecided', label: 'Not sure yet', icon: HelpCircle },
 ];
 
 function PropertyCard({ prop, scenario, store }: {
@@ -1958,7 +2036,7 @@ function PropertyCard({ prop, scenario, store }: {
     <div className="prop-card">
       {/* === Step 1: Property header + basics === */}
       <div className="prop-card-header">
-        <span className="prop-icon">{prop.type === 'land' ? '🌳' : '🏠'}</span>
+        <span className="prop-icon"><Glyph i={prop.type === 'land' ? TreePine : Home} /></span>
         <input type="text" className="prop-name-input" value={prop.name} placeholder="e.g. Family Home" onChange={(e) => store.updateProperty(scenario.id, prop.id, { name: e.target.value })} aria-label="Property name" />
         <select className="table-select" value={prop.type} onChange={(e) => store.updateProperty(scenario.id, prop.id, { type: e.target.value as PropertyType })} aria-label="Property type" style={{ width: 'auto', minWidth: 140 }}>
           {PROPERTY_TYPES.map((t) => <option key={t} value={t}>{prettify(t)}</option>)}
@@ -2042,7 +2120,7 @@ function PropertyCard({ prop, scenario, store }: {
                 store.updateProperty(scenario.id, prop.id, updates);
               }}
             >
-              <span className="prop-plan-icon">{opt.icon}</span>
+              <span className="prop-plan-icon"><Glyph i={opt.icon} /></span>
               <span>{opt.label}</span>
             </button>
           ))}
@@ -2109,17 +2187,17 @@ function PropertyCard({ prop, scenario, store }: {
 
       {/* === Step Final: Retirement Impact (always visible) === */}
       <div className="prop-step prop-step-impact">
-        <div className="prop-step-label">📊 Retirement Impact</div>
+        <div className="prop-step-label"><TrendingUp size={15} aria-hidden="true" /> Retirement Impact</div>
         <div className="prop-impact-grid">
           <div className="prop-impact-item">
-            <span className="prop-impact-icon">🏠</span>
+            <span className="prop-impact-icon"><Home size={16} aria-hidden="true" /></span>
             <div>
               <div className="prop-impact-value">{formatCurrency(equity, { compact: true })}</div>
               <div className="prop-impact-label">Equity available</div>
             </div>
           </div>
           <div className="prop-impact-item">
-            <span className="prop-impact-icon">💰</span>
+            <span className="prop-impact-icon"><CircleDollarSign size={16} aria-hidden="true" /></span>
             <div>
               <div className="prop-impact-value">{formatCurrency(annualHousing + (prop.mortgagePayment ?? 0), { compact: true })}/yr</div>
               <div className="prop-impact-label">Housing cost in retirement</div>
@@ -2127,7 +2205,7 @@ function PropertyCard({ prop, scenario, store }: {
           </div>
           {showSaleFields && (prop.saleProceeds ?? 0) > 0 && (
             <div className="prop-impact-item">
-              <span className="prop-impact-icon">💵</span>
+              <span className="prop-impact-icon"><Wallet size={16} aria-hidden="true" /></span>
               <div>
                 <div className="prop-impact-value" style={{ color: 'var(--green)' }}>{formatCurrency(prop.saleProceeds ?? 0, { compact: true })}</div>
                 <div className="prop-impact-label">Cash from sale at age {prop.saleAge}</div>
@@ -2136,7 +2214,7 @@ function PropertyCard({ prop, scenario, store }: {
           )}
           {showBuyFields && estMortgage > 0 && (
             <div className="prop-impact-item">
-              <span className="prop-impact-icon">🔑</span>
+              <span className="prop-impact-icon"><KeyRound size={16} aria-hidden="true" /></span>
               <div>
                 <div className="prop-impact-value">{formatCurrency(estMortgage, { compact: true })}/yr</div>
                 <div className="prop-impact-label">New mortgage at age {prop.purchaseAge}</div>
@@ -2162,7 +2240,7 @@ function PropertiesPanel({ scenario, store }: {
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2><span aria-hidden="true">🏠</span> Homes & Property</h2>
+        <h2><Home size={20} aria-hidden="true" /> Homes & Property</h2>
         <button className="btn btn-sm" onClick={() => store.addProperty(scenario.id, {
           name: 'New Property', type: 'primary_residence', currentValue: 0, mortgageBalance: 0, annualAppreciation: 0.03, annualPropertyTax: 0, annualInsurance: 0,
         })}>+ Add Property</button>
@@ -2200,7 +2278,7 @@ function PropertiesPanel({ scenario, store }: {
             return (
               <div key={g.label} className="acct-group">
                 <div className="acct-group-header">
-                  <span className="acct-group-icon" aria-hidden="true">{g.icon}</span>
+                  <span className="acct-group-icon" aria-hidden="true"><Glyph i={g.icon} /></span>
                   <span className="acct-group-label">{g.label}</span>
                   <span className="acct-group-count">{groupProps.length}</span>
                   <span className="acct-group-total">{formatCurrency(groupValue, { compact: true })}</span>
@@ -2224,18 +2302,18 @@ function PropertiesPanel({ scenario, store }: {
   );
 }
 
-const CATEGORY_ICONS: Record<string, string> = {
-  housing: '🏠',
-  food: '🍽️',
-  transportation: '🚗',
-  healthcare: '🏥',
-  insurance: '🛡️',
-  utilities: '💡',
-  entertainment: '🎬',
-  travel: '✈️',
-  debt_payment: '💳',
-  taxes: '🧾',
-  other: '📦',
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  housing: Home,
+  food: Utensils,
+  transportation: Car,
+  healthcare: HeartPulse,
+  insurance: ShieldCheck,
+  utilities: Lightbulb,
+  entertainment: Clapperboard,
+  travel: Plane,
+  debt_payment: CreditCard,
+  taxes: Receipt,
+  other: Package,
 };
 
 function getExpensePhase(exp: { preRetirement: boolean; postRetirement: boolean }): { label: string; cls: string } {
@@ -2256,7 +2334,7 @@ function ExpenseRow({ exp, scenario, store }: {
   return (
     <div className="income-row exp-row">
       <div className="income-row-main">
-        <span className="income-row-icon" aria-hidden="true">{CATEGORY_ICONS[exp.category] ?? '📦'}</span>
+        <span className="income-row-icon" aria-hidden="true"><Glyph i={CATEGORY_ICONS[exp.category] ?? Package} /></span>
         <input
           type="text"
           className="income-row-name"
@@ -2284,12 +2362,12 @@ function ExpenseRow({ exp, scenario, store }: {
             className={`income-flag ${exp.preRetirement ? 'active' : ''}`}
             title="Applies before retirement"
             onClick={() => store.updateExpense(scenario.id, exp.id, { preRetirement: !exp.preRetirement })}
-          >💼 Before</button>
+          ><Briefcase size={14} aria-hidden="true" /> Before</button>
           <button
             className={`income-flag ${exp.postRetirement ? 'active' : ''}`}
             title="Applies after retirement"
             onClick={() => store.updateExpense(scenario.id, exp.id, { postRetirement: !exp.postRetirement })}
-          >🏖️ After</button>
+          ><Palmtree size={14} aria-hidden="true" /> After</button>
         </div>
         <ConfirmDelete title="Delete expense" onConfirm={() => store.deleteExpense(scenario.id, exp.id)} />
       </div>
@@ -2310,14 +2388,14 @@ function ExpensesPanel({ scenario, store }: {
   // Group by category
   const groups = EXPENSE_CATEGORIES.map((cat) => ({
     category: cat,
-    icon: CATEGORY_ICONS[cat] ?? '📦',
+    icon: CATEGORY_ICONS[cat] ?? Package,
     expenses: scenario.expenses.filter((e) => e.category === cat),
   })).filter((g) => g.expenses.length > 0);
 
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2><span aria-hidden="true">📋</span> Expenses</h2>
+        <h2><ListChecks size={20} aria-hidden="true" /> Expenses</h2>
         <button className="btn btn-sm" onClick={() => store.addExpense(scenario.id, {
           name: 'New Expense', category: 'other', annualAmount: 0, preRetirement: false, postRetirement: true, startAge: null, endAge: null,
         })}>+ Add Expense</button>
@@ -2329,11 +2407,11 @@ function ExpensesPanel({ scenario, store }: {
 
       {/* Quick add common expenses */}
       <details className="quick-add-section">
-        <summary className="quick-add-label">⚡ Quick Add Common Expenses <span className="quick-add-toggle"></span></summary>
+        <summary className="quick-add-label"><Zap size={15} aria-hidden="true" /> Quick Add Common Expenses <span className="quick-add-toggle"></span></summary>
         <div className="quick-add-grid">
           {COMMON_EXPENSES.map((ce) => (
             <button key={ce.name} className="quick-add-btn" onClick={() => store.addExpense(scenario.id, { ...ce })}>
-              <span className="quick-add-icon">{ce.icon}</span>
+              <span className="quick-add-icon"><Glyph i={ce.icon} /></span>
               <span>{ce.name}</span>
               <span className="quick-add-amount">{formatCurrency(ce.annualAmount / 12, { compact: true })}/mo</span>
             </button>
@@ -2365,7 +2443,7 @@ function ExpensesPanel({ scenario, store }: {
             return (
               <div key={g.category} className="income-group">
                 <div className="income-group-header">
-                  <span className="income-group-icon">{g.icon}</span>
+                  <span className="income-group-icon"><Glyph i={g.icon} /></span>
                   <span className="income-group-label">{prettify(g.category)}</span>
                   <span className="income-group-count">{g.expenses.length}</span>
                   <span className="income-group-total-muted">{formatCurrency(groupTotal, { compact: true })}/mo</span>
@@ -2390,16 +2468,16 @@ function ExpensesPanel({ scenario, store }: {
 }
 
 /** Income type icons */
-const INCOME_ICONS: Record<string, string> = {
-  salary: '💼',
-  social_security: '🏛️',
-  pension: '🏢',
-  part_time: '🕐',
-  self_employment: '🔨',
-  rental: '🏠',
-  annuity: '📊',
-  dividends: '💰',
-  other: '📦',
+const INCOME_ICONS: Record<string, LucideIcon> = {
+  salary: Briefcase,
+  social_security: Landmark,
+  pension: Building2,
+  part_time: Clock,
+  self_employment: Hammer,
+  rental: Home,
+  annuity: Table2,
+  dividends: CircleDollarSign,
+  other: Package,
 };
 
 /** Format timing as a compact summary */
@@ -2428,7 +2506,7 @@ function IncomeRow({ inc, scenario, store }: {
   return (
     <div className="income-row">
       <div className="income-row-main">
-        <span className="income-row-icon" aria-hidden="true">{INCOME_ICONS[inc.type] ?? '📦'}</span>
+        <span className="income-row-icon" aria-hidden="true"><Glyph i={INCOME_ICONS[inc.type] ?? Package} /></span>
         <input
           type="text"
           className="income-row-name"
@@ -2482,12 +2560,12 @@ function IncomeRow({ inc, scenario, store }: {
             className={`income-flag ${inc.cola ? 'active' : ''}`}
             title="Inflation adjusted (COLA)"
             onClick={() => store.updateIncome(scenario.id, inc.id, { cola: !inc.cola })}
-          >📈 COLA</button>
+          ><TrendingUp size={14} aria-hidden="true" /> COLA</button>
           <button
             className={`income-flag ${inc.taxable ? 'active' : ''}`}
             title="Taxed as ordinary income"
             onClick={() => store.updateIncome(scenario.id, inc.id, { taxable: !inc.taxable })}
-          >🧾 Tax</button>
+          ><Receipt size={14} aria-hidden="true" /> Tax</button>
         </div>
         <ConfirmDelete title="Delete income source" onConfirm={() => store.deleteIncome(scenario.id, inc.id)} />
       </div>
@@ -2519,7 +2597,7 @@ function IncomePanel({ scenario, store }: {
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2><span aria-hidden="true">💵</span> Income Sources</h2>
+        <h2><Wallet size={20} aria-hidden="true" /> Income Sources</h2>
         <button className="btn btn-sm" onClick={() => store.addIncome(scenario.id, {
           name: 'New Income', type: 'part_time', annualAmount: 0, startAge: scenario.assumptions.currentAge, endAge: scenario.assumptions.retirementAge - 1, cola: true, taxable: true,
         })}>+ Add Income</button>
@@ -2531,13 +2609,13 @@ function IncomePanel({ scenario, store }: {
 
       {/* Quick add common income sources */}
       <details className="quick-add-section">
-        <summary className="quick-add-label">⚡ Quick Add Common Income <span className="quick-add-toggle"></span></summary>
+        <summary className="quick-add-label"><Zap size={15} aria-hidden="true" /> Quick Add Common Income <span className="quick-add-toggle"></span></summary>
         <div className="quick-add-grid">
           {COMMON_INCOME.map((ci) => (
             <button key={ci.name} className="quick-add-btn" onClick={() => store.addIncome(scenario.id, {
               name: ci.name, type: ci.type, annualAmount: ci.annualAmount, startAge: Math.max(ci.startAge, scenario.assumptions.currentAge), endAge: ci.endAge, cola: ci.cola, taxable: ci.taxable,
             })}>
-              <span className="quick-add-icon" aria-hidden="true">{ci.icon}</span>
+              <span className="quick-add-icon" aria-hidden="true"><Glyph i={ci.icon} /></span>
               <span>{ci.name}</span>
               <span className="quick-add-amount">{formatCurrency(ci.annualAmount / 12, { compact: true })}/mo</span>
             </button>
@@ -2569,7 +2647,7 @@ function IncomePanel({ scenario, store }: {
           {preRet.length > 0 && (
             <div className="income-group">
               <div className="income-group-header">
-                <span className="income-group-icon">💼</span>
+                <span className="income-group-icon"><Briefcase size={16} aria-hidden="true" /></span>
                 <span className="income-group-label">Pre-Retirement Income</span>
                 <span className="income-group-count">{preRet.length}</span>
                 <button className="btn btn-sm acct-group-add" onClick={() => store.addIncome(scenario.id, {
@@ -2586,7 +2664,7 @@ function IncomePanel({ scenario, store }: {
           {postRet.length > 0 && (
             <div className="income-group">
               <div className="income-group-header">
-                <span className="income-group-icon">🏛️</span>
+                <span className="income-group-icon"><Landmark size={16} aria-hidden="true" /></span>
                 <span className="income-group-label">Retirement Income</span>
                 <span className="income-group-count">{postRet.length}</span>
                 <button className="btn btn-sm acct-group-add" onClick={() => store.addIncome(scenario.id, {
@@ -2609,12 +2687,12 @@ function IncomePanel({ scenario, store }: {
 }
 
 // Event type metadata: icon, hint, and which fields are emphasized
-const EVENT_META: Record<EventType, { icon: string; hint: string; example: string }> = {
-  home_purchase: { icon: '🏠', hint: 'Down payment and closing costs reduce your savings. Ongoing impact can model higher property taxes or mortgage payments.', example: 'Buy a retirement home' },
-  home_sale: { icon: '🏡', hint: 'Proceeds from the sale add to your savings. You can model ongoing impact for reduced housing costs after downsizing.', example: 'Sell current house' },
-  large_purchase: { icon: '🚗', hint: 'A one-time expense like a vehicle, RV, or major renovation. Enter the total cost and when it happens.', example: 'Buy an RV' },
-  windfall: { icon: '💰', hint: 'An inheritance, gift, or bonus. Enter the proceeds amount and when you expect to receive it.', example: 'Receive inheritance' },
-  other: { icon: '📋', hint: 'Any other significant financial event. Use cost for money out, proceeds for money in, and ongoing for recurring impacts.', example: 'Custom event' },
+const EVENT_META: Record<EventType, { icon: LucideIcon; hint: string; example: string }> = {
+  home_purchase: { icon: Home, hint: 'Down payment and closing costs reduce your savings. Ongoing impact can model higher property taxes or mortgage payments.', example: 'Buy a retirement home' },
+  home_sale: { icon: House, hint: 'Proceeds from the sale add to your savings. You can model ongoing impact for reduced housing costs after downsizing.', example: 'Sell current house' },
+  large_purchase: { icon: Car, hint: 'A one-time expense like a vehicle, RV, or major renovation. Enter the total cost and when it happens.', example: 'Buy an RV' },
+  windfall: { icon: CircleDollarSign, hint: 'An inheritance, gift, or bonus. Enter the proceeds amount and when you expect to receive it.', example: 'Receive inheritance' },
+  other: { icon: ClipboardList, hint: 'Any other significant financial event. Use cost for money out, proceeds for money in, and ongoing for recurring impacts.', example: 'Custom event' },
 };
 
 function EventsPanel({ scenario, store }: {
@@ -2627,7 +2705,7 @@ function EventsPanel({ scenario, store }: {
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2><span aria-hidden="true">📅</span> Life Events</h2>
+        <h2><CalendarDays size={20} aria-hidden="true" /> Life Events</h2>
         <button className="btn btn-sm" onClick={() => store.addEvent(scenario.id, {
           name: '', type: 'home_purchase', age: scenario.assumptions.currentAge + 5, cost: 0, proceeds: 0, ongoingAnnualImpact: 0, ongoingDurationYears: null, notes: '',
         })}>+ Add Event</button>
@@ -2667,7 +2745,7 @@ function EventsPanel({ scenario, store }: {
           return (
             <div key={ev.id} className="event-card">
               <div className="event-card-header">
-                <span className="event-icon">{meta.icon}</span>
+                <span className="event-icon"><Glyph i={meta.icon} /></span>
                 <span className="event-name">
                   <input
                     type="text"
@@ -2747,12 +2825,12 @@ function EventsPanel({ scenario, store }: {
    there — this widget makes them visible without forcing the user to
    dig into the Life Events panel. */
 
-const EVENT_ICON: Record<EventType, string> = {
-  home_purchase: '🏠',
-  home_sale: '🏡',
-  large_purchase: '🚗',
-  windfall: '💰',
-  other: '📋',
+const EVENT_ICON: Record<EventType, LucideIcon> = {
+  home_purchase: Home,
+  home_sale: House,
+  large_purchase: Car,
+  windfall: CircleDollarSign,
+  other: ClipboardList,
 };
 
 function UpcomingEventsWidget({
@@ -2773,7 +2851,7 @@ function UpcomingEventsWidget({
   if (upcoming.length === 0) {
     return (
       <div className="upcoming-events-widget">
-        <div className="upcoming-events-header">📅 Upcoming Life Events</div>
+        <div className="upcoming-events-header"><CalendarClock size={15} aria-hidden="true" /> Upcoming Life Events</div>
         <div className="upcoming-events-empty">
           No life events yet. Add a windfall, home purchase, or other one-time event to see how it
           affects your plan. <span className="muted">(Events impact net worth and other projections.)</span>
@@ -2785,7 +2863,7 @@ function UpcomingEventsWidget({
   return (
     <div className="upcoming-events-widget">
       <div className="upcoming-events-header">
-        📅 Upcoming Life Events
+        <CalendarClock size={15} aria-hidden="true" /> Upcoming Life Events
         <span className="upcoming-events-hint">
           These will affect your projection at the indicated age.
         </span>
@@ -2801,7 +2879,7 @@ function UpcomingEventsWidget({
               className={`upcoming-event-row ${isPast ? 'past' : ''}`}
               title={isPast ? 'This event has already been applied to your current net worth' : 'Future event — not yet reflected in current net worth'}
             >
-              <span className="upcoming-event-icon">{EVENT_ICON[ev.type] ?? '📋'}</span>
+              <span className="upcoming-event-icon"><Glyph i={EVENT_ICON[ev.type] ?? ClipboardList} /></span>
               <span className="upcoming-event-name">{ev.name || prettify(ev.type)}</span>
               <span className="upcoming-event-age">
                 {isPast ? `Past (age ${ev.age})` : `Age ${ev.age}`}
@@ -2902,17 +2980,17 @@ function ResultsView({ scenario, result, readiness }: {
     Expenses: Math.round(y.expenses),
   }));
 
-  const navItems: { id: ResultSection; label: string; icon: string; help: string }[] = [
+  const navItems: { id: ResultSection; label: string; icon: LucideIcon; help: string }[] = [
     {
       id: 'monte-carlo',
       label: 'Monte Carlo Stress Test',
-      icon: '🎲',
+      icon: Dices,
       help: 'Probability of success across thousands of random futures.',
     },
     {
       id: 'deterministic',
       label: 'Straight-Line Projection',
-      icon: '📊',
+      icon: Table2,
       help: 'Single-trajectory view at your expected returns.',
     },
   ];
@@ -2966,7 +3044,7 @@ function ResultsView({ scenario, result, readiness }: {
                   onClick={() => setSection(item.id)}
                   title={item.help}
                 >
-                  <span className="results-nav-icon">{item.icon}</span>
+                  <span className="results-nav-icon"><Glyph i={item.icon} /></span>
                   {item.label}
                 </button>
               </li>
@@ -2985,7 +3063,7 @@ function ResultsView({ scenario, result, readiness }: {
           {section === 'monte-carlo' && (
             <div className="panel">
               <div className="panel-header">
-                <h2><span aria-hidden="true">🎲</span> Monte Carlo Stress Test</h2>
+                <h2><Dices size={20} aria-hidden="true" /> Monte Carlo Stress Test</h2>
                 <button
                   className="btn btn-sm"
                   onClick={() => setSection('deterministic')}
@@ -3293,7 +3371,7 @@ function YearTable({ result, retirementAge, scenario, focusAge, onFocusConsumed 
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2><span aria-hidden="true">📊</span> Year-by-Year Detail</h2>
+        <h2><Table2 size={20} aria-hidden="true" /> Year-by-Year Detail</h2>
         <button className="btn btn-sm" onClick={() => setShowAll(!showAll)}>{showAll ? 'Show Summary' : 'Show All Years'}</button>
       </div>
       <div className="table-scroll" style={{ overflowX: 'auto' }}>
@@ -3350,7 +3428,7 @@ function YearTable({ result, retirementAge, scenario, focusAge, onFocusConsumed 
                       <div className="year-detail">
                         <div className="year-detail-grid">
                           <div className="year-detail-section">
-                            <div className="year-detail-title">💵 Income Sources</div>
+                            <div className="year-detail-title"><Wallet size={15} aria-hidden="true" /> Income Sources</div>
                             <table className="data-table year-detail-table">
                               <tbody>
                                 {(() => {
@@ -3377,7 +3455,7 @@ function YearTable({ result, retirementAge, scenario, focusAge, onFocusConsumed 
                             </table>
                           </div>
                           <div className="year-detail-section">
-                            <div className="year-detail-title">📋 Expenses</div>
+                            <div className="year-detail-title"><ListChecks size={15} aria-hidden="true" /> Expenses</div>
                             <table className="data-table year-detail-table">
                               <tbody>
                                 {(() => {
@@ -3481,7 +3559,7 @@ function CompareView({ results, scenarios }: { results: NonNullable<ReturnType<t
     <div>
       {results.length < 2 && (
         <div className="panel mb-16 compare-empty">
-          <div className="compare-empty-icon" aria-hidden="true">⚖️</div>
+          <div className="compare-empty-icon" aria-hidden="true"><Scale size={32} /></div>
           <div className="compare-empty-body">
             <h3>Compare needs at least two scenarios</h3>
             <p className="section-help" style={{ marginBottom: 0 }}>

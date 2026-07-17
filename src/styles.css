@@ -2451,7 +2451,144 @@ tr.drag-over {
 
 .inputs-nav-icon,
 .results-nav-icon {
-  font-size: 18px;
+  /* Lucide SVG: inherits color from the button so it follows the theme and
+     the active state automatically. flex-shrink keeps it from being squeezed
+     when the nav collapses to a scrollable strip on mobile. */
+  flex-shrink: 0;
+  color: inherit;
+}
+
+/* Headings that now lead with a Lucide icon (panel titles + chart titles).
+   inline-flex + gap gives the icon breathing room; vertical-align is a
+   fallback for any heading we don't make flex. */
+h1 svg, h2 svg, h3 svg {
+  vertical-align: -0.2em;
+}
+.overview-section-title,
+.assumptions-title,
+.panel-header h2,
+.chart-container h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.overview-section-title svg,
+.assumptions-title svg,
+.panel-header h2 svg,
+.chart-container h3 svg {
+  flex-shrink: 0;
+  color: inherit;
+}
+
+/* ---- Lucide icons in buttons, menus, and inline labels (Pass 2) ----
+   Emoji were sized via font-size; Lucide SVGs render at their `size` prop but
+   still need (a) color: inherit so they follow the element's theme color,
+   (b) flex-shrink: 0 so they aren't squeezed, and (c) the parent laid out as
+   inline-flex with a gap when an icon sits next to text. vertical-align covers
+   any inline (non-flex) parent as a fallback. */
+.btn svg,
+.menu-item svg,
+.ai-chat-quick-btn svg,
+.ai-chat-title svg,
+.ai-chat-suggestion-header svg,
+.quick-add-label svg,
+.upcoming-events-header svg,
+.year-detail-title svg,
+.prop-step-label svg,
+.resources-picker-trigger svg,
+.contextual-resources summary svg,
+.onboarding-icon svg,
+.wizard-title svg {
+  flex-shrink: 0;
+  color: inherit;
+}
+.btn,
+.menu-item,
+.ai-chat-quick-btn,
+.ai-chat-title,
+.ai-chat-suggestion-header,
+.quick-add-label,
+.upcoming-events-header,
+.year-detail-title,
+.prop-step-label,
+.contextual-resources summary,
+.wizard-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* inline-flex on a full-width menu item would shrink it to content width, so
+   re-expand it to fill the dropdown. */
+.menu-item { width: 100%; }
+
+/* Icon-only round buttons in the AI chat header — center the SVG. */
+.ai-chat-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ai-chat-icon-btn svg { color: inherit; }
+
+/* Emoji-sized containers that now hold an SVG instead of a glyph. */
+.onboarding-icon,
+.new-scenario-option-icon,
+.compare-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.new-scenario-option-icon svg,
+.compare-empty-icon svg { color: inherit; }
+
+/* Resource link icon slot: was an emoji span, now holds an SVG. */
+.resource-link .resource-icon {
+  display: inline-flex;
+  align-items: center;
+}
+.resource-link .resource-icon svg { color: inherit; }
+
+/* ---- Data-marker icon slots (Pass 3) ----
+   These spans previously held an emoji sized via font-size (16–20px). They now
+   hold a Lucide <svg> sized by its `size` prop, so they only need: inline-flex
+   to center the glyph vertically, color: inherit to follow theme text color,
+   and to keep their existing flex-shrink so they aren't squeezed in a row. */
+.income-row-icon,
+.quick-add-icon,
+.income-group-icon,
+.acct-card-icon,
+.acct-group-icon,
+.prop-icon,
+.prop-plan-icon,
+.prop-impact-icon,
+.event-icon,
+.upcoming-event-icon,
+.resource-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.income-row-icon svg,
+.quick-add-icon svg,
+.income-group-icon svg,
+.acct-card-icon svg,
+.acct-group-icon svg,
+.prop-icon svg,
+.prop-plan-icon svg,
+.prop-impact-icon svg,
+.event-icon svg,
+.upcoming-event-icon svg,
+.resource-icon svg,
+.results-nav-icon svg {
+  flex-shrink: 0;
+  color: inherit;
+}
+
+/* Flag toggle buttons (Before/After/COLA/Tax) now lead with an SVG — give it
+   a hair of space from the label. The .income-flag rule already handles the
+   button chrome; this just aligns the inline icon. */
+.income-flag svg {
+  flex-shrink: 0;
+  color: inherit;
 }
 
 .inputs-content,
@@ -3296,6 +3433,9 @@ tr.drag-over {
 }
 
 .income-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 3px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);

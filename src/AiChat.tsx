@@ -1,4 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  Bot,
+  Pin,
+  PinOff,
+  Lightbulb,
+  Trash2,
+  Settings,
+  ClipboardList,
+  ClipboardCheck,
+  Wand2,
+  SendHorizontal,
+  type LucideIcon,
+} from 'lucide-react';
 import { usePlanStore } from './store';
 import { runProjection } from './engine';
 import {
@@ -19,6 +32,14 @@ import {
 import { formatPercent } from './format';
 
 const PIN_STORAGE_KEY = 'ai-chat-pinned';
+
+/** Icon per quick-action id — keeps ai.ts free of JSX while the UI gets a
+ *  consistent Lucide glyph next to each suggestion. */
+const QUICK_ACTION_ICON: Record<string, LucideIcon> = {
+  'fact-check': ClipboardCheck,
+  suggest: Lightbulb,
+  scenario: Wand2,
+};
 
 /**
  * Translate raw API/network errors into a friendly message with an actionable
@@ -392,7 +413,7 @@ export function AiChat() {
           aria-label={isOpen ? 'Close AI Assistant' : 'Open AI Assistant'}
           aria-expanded={isOpen}
         >
-          {isOpen ? '✕' : <><span aria-hidden="true">🤖</span><span className="ai-chat-fab-label">Ask AI</span></>}
+          {isOpen ? '✕' : <><span aria-hidden="true"><Bot size={18} /></span><span className="ai-chat-fab-label">Ask AI</span></>}
         </button>
       )}
 
@@ -406,7 +427,7 @@ export function AiChat() {
           aria-label="AI Assistant"
         >
           <div className="ai-chat-header">
-            <span className="ai-chat-title">🤖 AI Assistant</span>
+            <span className="ai-chat-title"><Bot size={18} aria-hidden="true" /> AI Assistant</span>
             <div className="ai-chat-header-actions">
               <button
                 className={`ai-chat-icon-btn${pinned ? ' active' : ''}`}
@@ -414,7 +435,7 @@ export function AiChat() {
                 title={pinned ? 'Unpin from right side' : 'Pin to right side'}
                 aria-label={pinned ? 'Unpin from right side' : 'Pin to right side'}
               >
-                {pinned ? '📌' : '📍'}
+                {pinned ? <Pin size={16} aria-hidden="true" /> : <PinOff size={16} aria-hidden="true" />}
               </button>
               <button
                 className={`ai-chat-icon-btn${showSuggestions ? ' active' : ''}`}
@@ -423,7 +444,7 @@ export function AiChat() {
                 aria-label="Show prompt suggestions"
                 aria-expanded={showSuggestions}
               >
-                💡
+                <Lightbulb size={16} aria-hidden="true" />
               </button>
               <button
                 className="ai-chat-icon-btn"
@@ -431,7 +452,7 @@ export function AiChat() {
                 title="Settings"
                 aria-label="AI settings"
               >
-                ⚙️
+                <Settings size={16} aria-hidden="true" />
               </button>
               {messages.length > 0 && (
                 <button
@@ -441,7 +462,7 @@ export function AiChat() {
                   aria-label="Clear conversation"
                   aria-expanded={confirmingClear}
                 >
-                  🗑️
+                  <Trash2 size={16} aria-hidden="true" />
                 </button>
               )}
               <button className="ai-chat-icon-btn" onClick={() => { setIsOpen(false); setPinned(false); try { localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(false)); } catch { /* ignore */ } }} title="Close" aria-label="Close AI Assistant">✕</button>
@@ -510,6 +531,7 @@ export function AiChat() {
                     className="ai-chat-quick-btn"
                     onClick={() => handlePromptClick(qa.prompt)}
                   >
+                    {(() => { const I = QUICK_ACTION_ICON[qa.id]; return I ? <I size={15} aria-hidden="true" /> : null; })()}
                     {qa.label}
                   </button>
                 ))}
@@ -528,7 +550,7 @@ export function AiChat() {
                 </p>
                 {!hasApiKey && (
                   <button className="ai-chat-quick-btn" onClick={() => setShowSettings(true)}>
-                    ⚙️ Configure API Key
+                    <Settings size={15} aria-hidden="true" /> Configure API Key
                   </button>
                 )}
                 {hasApiKey && (
@@ -539,6 +561,7 @@ export function AiChat() {
                         className="ai-chat-quick-btn"
                         onClick={() => handlePromptClick(qa.prompt)}
                       >
+                        {(() => { const I = QUICK_ACTION_ICON[qa.id]; return I ? <I size={15} aria-hidden="true" /> : null; })()}
                         {qa.label}
                       </button>
                     ))}
@@ -555,7 +578,7 @@ export function AiChat() {
                 {msg.suggestion && (
                   <div className="ai-chat-suggestion">
                     <div className="ai-chat-suggestion-header">
-                      📋 Proposed Scenario: {msg.suggestion.name}
+                      <ClipboardList size={15} aria-hidden="true" /> Proposed Scenario: {msg.suggestion.name}
                     </div>
                     {msg.suggestion.description && (
                       <p className="ai-chat-suggestion-desc">{msg.suggestion.description}</p>
@@ -628,7 +651,7 @@ export function AiChat() {
               aria-label="Send message"
               title="Send message"
             >
-              ➤
+              <SendHorizontal size={18} aria-hidden="true" />
             </button>
           </div>
         </div>

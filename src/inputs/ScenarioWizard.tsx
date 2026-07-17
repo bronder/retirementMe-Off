@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { Sparkles } from 'lucide-react';
 import { runProjection, getReadinessSummary } from '../engine';
 import { formatCurrency, formatPercent } from '../format';
 import type { WizardScenarioData } from '../store';
@@ -150,7 +151,7 @@ export function ScenarioWizard({ onCreate, onCancel }: ScenarioWizardProps) {
       >
         <div className="wizard-header">
           <div>
-            <h2 className="wizard-title">✨ Create your scenario</h2>
+            <h2 className="wizard-title"><Sparkles size={20} aria-hidden="true" /> Create your scenario</h2>
             <p className="wizard-subtitle">Answer a few questions — we'll build a plan and show your outlook instantly.</p>
           </div>
           <button className="wizard-close" onClick={onCancel} aria-label="Close wizard">✕</button>
