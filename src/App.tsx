@@ -3374,7 +3374,7 @@ function YearTable({ result, retirementAge, scenario, focusAge, onFocusConsumed 
         <h2><Table2 size={20} aria-hidden="true" /> Year-by-Year Detail</h2>
         <button className="btn btn-sm" onClick={() => setShowAll(!showAll)}>{showAll ? 'Show Summary' : 'Show All Years'}</button>
       </div>
-      <div className="table-scroll" style={{ overflowX: 'auto' }}>
+      <div className="table-scroll">
         <table className="data-table">
           <thead>
             <tr>
@@ -3600,7 +3600,7 @@ function CompareView({ results, scenarios }: { results: NonNullable<ReturnType<t
           <p className="section-help">
             Only the assumptions that vary between scenarios are shown — so you can see <em>why</em> the outcomes differ without switching back to Inputs.
           </p>
-          <div style={{ overflowX: 'auto' }}>
+          <div className="table-scroll">
             <table className="data-table compare-diff-table">
               <thead>
                 <tr>

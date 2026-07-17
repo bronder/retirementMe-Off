@@ -5398,6 +5398,17 @@ h1 svg, h2 svg, h3 svg {
   }
 }
 
+/* Shared table wrapper — gives any wide data table the same clean,
+   bordered, rounded treatment as the chart-mirror disclosures so tables
+   read as a consistent family (Year-by-Year, "What's different?", etc.).
+   The mobile mask rule below adds the right-edge fade on top of this. */
+.table-scroll {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  overflow-x: auto;
+}
+
 /* ============================================================
    MOBILE YEAR-BY-YEAR TABLE (≤ 700px)
    ============================================================
