@@ -7,6 +7,7 @@
  * percentile chart respects the active theme without duplicate code.
  */
 import { useMemo, useState, useRef, useEffect } from 'react';
+import { Dices } from 'lucide-react';
 import {
   AreaChart,
   Area,
@@ -380,7 +381,7 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
           disabled={run.status === 'running'}
           style={{ alignSelf: 'flex-end' }}
         >
-          {run.status === 'running' ? 'Running…' : '🎲 Run Simulation'}
+          {run.status === 'running' ? 'Running…' : <><Dices size={16} aria-hidden="true" /> Run Simulation</>}
         </button>
       </div>
 

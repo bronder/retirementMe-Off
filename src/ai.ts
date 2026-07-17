@@ -114,19 +114,19 @@ export interface ScenarioSuggestion {
 export const QUICK_ACTIONS = [
   {
     id: 'fact-check',
-    label: '📋 Fact-check my plan',
+    label: 'Fact-check my plan',
     prompt:
       'Please fact-check my retirement plan. Review all assumptions (return rates, inflation, withdrawal rate, tax rate, timeline) for realism. Check if I have adequate expense coverage, appropriate account diversification, and reasonable income sources. Flag anything that seems unrealistic, missing, or potentially risky.',
   },
   {
     id: 'suggest',
-    label: '💡 Suggest improvements',
+    label: 'Suggest improvements',
     prompt:
       'Review my retirement plan and suggest specific improvements. Consider: tax optimization strategies, expense gaps, savings rate adequacy, Social Security claiming strategy, account diversification, and any risks I might be overlooking. Be specific and actionable.',
   },
   {
     id: 'scenario',
-    label: '🔄 Create a scenario',
+    label: 'Create a scenario',
     prompt:
       'Based on my current plan, create an alternative retirement scenario. Consider a different retirement age, adjusted savings rate, or modified spending pattern. Use the createScenario JSON format to propose specific changes. Explain your reasoning.',
   },
