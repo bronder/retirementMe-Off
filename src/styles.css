@@ -5953,3 +5953,241 @@ h1 svg, h2 svg, h3 svg {
   line-height: 1.4;
 }
 
+/* ============================================================
+   What-If panel — live slider sandbox on the Results tab.
+   Collapsible trigger bar; body is a two-column grid (sliders |
+   comparison). Sliders are bespoke range inputs themed via CSS
+   variables so they match every theme.
+   ============================================================ */
+
+.whatif-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* The whole header is a button so the panel is keyboard-openable. */
+.whatif-trigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 16px 22px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+  color: var(--text);
+}
+.whatif-trigger:hover {
+  background: var(--panel-hover);
+}
+.whatif-trigger-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-base);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.whatif-dirty-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.whatif-trigger-sub {
+  flex: 1;
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+}
+.whatif-chevron {
+  color: var(--text-dim);
+  transition: transform 0.2s ease;
+}
+.whatif-chevron.open {
+  transform: rotate(180deg);
+}
+
+.whatif-body {
+  padding: 0 22px 22px;
+}
+
+.whatif-help {
+  margin-bottom: 16px;
+}
+
+.whatif-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(360px, 1.6fr);
+  gap: 22px;
+  align-items: start;
+}
+@media (max-width: 880px) {
+  .whatif-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Sliders column --- */
+.whatif-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.whatif-slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.whatif-slider-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.whatif-slider-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+.whatif-slider-value {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.whatif-slider-value.changed {
+  color: var(--accent);
+  font-weight: 700;
+}
+.whatif-slider-delta {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  font-weight: 500;
+}
+.whatif-slider-help {
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+/* The range input itself. Unstyled <input type=range> is wildly inconsistent
+   across browsers, so we theme both the track and the thumb. */
+.whatif-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  outline: none;
+  cursor: pointer;
+}
+.whatif-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--panel);
+  box-shadow: var(--shadow-sm);
+  cursor: grab;
+  transition: transform 0.1s ease;
+}
+.whatif-range::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+.whatif-range:active::-webkit-slider-thumb {
+  cursor: grabbing;
+  transform: scale(1.15);
+}
+.whatif-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--panel);
+  box-shadow: var(--shadow-sm);
+  cursor: grab;
+}
+.whatif-range:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.whatif-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+/* --- Comparison column --- */
+.whatif-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.whatif-deltas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+.whatif-delta-card {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+.whatif-delta-label {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.whatif-delta-vals {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.whatif-delta-baseline {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-dim);
+}
+.whatif-delta-arrow {
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+}
+.whatif-delta-new {
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--text);
+}
+.whatif-delta-new.good {
+  color: var(--green);
+}
+.whatif-delta-new.bad {
+  color: var(--red);
+}
+
+.whatif-chart {
+  margin-bottom: 0;
+}
+
+.whatif-clean {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  margin-top: 16px;
+}
+

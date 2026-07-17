@@ -99,6 +99,7 @@ import { useEditableNumber } from './hooks/useEditableNumber';
 import { DataTable } from './inputs/DataTable';
 import { ChartDataDisclosure } from './inputs/ChartDataDisclosure';
 import { ScenarioWizard } from './inputs/ScenarioWizard';
+import { WhatIfPanel } from './inputs/WhatIfPanel';
 
 type Tab = 'inputs' | 'results' | 'compare';
 type InputSection = 'overview' | 'assumptions' | 'accounts' | 'properties' | 'expenses' | 'income' | 'events';
@@ -2917,7 +2918,7 @@ function UpcomingEventsWidget({
  * summary cards. Users still land on the straight-line projection and can
  * click into Monte Carlo for the probability view.
  */
-type ResultSection = 'monte-carlo' | 'deterministic';
+type ResultSection = 'monte-carlo' | 'deterministic' | 'what-if';
 const DEFAULT_RESULT_SECTION: ResultSection = 'deterministic';
 
 function ResultsView({ scenario, result, readiness }: {
@@ -2993,6 +2994,12 @@ function ResultsView({ scenario, result, readiness }: {
       icon: Table2,
       help: 'Single-trajectory view at your expected returns.',
     },
+    {
+      id: 'what-if',
+      label: 'What If?',
+      icon: Wand2,
+      help: 'Drag sliders to compare an alternate retirement future.',
+    },
   ];
 
   return (
@@ -3055,7 +3062,9 @@ function ResultsView({ scenario, result, readiness }: {
           <p className="muted" style={{ fontSize: 'var(--text-xs)', padding: '0 16px', lineHeight: 1.5 }}>
             {section === 'monte-carlo'
               ? 'Monte Carlo runs the plan many times with randomized returns to surface the probability of success across random futures.'
-              : 'Deterministic view projects the plan at your exact expected return — one possible future.'}
+              : section === 'what-if'
+                ? 'What If? builds a throwaway copy of your plan and re-projects it live as you drag sliders. Apply to keep the changes — or close to discard.'
+                : 'Deterministic view projects the plan at your exact expected return — one possible future.'}
           </p>
         </aside>
 
@@ -3209,6 +3218,10 @@ function ResultsView({ scenario, result, readiness }: {
               {/* Year-by-year table */}
               <YearTable result={result} retirementAge={scenario.assumptions.retirementAge} scenario={scenario} focusAge={focusAge} onFocusConsumed={() => setFocusAge(null)} />
             </>
+          )}
+
+          {section === 'what-if' && (
+            <WhatIfPanel scenario={scenario} defaultOpen />
           )}
         </div>
       </div>
