@@ -100,6 +100,7 @@ import { DataTable } from './inputs/DataTable';
 import { ChartDataDisclosure } from './inputs/ChartDataDisclosure';
 import { ScenarioWizard } from './inputs/ScenarioWizard';
 import { WhatIfPanel } from './inputs/WhatIfPanel';
+import { PlanOverview } from './inputs/PlanOverview';
 
 type Tab = 'inputs' | 'results' | 'compare';
 type InputSection = 'overview' | 'assumptions' | 'accounts' | 'properties' | 'expenses' | 'income' | 'events';
@@ -2918,8 +2919,8 @@ function UpcomingEventsWidget({
  * summary cards. Users still land on the straight-line projection and can
  * click into Monte Carlo for the probability view.
  */
-type ResultSection = 'monte-carlo' | 'deterministic' | 'what-if';
-const DEFAULT_RESULT_SECTION: ResultSection = 'deterministic';
+type ResultSection = 'monte-carlo' | 'deterministic' | 'what-if' | 'overview';
+const DEFAULT_RESULT_SECTION: ResultSection = 'overview';
 
 function ResultsView({ scenario, result, readiness }: {
   scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
@@ -2982,6 +2983,12 @@ function ResultsView({ scenario, result, readiness }: {
   }));
 
   const navItems: { id: ResultSection; label: string; icon: LucideIcon; help: string }[] = [
+    {
+      id: 'overview',
+      label: 'Plan Overview',
+      icon: LayoutDashboard,
+      help: 'A single-page report of your plan: net worth, allocation, accounts, and cash flow.',
+    },
     {
       id: 'monte-carlo',
       label: 'Monte Carlo Stress Test',
@@ -3060,15 +3067,21 @@ function ResultsView({ scenario, result, readiness }: {
           <div className="sidebar-divider" />
           <div className="sidebar-resources-label">About</div>
           <p className="muted" style={{ fontSize: 'var(--text-xs)', padding: '0 16px', lineHeight: 1.5 }}>
-            {section === 'monte-carlo'
-              ? 'Monte Carlo runs the plan many times with randomized returns to surface the probability of success across random futures.'
-              : section === 'what-if'
-                ? 'What If? builds a throwaway copy of your plan and re-projects it live as you drag sliders. Apply to keep the changes — or close to discard.'
-                : 'Deterministic view projects the plan at your exact expected return — one possible future.'}
+            {section === 'overview'
+              ? 'A single-page report built from your plan — net worth, asset allocation, accounts, and cash flow. Use Print to save as PDF.'
+              : section === 'monte-carlo'
+                ? 'Monte Carlo runs the plan many times with randomized returns to surface the probability of success across random futures.'
+                : section === 'what-if'
+                  ? 'What If? builds a throwaway copy of your plan and re-projects it live as you drag sliders. Apply to keep the changes — or close to discard.'
+                  : 'Deterministic view projects the plan at your exact expected return — one possible future.'}
           </p>
         </aside>
 
         <div className="results-content">
+          {section === 'overview' && (
+            <PlanOverview scenario={scenario} result={result} readiness={readiness} />
+          )}
+
           {section === 'monte-carlo' && (
             <div className="panel">
               <div className="panel-header">

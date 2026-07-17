@@ -6191,3 +6191,195 @@ h1 svg, h2 svg, h3 svg {
   margin-top: 16px;
 }
 
+/* ============================================================
+   Plan Overview report — single-page financial report on the
+   Results rail. Reuses .panel/.summary-card/.chart-container/
+   .data-table/.table-scroll/.badge; adds report-specific layout
+   (section titles, allocation donut+table, insight cards) and a
+   print stylesheet that strips app chrome for PDF export.
+   ============================================================ */
+
+.plan-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.po-report-sub {
+  font-size: var(--text-sm);
+  margin-top: 2px;
+}
+
+.po-section {
+  margin-bottom: 24px;
+}
+
+/* Report section title — uppercase/dim to match chart-container h3 so all
+   section headers read as a consistent family. */
+.po-section-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+
+/* Readiness two-column: fact chips | narrative insight. */
+.po-readiness-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(280px, 1.4fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 760px) {
+  .po-readiness-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.po-readiness-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+}
+
+/* Narrative/advisor insight card: left accent border + subtle bg. */
+.po-insight {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+}
+.po-insight-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.po-insight p {
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--text);
+  margin: 0;
+}
+
+/* Allocation: donut | table. */
+.po-alloc-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.4fr);
+  gap: 16px;
+  align-items: center;
+}
+@media (max-width: 760px) {
+  .po-alloc-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.po-alloc-donut {
+  min-width: 0;
+}
+.po-alloc-table td:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.po-alloc-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.po-total-row {
+  font-weight: 700;
+  border-top: 2px solid var(--border);
+}
+
+.po-debt-note {
+  font-size: var(--text-xs);
+}
+
+/* ============================================================
+   Print — strip app chrome, expand the report full-width, and
+   force light-on-white so the PDF is readable regardless of the
+   user's chosen theme.
+   ============================================================ */
+@media print {
+  @page {
+    size: letter;
+    margin: 0.5in;
+  }
+
+  /* Force a light palette on everything. */
+  :root {
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --bg-subtle: #f6f5f2;
+    --text: #1c1b19;
+    --text-dim: #555;
+    --border: #d8d4cc;
+    --border-strong: #b8b3a8;
+    --accent: #c2410c;
+    --green: #15803d;
+    --red: #b91c1c;
+    --yellow: #a16207;
+    --chart: #0d9488;
+    --chart-2: #0e7490;
+    --chart-3: #6d28d9;
+    --chart-4: #a16207;
+    --shadow: none;
+    --shadow-sm: none;
+  }
+
+  /* Hide all app chrome; keep only the report. */
+  .app-topbar,
+  .app-tabbar,
+  .results-sidebar,
+  .ai-chat-fab,
+  .resources-footer,
+  .po-print-btn,
+  .summary-card-drilldown-hint {
+    display: none !important;
+  }
+
+  /* Collapse the sidebar layout to a single full-width column. */
+  .results-layout {
+    display: block !important;
+  }
+  .results-content {
+    width: 100% !important;
+  }
+  .results-sidebar {
+    position: static !important;
+  }
+
+  /* Remove sticky positioning and shadows that print poorly. */
+  * {
+    position: static !important;
+  }
+  .panel,
+  .chart-container,
+  .summary-card {
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+  .po-section,
+  .plan-overview > .panel {
+    break-inside: avoid;
+  }
+
+  /* Expand the app container for print width. */
+  .app {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  body {
+    background: #ffffff !important;
+  }
+}
+
