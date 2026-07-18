@@ -16,7 +16,7 @@ export function ChartDataDisclosure({
   return (
     <details className="chart-data-disclosure">
       <summary>
-        <span aria-hidden="true"><Table2 size={15} /></span> {summaryLabel}
+        <span className="chart-data-disclosure-icon" aria-hidden="true"><Table2 size={15} /></span> {summaryLabel}
         {rowCount > 0 && <span className="muted"> ({rowCount} rows)</span>}
       </summary>
       <div className="chart-data-disclosure-body">

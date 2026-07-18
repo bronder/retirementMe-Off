@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   Wand2,
   SendHorizontal,
+  ShieldAlert,
   type LucideIcon,
 } from 'lucide-react';
 import { usePlanStore } from './store';
@@ -37,7 +38,7 @@ const PIN_STORAGE_KEY = 'ai-chat-pinned';
  *  consistent Lucide glyph next to each suggestion. */
 const QUICK_ACTION_ICON: Record<string, LucideIcon> = {
   'fact-check': ClipboardCheck,
-  suggest: Lightbulb,
+  'risk-check': ShieldAlert,
   scenario: Wand2,
 };
 

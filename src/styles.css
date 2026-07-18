@@ -2579,7 +2579,9 @@ h1 svg, h2 svg, h3 svg {
 .prop-impact-icon,
 .event-icon,
 .upcoming-event-icon,
-.resource-icon {
+.resource-icon,
+.chart-data-disclosure-icon,
+.resources-picker-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2595,7 +2597,9 @@ h1 svg, h2 svg, h3 svg {
 .event-icon svg,
 .upcoming-event-icon svg,
 .resource-icon svg,
-.results-nav-icon svg {
+.results-nav-icon svg,
+.chart-data-disclosure-icon svg,
+.resources-picker-icon svg {
   flex-shrink: 0;
   color: inherit;
 }
@@ -3504,7 +3508,8 @@ h1 svg, h2 svg, h3 svg {
 .exp-phase-both,
 .exp-phase-pre,
 .exp-phase-post,
-.exp-phase-none {
+.exp-phase-none,
+.exp-phase-custom {
   background: transparent;
   color: var(--text-faint);
   padding: 0;
@@ -3512,6 +3517,48 @@ h1 svg, h2 svg, h3 svg {
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
+}
+
+/* Timing control — one semantic selector replaces the old Start/End/Before/After
+   quad. The selector's value IS the schedule; Custom reveals its inputs inline. */
+.exp-timing {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.exp-timing-select {
+  width: auto !important;
+  min-width: 140px;
+  font-size: var(--text-xs) !important;
+  font-weight: 500;
+  padding: 4px 8px !important;
+}
+
+/* Custom-range inline group: "From age [_] → To age [_] [Life]". Kept on one
+   line; the label/field/label rhythm makes the window legible at a glance. */
+.exp-custom-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.exp-custom-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.exp-custom-field label {
+  font-size: 10px;
+  color: var(--text-faint);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.exp-custom-sep {
+  color: var(--text-faint);
+  font-size: var(--text-xs);
 }
 
 .income-group-total-muted {
@@ -3638,7 +3685,7 @@ h1 svg, h2 svg, h3 svg {
 
 .acct-card-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   padding: 12px 14px;
   background: var(--panel);
@@ -3647,7 +3694,7 @@ h1 svg, h2 svg, h3 svg {
 
 .acct-card-header-left {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   flex: 1;
   min-width: 0;
@@ -3656,7 +3703,17 @@ h1 svg, h2 svg, h3 svg {
 .acct-card-icon {
   font-size: 20px;
   flex-shrink: 0;
-  margin-top: 2px;
+}
+
+.acct-card-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.acct-card-name-row > .delete-btn,
+.acct-card-name-row > .confirm-delete-group {
+  flex-shrink: 0;
 }
 
 .acct-card-title-area {
@@ -3668,7 +3725,7 @@ h1 svg, h2 svg, h3 svg {
 }
 
 .acct-card-name {
-  width: 100%;
+  flex: 1;
   font-size: var(--text-sm);
   font-weight: 600;
   background: transparent;

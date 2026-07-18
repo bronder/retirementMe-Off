@@ -114,21 +114,21 @@ export interface ScenarioSuggestion {
 export const QUICK_ACTIONS = [
   {
     id: 'fact-check',
-    label: 'Fact-check my plan',
+    label: 'Reality-check my numbers',
     prompt:
-      'Fact-check my retirement plan. Output a prioritized issue list, most severe first. For EACH issue use this format:\n**[Severity] Issue title** — one-sentence problem. Current: X. Realistic range: Y. Impact: Z.\nSeverities: Critical / Warning / Minor. Review: return rates, inflation, withdrawal rate, tax rate, timeline/longevity, expense coverage, account diversification, income gaps (e.g. Social Security start vs. retirement age). Only list issues that are actually wrong or missing — do not pad with "looks good" items. If a category is fine, skip it entirely.',
+      'Reality-check every number in my plan against real-world US benchmarks, and flag ONLY what is off. For each finding use:\n**[Severity] Problem** — one-sentence diagnosis. Current: X. Benchmark: Y (name the source). Impact: Z.\n\nCheck specifically:\n- Each expense vs BLS Consumer Expenditure Survey medians for a comparable household — line by line. Healthcare is the usual offender: confirm it covers premiums + out-of-pocket + dental/vision and that it outpaces general inflation.\n- Social Security and pension amounts — plausible for the claiming age and earnings history?\n- Do post-retirement expenses drop unrealistically vs pre-retirement? Flag a cliff. (A common error is expenses vanishing the day retirement starts.)\n- Return rates: pre-retirement over 8% or post-retirement over 6% = optimistic; under 3% = overly conservative. Inflation under 2.5% = optimistic (3% is the long-run norm).\n- Withdrawal rate vs the ~4% guideline AND the actual portfolio size.\n\nGive a cited source and a concrete number for every finding. Skip anything that is already reasonable.',
   },
   {
-    id: 'suggest',
-    label: 'Suggest improvements',
+    id: 'risk-check',
+    label: 'Find the plan-killers',
     prompt:
-      'Suggest improvements to my retirement plan, highest-impact first. For EACH suggestion use:\n**[Area] Suggestion** — one-sentence what + why. Current: X. Recommended: Y. Estimated impact: Z.\nAreas to consider: tax optimization (Roth conversions, withdrawal sequencing), expense gaps, savings rate, Social Security claiming age, account diversification, longevity/LTC risk. Max 8 suggestions. Skip areas that are already fine.',
+      'Find the silent failures that would sink this plan but are not obvious at a glance. For each: **[Severity] Risk** — why it breaks the plan, with the age or dollar where it bites. Impact: Z.\n\nHunt specifically for:\n- Withdrawal rate the portfolio cannot sustain — run it against my balance and first-year expenses.\n- Longevity gap: plan ending too early vs realistic lifespan; if a spouse is present, does the plan cover the longer-lived partner?\n- Sequence-of-returns risk in the first retirement decade.\n- Tax time-bombs: large pre-tax balances with no Roth-conversion strategy, RMDs pushing marginal rates up, or the retirement tax rate set unrealistically low.\n- Long-term care cost blind spot — is it modeled at all?\n- Claiming Social Security before full retirement age without justification.\n\nOnly list risks that genuinely apply to my numbers. Rank Critical → Minor.',
   },
   {
     id: 'scenario',
-    label: 'Create a scenario',
+    label: 'Propose a fix',
     prompt:
-      'Propose ONE alternative retirement scenario that addresses the biggest weakness in my current plan. Identify the weakness in one sentence, then output the <scenario> JSON block with specific assumption changes. One paragraph (3 sentences max) of reasoning after the block. Do not propose multiple scenarios.',
+      'Identify the single biggest weakness in my plan in one sentence, then propose ONE alternative scenario that fixes it. Output the <scenario> JSON block with specific assumption changes, followed by a 3-sentence rationale tying each change back to the weakness. Do not propose multiple scenarios — pick the highest-impact lever and pull it.',
   },
 ] as const;
 
@@ -197,7 +197,15 @@ export function buildPlanContext(
     lines.push(`**Expenses** (pre-ret: ${formatCurrency(preRetExpenses)}/yr, post-ret: ${formatCurrency(postRetExpenses)}/yr):`);
     for (const exp of scenario.expenses) {
       const phase = exp.preRetirement && exp.postRetirement ? 'both' : exp.preRetirement ? 'pre-ret' : 'post-ret';
-      lines.push(`  - ${exp.name} (${prettify(exp.category)}): ${formatCurrency(exp.annualAmount)}/yr [${phase}]`);
+      // Surface a time-bound expense's age window so the model can reason about
+      // costs that begin or end mid-plan (e.g. pet care ending at age 72, a car
+      // loan paid off at 68). Omitted entirely when both bounds are null so
+      // permanent expenses stay noise-free.
+      const window =
+        exp.startAge !== null || exp.endAge !== null
+          ? ` ages ${exp.startAge ?? 'start'}→${exp.endAge ?? 'lifetime'},`
+          : '';
+      lines.push(`  - ${exp.name} (${prettify(exp.category)}):${window} ${formatCurrency(exp.annualAmount)}/yr [${phase}]`);
     }
     lines.push('');
 

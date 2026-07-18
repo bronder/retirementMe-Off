@@ -549,7 +549,7 @@ function ResourcesPicker() {
         aria-expanded={open}
         title="Helpful calculators, Social Security, and other external tools"
       >
-        <span aria-hidden="true"><BookOpen size={16} /></span> Learn more
+        <span className="resources-picker-icon" aria-hidden="true"><BookOpen size={16} /></span> Learn more
         <span className="resources-picker-caret" aria-hidden="true">▾</span>
       </button>
       {open && (
@@ -1784,16 +1784,19 @@ function AccountCard({ acct, scenario, store }: {
     <div className="acct-card">
       <div className="acct-card-header">
         <div className="acct-card-header-left">
-          <span className="acct-card-icon" aria-hidden="true"><Glyph i={acct.type === 'checking_savings' ? Wallet : acct.type === 'taxable_brokerage' ? TrendingUp : acct.type.includes('roth') ? Sprout : acct.type === 'hsa' ? HeartPulse : acct.type === 'pension' ? Building2 : Landmark} /></span>
           <div className="acct-card-title-area">
-            <input
-              type="text"
-              className="acct-card-name"
-              value={acct.name}
-              onChange={(e) => store.updateAccount(scenario.id, acct.id, { name: e.target.value })}
-              aria-label="Account name"
-              placeholder="Account name"
-            />
+            <div className="acct-card-name-row">
+              <span className="acct-card-icon" aria-hidden="true"><Glyph i={acct.type === 'checking_savings' ? Wallet : acct.type === 'taxable_brokerage' ? TrendingUp : acct.type.includes('roth') ? Sprout : acct.type === 'hsa' ? HeartPulse : acct.type === 'pension' ? Building2 : Landmark} /></span>
+              <input
+                type="text"
+                className="acct-card-name"
+                value={acct.name}
+                onChange={(e) => store.updateAccount(scenario.id, acct.id, { name: e.target.value })}
+                aria-label="Account name"
+                placeholder="Account name"
+              />
+              <ConfirmDelete title="Delete account" onConfirm={() => store.deleteAccount(scenario.id, acct.id)} />
+            </div>
             <div className="acct-card-meta">
               <select className="table-select acct-type-select" value={acct.type} onChange={(e) => store.updateAccount(scenario.id, acct.id, { type: e.target.value as AccountType })} aria-label="Account type">
                 {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{prettify(t)}</option>)}
@@ -1802,7 +1805,6 @@ function AccountCard({ acct, scenario, store }: {
             </div>
           </div>
         </div>
-        <ConfirmDelete title="Delete account" onConfirm={() => store.deleteAccount(scenario.id, acct.id)} />
       </div>
       <div className="acct-card-body">
         <div className="acct-card-field">
@@ -2318,11 +2320,91 @@ const CATEGORY_ICONS: Record<string, LucideIcon> = {
   other: Package,
 };
 
-function getExpensePhase(exp: { preRetirement: boolean; postRetirement: boolean }): { label: string; cls: string } {
-  if (exp.preRetirement && exp.postRetirement) return { label: 'Continues through retirement', cls: 'exp-phase-both' };
-  if (exp.preRetirement && !exp.postRetirement) return { label: 'Ends at retirement', cls: 'exp-phase-pre' };
-  if (!exp.preRetirement && exp.postRetirement) return { label: 'Starts in retirement', cls: 'exp-phase-post' };
-  return { label: 'Inactive', cls: 'exp-phase-none' };
+/* ============================================================
+   EXPENSE TIMING MODEL
+   ============================================================
+   The expense's schedule is expressed to the engine via four low-level
+   fields (preRetirement, postRetirement, startAge, endAge). Asking the
+   user to set those four independently is the source of the confusion
+   this redesign fixes: "Before" + "End: At age 72" + "Start: Always"
+   requires decoding before the schedule is legible.
+
+   Instead we expose a single semantic "timing mode" and derive the four
+   fields from it. The mode is the source of truth in the UI; the fields
+   are derived state we write back to the store. Four modes cover every
+   real expense (the three the spec names, plus "Always" — the dominant
+   case where a cost runs both phases with no age bound):
+
+     always      -> both phases, no age bounds (Food, Utilities, ...)
+     before      -> pre-retirement only; ends at retirement (Mortgage)
+     retirement  -> post-retirement only; starts at retirement (Travel)
+     custom      -> explicit start/end ages the user sets (pet care that
+                    ends at 72, pre-Medicare healthcare ending at 64)
+
+   `custom` is progressive disclosure: its start/end inputs appear only
+   when that mode is chosen, so the row stays one line in the common case.
+*/
+
+type ExpenseTimingMode = 'always' | 'before' | 'retirement' | 'custom';
+
+/** Derive the timing mode from the stored fields. The engine treats a null
+ *  age bound as "no constraint", so a both-phases expense with no bounds is
+ *  `always`. Any explicit age bound means the user has chosen a window, so
+ *  we read it as `custom` regardless of the phase flags. */
+function deriveExpenseTiming(exp: {
+  preRetirement: boolean;
+  postRetirement: boolean;
+  startAge: number | null;
+  endAge: number | null;
+}): ExpenseTimingMode {
+  if (exp.startAge !== null || exp.endAge !== null) return 'custom';
+  if (exp.preRetirement && !exp.postRetirement) return 'before';
+  if (!exp.preRetirement && exp.postRetirement) return 'retirement';
+  return 'always'; // both, or neither (inactive) — both surface as "always"
+}
+
+/** Human label + accent class for the summary badge, by mode. Read at a
+ *  glance — no decoding required. */
+function expenseTimingLabel(mode: ExpenseTimingMode, retirementAge: number): { label: string; cls: string } {
+  switch (mode) {
+    case 'before': return { label: `Until retirement (age ${retirementAge})`, cls: 'exp-phase-pre' };
+    case 'retirement': return { label: `From retirement (age ${retirementAge}) onward`, cls: 'exp-phase-post' };
+    case 'custom': return { label: 'Custom age window', cls: 'exp-phase-custom' };
+    default: return { label: 'Always', cls: 'exp-phase-both' };
+  }
+}
+
+/** Map a chosen mode to the field patch that realizes it. Anchored modes
+ *  (before/retirement) use the phase flags as the boundary; `always` clears
+ *  any age bounds. `custom` keeps any bounds the user already set, but when
+ *  entering fresh it seeds startAge = currentAge — this is projection-neutral
+ *  (the plan starts at currentAge) and essential to avoid the mode being
+ *  indistinguishable from `always` (which would snap the selector back). */
+function timingModePatch(
+  mode: ExpenseTimingMode,
+  prev: { preRetirement: boolean; postRetirement: boolean; startAge: number | null; endAge: number | null },
+  currentAge: number,
+): { preRetirement: boolean; postRetirement: boolean; startAge: number | null; endAge: number | null } {
+  switch (mode) {
+    case 'before': return { preRetirement: true, postRetirement: false, startAge: null, endAge: null };
+    case 'retirement': return { preRetirement: false, postRetirement: true, startAge: null, endAge: null };
+    case 'custom': {
+      // Keep any bounds the user already set. But when entering Custom fresh
+      // (no startAge yet), seed startAge = currentAge. Without this, the patch
+      // would be {startAge: null, endAge: null, both phases} — identical to
+      // "Always" — so deriveExpenseTiming would immediately read it back as
+      // `always` and the selector would snap back (the flicker bug).
+      // currentAge is projection-neutral: the plan starts at currentAge anyway.
+      const startAge = prev.startAge ?? currentAge;
+      return {
+        preRetirement: true,
+        postRetirement: true,
+        startAge,
+        endAge: prev.endAge ?? null,
+      };
+    }
+    default: return { preRetirement: true, postRetirement: true, startAge: null, endAge: null };
+  }
 }
 
 function ExpenseRow({ exp, scenario, store }: {
@@ -2330,8 +2412,10 @@ function ExpenseRow({ exp, scenario, store }: {
   scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
   store: ReturnType<typeof usePlanStore.getState>;
 }) {
-  const phase = getExpensePhase(exp);
   const monthly = Math.round(exp.annualAmount / 12);
+  const { retirementAge, currentAge } = scenario.assumptions;
+  const mode = deriveExpenseTiming(exp);
+  const timing = expenseTimingLabel(mode, retirementAge);
 
   return (
     <div className="income-row exp-row">
@@ -2359,22 +2443,53 @@ function ExpenseRow({ exp, scenario, store }: {
           <CurrencyCellInput value={monthly} onChange={(v) => store.updateExpense(scenario.id, exp.id, { annualAmount: v * 12 })} />
           <span className="income-row-amount-unit">/mo</span>
         </div>
-        <div className="income-row-flags">
-          <button
-            className={`income-flag ${exp.preRetirement ? 'active' : ''}`}
-            title="Applies before retirement"
-            onClick={() => store.updateExpense(scenario.id, exp.id, { preRetirement: !exp.preRetirement })}
-          ><Briefcase size={14} aria-hidden="true" /> Before</button>
-          <button
-            className={`income-flag ${exp.postRetirement ? 'active' : ''}`}
-            title="Applies after retirement"
-            onClick={() => store.updateExpense(scenario.id, exp.id, { postRetirement: !exp.postRetirement })}
-          ><Palmtree size={14} aria-hidden="true" /> After</button>
+        {/* TIMING — one semantic selector whose value IS the schedule. This
+            replaces the old Start/End/Before/After quad: the user picks the
+            intent ("until retirement", "from retirement onward", "custom
+            range") and we derive the underlying fields. Custom reveals its
+            start/end inputs inline only when chosen (progressive disclosure),
+            so the common case stays a single compact line. */}
+        <div className="exp-timing">
+          <select
+            className="table-select exp-timing-select"
+            value={mode}
+            onChange={(e) => store.updateExpense(scenario.id, exp.id, timingModePatch(e.target.value as ExpenseTimingMode, exp, currentAge))}
+            aria-label="When this expense applies"
+          >
+            <option value="always">Always</option>
+            <option value="before">Until retirement</option>
+            <option value="retirement">From retirement onward</option>
+            <option value="custom">Custom range…</option>
+          </select>
+          {mode === 'custom' && (
+            <div className="exp-custom-range">
+              <span className="exp-custom-field">
+                <label>From age</label>
+                <NumCellInput
+                  value={exp.startAge ?? currentAge}
+                  onChange={(v) => store.updateExpense(scenario.id, exp.id, { startAge: v })}
+                />
+              </span>
+              <span className="exp-custom-sep" aria-hidden="true">→</span>
+              <span className="exp-custom-field">
+                <label>To age</label>
+                <NumCellInput
+                  value={exp.endAge ?? scenario.assumptions.endAge}
+                  onChange={(v) => store.updateExpense(scenario.id, exp.id, { endAge: v || null })}
+                />
+                <button
+                  className={`income-lifetime-btn ${exp.endAge === null ? 'active' : ''}`}
+                  title="Continues for life"
+                  onClick={() => store.updateExpense(scenario.id, exp.id, { endAge: null })}
+                >Life</button>
+              </span>
+            </div>
+          )}
         </div>
         <ConfirmDelete title="Delete expense" onConfirm={() => store.deleteExpense(scenario.id, exp.id)} />
       </div>
       <div className="income-row-summary">
-        <span className={`income-phase-badge ${phase.cls}`}>{phase.label}</span>
+        <span className={`income-phase-badge ${timing.cls}`}>{timing.label}</span>
       </div>
     </div>
   );
