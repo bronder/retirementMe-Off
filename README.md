@@ -22,15 +22,17 @@ A privacy-first retirement planning web app. All data stays in your browser — 
 - **Tax-aware withdrawals**: pulls from taxable → tax-deferred → tax-free (Roth) in optimal order
 - **Inflation & COLA**: all expenses and income adjust for inflation; Social Security COLA modeled separately
 - **Income sources (pre- and post-retirement)**: salary, self-employment, Social Security, pensions, part-time, rentals, annuities, dividends, and more
+  - "+ Add Income" picker pre-fills sensible defaults per type, including a Salary in Retirement option
   - Card-based layout grouped by phase (Pre-Retirement / Retirement)
   - Toggle flags for COLA and taxable status
   - Compact timing summaries ("Age 62 → lifetime")
 - **Expenses**: card-based layout with category grouping
-  - Quick Add: 20 common expense templates based on BLS national averages
+  - "+ Add Expense" picker offers 20 common expense templates based on BLS national averages (plus a custom option)
   - Retirement transition badges (Continues, Ends at retirement, Starts in retirement)
   - Toggle flags for Before/After retirement
 - **Spouse planning**: extend the projection to cover the longer-lived partner's lifespan
 - **Life events**: model buying a house, windfalls, large purchases with one-time and ongoing impacts
+  - "+ Add Event" picker pre-fills cost/proceeds/ongoing defaults per event type
 - **Overview panel**: wellness gauge, data completeness checklist, and mini net worth chart
   - Partial scoring for account balance and expense category coverage
 - **Charts**: net worth over time (nominal + real dollars), retirement cash flow, multi-scenario comparison
@@ -76,15 +78,15 @@ Use the scenario switcher to manage "what-if" plans:
 
 **Assumptions** — Set your current age, retirement age, end age, inflation rate, tax rate, safe withdrawal rate, and expected returns. A compact summary banner shows your scenario at a glance. Enable spouse planning to model a joint retirement. Contextual warnings alert you to risky values (e.g., withdrawal rate above 4%).
 
-**Income Sources** — Add any income source (salary, self-employment, Social Security, pensions, part-time, rentals, annuities, dividends). Card-based layout grouped by retirement phase. Set start/end ages with lifetime toggle. Toggle COLA and taxable status with flag buttons.
+**Income Sources** — Add any income source (salary, self-employment, Social Security, pensions, part-time, rentals, annuities, dividends) via the "+ Add Income" picker, which pre-fills sensible defaults per type. Card-based layout grouped by retirement phase. Set start/end ages with lifetime toggle. Toggle COLA and taxable status with flag buttons.
 
 **Accounts & Savings** — Add accounts grouped by type (Cash, Taxable, Tax-Advantaged, Other). Each account card shows balance, return rate, contribution, and employer match (401k only). Visual allocation bar shows distribution. Per-group add buttons for quick entry.
 
 **Homes & Property** — Track properties with current value, mortgage details (balance, payment, years remaining), and annual costs (tax, insurance). Choose a plan: Keep, Sell, Sell & Buy, or Undecided. Future purchases compute mortgage payments via standard amortization. Zillow lookup links for easy value reference. Retirement impact summary shows equity, housing costs, and cash flow implications.
 
-**Expenses** — Card-based layout grouped by category. Quick Add section with 20 common expense templates based on BLS national averages. Toggle Before/After retirement with flag buttons. Retirement transition badges show whether each expense continues, ends, or starts at retirement.
+**Expenses** — Card-based layout grouped by category. "+ Add Expense" picker offers 20 common expense templates based on BLS national averages (plus a custom option). Toggle Before/After retirement with flag buttons. Retirement transition badges show whether each expense continues, ends, or starts at retirement.
 
-**Life Events** — Model one-time events like buying a house (cost = down payment, ongoing impact = new mortgage). Set the age it occurs and any recurring financial impact.
+**Life Events** — Model one-time events like buying a house (cost = down payment, ongoing impact = new mortgage). The "+ Add Event" picker pre-fills cost/proceeds/ongoing defaults per event type. Set the age it occurs and any recurring financial impact.
 
 ### 2. Results & Charts Tab
 
