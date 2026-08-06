@@ -63,6 +63,7 @@ import {
   BadgeDollarSign,
   HelpCircle,
   KeyRound,
+  Plus,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -179,8 +180,9 @@ const COMMON_ACCOUNTS: { name: string; icon: LucideIcon; type: AccountType; bala
 
 /** Quick-add templates for income sources — typical amounts and ages so the
  *  user can populate a realistic plan in a few clicks. */
-const COMMON_INCOME: { name: string; icon: LucideIcon; type: IncomeType; annualAmount: number; startAge: number; endAge: number | null; cola: boolean; taxable: boolean; hint: string }[] = [
+const COMMON_INCOME: { name: string; icon: LucideIcon; type: IncomeType; annualAmount: number; startAge: number; endAge: number | null; cola: boolean; taxable: boolean; hint: string; postRetirement?: boolean }[] = [
   { name: 'Salary', icon: Briefcase, type: 'salary', annualAmount: 85000, startAge: 0, endAge: 64, cola: true, taxable: true, hint: 'Pre-retirement' },
+  { name: 'Salary in Retirement', icon: Briefcase, type: 'salary', annualAmount: 60000, startAge: 0, endAge: null, cola: true, taxable: true, hint: 'Working into retirement', postRetirement: true },
   { name: 'Social Security', icon: Landmark, type: 'social_security', annualAmount: 36000, startAge: 67, endAge: null, cola: true, taxable: false, hint: 'COLA' },
   { name: 'Pension', icon: FileText, type: 'pension', annualAmount: 18000, startAge: 65, endAge: null, cola: false, taxable: true, hint: 'Fixed' },
   { name: 'Part-time', icon: Clock, type: 'part_time', annualAmount: 15000, startAge: 65, endAge: 70, cola: false, taxable: true, hint: 'Bridge' },
@@ -2495,6 +2497,108 @@ function ExpenseRow({ exp, scenario, store }: {
   );
 }
 
+/**
+ * Popover menu of common expense types, presented when "+ Add Expense" is clicked.
+ * Mirrors IncomeAddMenu / ThemePicker (outside-click + Escape to close).
+ * Picking an option adds a row pre-filled with that expense's category, amount,
+ * and Before/After timing defaults — instead of appending a blank "New Expense".
+ *
+ * `defaultCategory`, when set (used by per-category "+ Add" buttons), filters the
+ * menu to entries of that category and offers a custom-blank option for it.
+ */
+function ExpenseAddMenu({ scenario, store, label, defaultCategory, compact }: {
+  scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
+  store: ReturnType<typeof usePlanStore.getState>;
+  label: string;
+  defaultCategory?: ExpenseCategory;
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const items = defaultCategory
+    ? COMMON_EXPENSES.filter((ce) => ce.category === defaultCategory)
+    : COMMON_EXPENSES;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  // Compact timing label for the hint line.
+  const timingLabel = (ce: { preRetirement: boolean; postRetirement: boolean }) =>
+    ce.preRetirement && ce.postRetirement ? 'Before + After'
+      : ce.preRetirement ? 'Before'
+      : ce.postRetirement ? 'After'
+      : 'Manual';
+
+  return (
+    <div className="menu-wrapper expense-add-menu" ref={ref}>
+      <button
+        type="button"
+        className={`btn btn-sm${compact ? ' acct-group-add' : ''}${open ? ' open' : ''}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        {label} <span aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <div className="menu-dropdown" role="listbox" style={{ minWidth: 280, maxHeight: '70vh', overflowY: 'auto' }}>
+          {items.map((ce) => (
+            <button
+              key={ce.name}
+              type="button"
+              role="option"
+              className="menu-item income-add-item"
+              onClick={() => {
+                store.addExpense(scenario.id, { ...ce });
+                setOpen(false);
+              }}
+            >
+              <span className="income-add-icon" aria-hidden="true"><Glyph i={ce.icon} /></span>
+              <span className="income-add-text">
+                <span className="income-add-name">{ce.name}</span>
+                <span className="income-add-hint">{prettify(ce.category)} · {timingLabel(ce)} · {formatCurrency(ce.annualAmount / 12, { compact: true })}/mo</span>
+              </span>
+            </button>
+          ))}
+          <div className="menu-divider" />
+          <button
+            type="button"
+            role="option"
+            className="menu-item income-add-item"
+            onClick={() => {
+              store.addExpense(scenario.id, {
+                name: 'New Expense', category: defaultCategory ?? 'other', annualAmount: 0,
+                preRetirement: false, postRetirement: true, startAge: null, endAge: null,
+              });
+              setOpen(false);
+            }}
+          >
+            <span className="income-add-icon" aria-hidden="true"><Glyph i={Plus} /></span>
+            <span className="income-add-text">
+              <span className="income-add-name">Custom expense…</span>
+              <span className="income-add-hint">{defaultCategory ? prettify(defaultCategory) : 'Other'} · blank row, edit yourself</span>
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ExpensesPanel({ scenario, store }: {
   scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
   store: ReturnType<typeof usePlanStore.getState>;
@@ -2513,28 +2617,12 @@ function ExpensesPanel({ scenario, store }: {
     <div className="panel">
       <div className="panel-header">
         <h2><ListChecks size={20} aria-hidden="true" /> Expenses</h2>
-        <button className="btn btn-sm" onClick={() => store.addExpense(scenario.id, {
-          name: 'New Expense', category: 'other', annualAmount: 0, preRetirement: false, postRetirement: true, startAge: null, endAge: null,
-        })}>+ Add Expense</button>
+        <ExpenseAddMenu scenario={scenario} store={store} label="+ Add Expense" />
       </div>
       <p className="section-help">
         Enter your monthly costs for each category. Toggle <strong>Before</strong> and/or <strong>After</strong> to control
         when each expense applies in your retirement plan.
       </p>
-
-      {/* Quick add common expenses */}
-      <details className="quick-add-section">
-        <summary className="quick-add-label"><Zap size={15} aria-hidden="true" /> Quick Add Common Expenses <span className="quick-add-toggle"></span></summary>
-        <div className="quick-add-grid">
-          {COMMON_EXPENSES.map((ce) => (
-            <button key={ce.name} className="quick-add-btn" onClick={() => store.addExpense(scenario.id, { ...ce })}>
-              <span className="quick-add-icon"><Glyph i={ce.icon} /></span>
-              <span>{ce.name}</span>
-              <span className="quick-add-amount">{formatCurrency(ce.annualAmount / 12, { compact: true })}/mo</span>
-            </button>
-          ))}
-        </div>
-      </details>
 
       <div className="summary-strip">
         <div className="summary-strip-item">
@@ -2552,7 +2640,7 @@ function ExpensesPanel({ scenario, store }: {
       </div>
 
       {scenario.expenses.length === 0 ? (
-        <p className="muted" style={{ padding: '8px 0' }}>No expenses added yet. Use Quick Add above or click "Add Expense" to start.</p>
+        <p className="muted" style={{ padding: '8px 0' }}>No expenses added yet. Click "Add Expense" to start.</p>
       ) : (
         <div className="income-groups">
           {groups.map((g) => {
@@ -2564,9 +2652,7 @@ function ExpensesPanel({ scenario, store }: {
                   <span className="income-group-label">{prettify(g.category)}</span>
                   <span className="income-group-count">{g.expenses.length}</span>
                   <span className="income-group-total-muted">{formatCurrency(groupTotal, { compact: true })}/mo</span>
-                  <button className="btn btn-sm acct-group-add" onClick={() => store.addExpense(scenario.id, {
-                    name: 'New Expense', category: g.category, annualAmount: 0, preRetirement: false, postRetirement: true, startAge: null, endAge: null,
-                  })}>+ Add</button>
+                  <ExpenseAddMenu scenario={scenario} store={store} label="+ Add" defaultCategory={g.category} compact />
                 </div>
                 <div className="income-group-rows">
                   {g.expenses.map((exp) => (
@@ -2694,6 +2780,123 @@ function IncomeRow({ inc, scenario, store }: {
   );
 }
 
+/**
+ * Popover menu of income types, presented when "+ Add Income" is clicked.
+ * Mirrors the ThemePicker popover pattern (outside-click + Escape to close).
+ * Picking an option adds a row pre-filled with sensible defaults for that type,
+ * instead of the old behavior of appending a blank "New Income".
+ *
+ * `defaultPhase` biases the start/end ages so a row lands in the intended group
+ * when triggered from a Pre-Retirement / Retirement group header.
+ */
+function IncomeAddMenu({ scenario, store, label, defaultPhase, compact }: {
+  scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
+  store: ReturnType<typeof usePlanStore.getState>;
+  label: string;
+  defaultPhase?: 'pre' | 'post';
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const cur = scenario.assumptions.currentAge;
+  const ret = scenario.assumptions.retirementAge;
+
+  // Resolve start/end ages for a COMMON_INCOME entry, honoring defaultPhase bias.
+  const agesFor = (ci: { startAge: number; endAge: number | null; postRetirement?: boolean }): { startAge: number; endAge: number | null } => {
+    if (defaultPhase === 'pre') return { startAge: cur, endAge: ret - 1 };
+    if (defaultPhase === 'post') return { startAge: ret, endAge: null };
+    // Sources flagged as post-retirement (e.g. Salary in Retirement) start at
+    // retirement age so they land in the Retirement group, with no end clamp.
+    if (ci.postRetirement) return { startAge: ret, endAge: ci.endAge };
+    // Default: keep the preset start, but clamp a finite endAge to stay within
+    // the pre-retirement phase so a source like Salary (preset endAge 64) doesn't
+    // span the retirement boundary and render as phase 'both'. Lifetime (null)
+    // sources are intentionally left alone.
+    const startAge = Math.max(ci.startAge, cur);
+    const endAge = ci.endAge !== null && ci.endAge >= ret ? ret - 1 : ci.endAge;
+    return { startAge, endAge };
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className={`menu-wrapper income-add-menu`} ref={ref}>
+      <button
+        type="button"
+        className={`btn btn-sm${compact ? ' acct-group-add' : ''}${open ? ' open' : ''}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        {label} <span aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <div className="menu-dropdown" role="listbox" style={{ minWidth: 260 }}>
+          {COMMON_INCOME.map((ci) => {
+            const { startAge, endAge } = agesFor(ci);
+            return (
+              <button
+                key={ci.type}
+                type="button"
+                role="option"
+                className="menu-item income-add-item"
+                onClick={() => {
+                  store.addIncome(scenario.id, {
+                    name: ci.name, type: ci.type, annualAmount: ci.annualAmount, startAge, endAge, cola: ci.cola, taxable: ci.taxable,
+                  });
+                  setOpen(false);
+                }}
+              >
+                <span className="income-add-icon" aria-hidden="true"><Glyph i={ci.icon} /></span>
+                <span className="income-add-text">
+                  <span className="income-add-name">{ci.name}</span>
+                  <span className="income-add-hint">{ci.hint} · {formatCurrency(ci.annualAmount / 12, { compact: true })}/mo</span>
+                </span>
+              </button>
+            );
+          })}
+          <div className="menu-divider" />
+          <button
+            type="button"
+            role="option"
+            className="menu-item income-add-item"
+            onClick={() => {
+              const base = {
+                name: 'New Income', annualAmount: 0,
+                startAge: defaultPhase === 'post' ? ret : cur,
+                endAge: defaultPhase === 'pre' ? ret - 1 : null,
+                cola: true, taxable: true,
+              } as const;
+              store.addIncome(scenario.id, { ...base, type: defaultPhase === 'post' ? 'pension' : 'other' });
+              setOpen(false);
+            }}
+          >
+            <span className="income-add-icon" aria-hidden="true"><Glyph i={Plus} /></span>
+            <span className="income-add-text">
+              <span className="income-add-name">Custom income…</span>
+              <span className="income-add-hint">Blank row, edit details yourself</span>
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function IncomePanel({ scenario, store }: {
   scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
   store: ReturnType<typeof usePlanStore.getState>;
@@ -2715,30 +2918,13 @@ function IncomePanel({ scenario, store }: {
     <div className="panel">
       <div className="panel-header">
         <h2><Wallet size={20} aria-hidden="true" /> Income Sources</h2>
-        <button className="btn btn-sm" onClick={() => store.addIncome(scenario.id, {
-          name: 'New Income', type: 'part_time', annualAmount: 0, startAge: scenario.assumptions.currentAge, endAge: scenario.assumptions.retirementAge - 1, cola: true, taxable: true,
-        })}>+ Add Income</button>
+        <IncomeAddMenu scenario={scenario} store={store} label="+ Add Income" />
       </div>
       <p className="section-help">
         Add <strong>any income source</strong> — pre-retirement (salary, self-employment) or post-retirement (Social Security, pension).
         Set Start/End ages to control when each source is active.
       </p>
 
-      {/* Quick add common income sources */}
-      <details className="quick-add-section">
-        <summary className="quick-add-label"><Zap size={15} aria-hidden="true" /> Quick Add Common Income <span className="quick-add-toggle"></span></summary>
-        <div className="quick-add-grid">
-          {COMMON_INCOME.map((ci) => (
-            <button key={ci.name} className="quick-add-btn" onClick={() => store.addIncome(scenario.id, {
-              name: ci.name, type: ci.type, annualAmount: ci.annualAmount, startAge: Math.max(ci.startAge, scenario.assumptions.currentAge), endAge: ci.endAge, cola: ci.cola, taxable: ci.taxable,
-            })}>
-              <span className="quick-add-icon" aria-hidden="true"><Glyph i={ci.icon} /></span>
-              <span>{ci.name}</span>
-              <span className="quick-add-amount">{formatCurrency(ci.annualAmount / 12, { compact: true })}/mo</span>
-            </button>
-          ))}
-        </div>
-      </details>
 
       <div className="summary-strip">
         <div className="summary-strip-item">
@@ -2767,9 +2953,7 @@ function IncomePanel({ scenario, store }: {
                 <span className="income-group-icon"><Briefcase size={16} aria-hidden="true" /></span>
                 <span className="income-group-label">Pre-Retirement Income</span>
                 <span className="income-group-count">{preRet.length}</span>
-                <button className="btn btn-sm acct-group-add" onClick={() => store.addIncome(scenario.id, {
-                  name: 'New Income', type: 'salary', annualAmount: 0, startAge: scenario.assumptions.currentAge, endAge: scenario.assumptions.retirementAge - 1, cola: true, taxable: true,
-                })}>+ Add</button>
+                <IncomeAddMenu scenario={scenario} store={store} label="+ Add" defaultPhase="pre" compact />
               </div>
               <div className="income-group-rows">
                 {preRet.map((inc) => (
@@ -2784,9 +2968,7 @@ function IncomePanel({ scenario, store }: {
                 <span className="income-group-icon"><Landmark size={16} aria-hidden="true" /></span>
                 <span className="income-group-label">Retirement Income</span>
                 <span className="income-group-count">{postRet.length}</span>
-                <button className="btn btn-sm acct-group-add" onClick={() => store.addIncome(scenario.id, {
-                  name: 'New Income', type: 'pension', annualAmount: 0, startAge: scenario.assumptions.retirementAge, endAge: null, cola: false, taxable: true,
-                })}>+ Add</button>
+                <IncomeAddMenu scenario={scenario} store={store} label="+ Add" defaultPhase="post" compact />
               </div>
               <div className="income-group-rows">
                 {postRet.map((inc) => (
@@ -2812,6 +2994,97 @@ const EVENT_META: Record<EventType, { icon: LucideIcon; hint: string; example: s
   other: { icon: ClipboardList, hint: 'Any other significant financial event. Use cost for money out, proceeds for money in, and ongoing for recurring impacts.', example: 'Custom event' },
 };
 
+// Sensible starting cost/proceeds/ongoing defaults per event type, so the
+// "+ Add Event" menu can pre-fill a row that matches the chosen type.
+const EVENT_DEFAULTS: Record<EventType, { cost: number; proceeds: number; ongoingAnnualImpact: number }> = {
+  home_purchase: { cost: 80000, proceeds: 0, ongoingAnnualImpact: 18000 },
+  home_sale: { cost: 0, proceeds: 250000, ongoingAnnualImpact: -6000 },
+  large_purchase: { cost: 40000, proceeds: 0, ongoingAnnualImpact: 0 },
+  windfall: { cost: 0, proceeds: 100000, ongoingAnnualImpact: 0 },
+  other: { cost: 0, proceeds: 0, ongoingAnnualImpact: 0 },
+};
+
+/**
+ * Popover menu of life event types, presented when "+ Add Event" is clicked.
+ * Mirrors IncomeAddMenu / ThemePicker (outside-click + Escape to close).
+ * Picking an option adds an event pre-filled with that type's name, icon,
+ * and sensible cost/proceeds/ongoing defaults — instead of appending a blank
+ * "home_purchase" event.
+ */
+function EventAddMenu({ scenario, store, label }: {
+  scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
+  store: ReturnType<typeof usePlanStore.getState>;
+  label: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="menu-wrapper event-add-menu" ref={ref}>
+      <button
+        type="button"
+        className={`btn btn-sm${open ? ' open' : ''}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        {label} <span aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <div className="menu-dropdown" role="listbox" style={{ minWidth: 300 }}>
+          {EVENT_TYPES.map((t) => {
+            const meta = EVENT_META[t];
+            const d = EVENT_DEFAULTS[t];
+            const amountHint = d.proceeds > 0
+              ? `+${formatCurrency(d.proceeds, { compact: true })}`
+              : d.cost > 0
+                ? `-${formatCurrency(d.cost, { compact: true })}`
+                : 'No amount';
+            return (
+              <button
+                key={t}
+                type="button"
+                role="option"
+                className="menu-item income-add-item"
+                onClick={() => {
+                  store.addEvent(scenario.id, {
+                    name: meta.example, type: t, age: scenario.assumptions.currentAge + 5,
+                    cost: d.cost, proceeds: d.proceeds, ongoingAnnualImpact: d.ongoingAnnualImpact,
+                    ongoingDurationYears: d.ongoingAnnualImpact !== 0 ? 30 : null, notes: '',
+                  });
+                  setOpen(false);
+                }}
+              >
+                <span className="income-add-icon" aria-hidden="true"><Glyph i={meta.icon} /></span>
+                <span className="income-add-text">
+                  <span className="income-add-name">{meta.example}</span>
+                  <span className="income-add-hint">{prettify(t)} · {amountHint}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EventsPanel({ scenario, store }: {
   scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
   store: ReturnType<typeof usePlanStore.getState>;
@@ -2823,9 +3096,7 @@ function EventsPanel({ scenario, store }: {
     <div className="panel">
       <div className="panel-header">
         <h2><CalendarDays size={20} aria-hidden="true" /> Life Events</h2>
-        <button className="btn btn-sm" onClick={() => store.addEvent(scenario.id, {
-          name: '', type: 'home_purchase', age: scenario.assumptions.currentAge + 5, cost: 0, proceeds: 0, ongoingAnnualImpact: 0, ongoingDurationYears: null, notes: '',
-        })}>+ Add Event</button>
+        <EventAddMenu scenario={scenario} store={store} label="+ Add Event" />
       </div>
       <p className="section-help">
         Model major events that impact your retirement plan — buying or selling a home, receiving an inheritance,

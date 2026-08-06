@@ -3104,6 +3104,42 @@ h1 svg, h2 svg, h3 svg {
   margin: 6px 0;
 }
 
+/* Income type chooser (presented by "+ Add Income"). */
+.income-add-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+.income-add-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.income-add-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.income-add-name {
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.income-add-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
 /* ============================================================
    UTILITIES
    ============================================================ */
