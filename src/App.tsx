@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect, Fragment, Component } from 'react';
+import { createPortal } from 'react-dom';
 import {
   LayoutDashboard,
   Settings,
@@ -97,6 +98,7 @@ import { PctInputEnhanced } from './inputs/PctInputEnhanced';
 import { FieldGroup } from './inputs/FieldGroup';
 import { ContextWarning } from './inputs/ContextWarning';
 import { useEditableNumber } from './hooks/useEditableNumber';
+import { usePopoverPosition } from './hooks/usePopoverPosition';
 import { DataTable } from './inputs/DataTable';
 import { ChartDataDisclosure } from './inputs/ChartDataDisclosure';
 import { ScenarioWizard } from './inputs/ScenarioWizard';
@@ -2022,6 +2024,11 @@ function PropertyCard({ prop, scenario, store }: {
   const planAction = prop.planAction ?? 'undecided';
   const showSaleFields = planAction === 'sell' || planAction === 'sell_and_buy';
   const showBuyFields = planAction === 'sell_and_buy';
+  // 'simple' = one flat monthly payment (escrow) covering P+I + tax + insurance,
+  // flat until payoff then $0. 'detailed' (default) = separate fields. Absent
+  // field on legacy data falls back to detailed = today's behavior.
+  const mortgageMode = prop.mortgageInputMode ?? 'detailed';
+  const isSimpleMortgage = mortgageMode === 'simple';
 
   // Build retirement impact summary sentence
   let impactSentence = '';
@@ -2053,6 +2060,26 @@ function PropertyCard({ prop, scenario, store }: {
       {/* === Step 1: Current property (compact) === */}
       <div className="prop-step">
         <div className="prop-step-label">① Current Property</div>
+        <div className="prop-mode-toggle-row">
+          <span className="prop-mode-toggle-label">How do you track housing costs?</span>
+          <span className="income-end-toggle prop-mode-toggle">
+            <button
+              className={`income-lifetime-btn ${isSimpleMortgage ? 'active' : ''}`}
+              title="Enter one monthly payment that includes principal, interest, taxes & insurance"
+              onClick={() => store.updateProperty(scenario.id, prop.id, { mortgageInputMode: 'simple' })}
+            >Simple (one payment)</button>
+            <button
+              className={`income-lifetime-btn ${!isSimpleMortgage ? 'active' : ''}`}
+              title="Enter balance, P+I payment, tax, and insurance separately"
+              onClick={() => store.updateProperty(scenario.id, prop.id, { mortgageInputMode: 'detailed' })}
+            >Detailed</button>
+          </span>
+        </div>
+        {isSimpleMortgage && (
+          <div className="prop-hint" style={{ marginBottom: 12 }}>
+            Enter your total monthly payment as shown on your statement — most people escrow, so it includes principal, interest, taxes &amp; insurance. It counts as a single housing cost until the mortgage pays off, then drops to $0. We still need the balance to track your equity and payoff.
+          </div>
+        )}
         <div className="prop-zone-grid">
           <div className="prop-field">
             <label>Current market value</label>
@@ -2063,19 +2090,27 @@ function PropertyCard({ prop, scenario, store }: {
             <label>Remaining mortgage balance</label>
             <CurrencyCellInput value={prop.mortgageBalance} onChange={(v) => store.updateProperty(scenario.id, prop.id, { mortgageBalance: v })} />
           </div>
-          <div className="prop-field">
-            <label>Annual mortgage payment (P+I)</label>
-            <CurrencyCellInput value={prop.mortgagePayment ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { mortgagePayment: v })} />
-          </div>
+          {isSimpleMortgage ? (
+            <PropMonthlyPaymentField prop={prop} scenario={scenario} store={store} />
+          ) : (
+            <div className="prop-field">
+              <label>Annual mortgage payment (P+I)</label>
+              <CurrencyCellInput value={prop.mortgagePayment ?? 0} onChange={(v) => store.updateProperty(scenario.id, prop.id, { mortgagePayment: v })} />
+            </div>
+          )}
           <PropYearsLeftField prop={prop} scenario={scenario} store={store} />
-          <div className="prop-field">
-            <label>Property tax /yr</label>
-            <CurrencyCellInput value={prop.annualPropertyTax} onChange={(v) => store.updateProperty(scenario.id, prop.id, { annualPropertyTax: v })} />
-          </div>
-          <div className="prop-field">
-            <label>Home insurance /yr</label>
-            <CurrencyCellInput value={prop.annualInsurance} onChange={(v) => store.updateProperty(scenario.id, prop.id, { annualInsurance: v })} />
-          </div>
+          {!isSimpleMortgage && (
+            <>
+              <div className="prop-field">
+                <label>Property tax /yr</label>
+                <CurrencyCellInput value={prop.annualPropertyTax} onChange={(v) => store.updateProperty(scenario.id, prop.id, { annualPropertyTax: v })} />
+              </div>
+              <div className="prop-field">
+                <label>Home insurance /yr</label>
+                <CurrencyCellInput value={prop.annualInsurance} onChange={(v) => store.updateProperty(scenario.id, prop.id, { annualInsurance: v })} />
+              </div>
+            </>
+          )}
           <div className="prop-field">
             <label>Expected annual home value growth</label>
             <PctCellInput value={prop.annualAppreciation} onChange={(v) => store.updateProperty(scenario.id, prop.id, { annualAppreciation: v })} />
@@ -2515,6 +2550,8 @@ function ExpenseAddMenu({ scenario, store, label, defaultCategory, compact }: {
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const { style: popStyle, placement } = usePopoverPosition(ref, open);
 
   const items = defaultCategory
     ? COMMON_EXPENSES.filter((ce) => ce.category === defaultCategory)
@@ -2523,7 +2560,11 @@ function ExpenseAddMenu({ scenario, store, label, defaultCategory, compact }: {
   useEffect(() => {
     if (!open) return;
     const onDocClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      // The dropdown is portaled to document.body, so it's no longer a DOM
+      // child of the trigger wrapper — check both to avoid closing on clicks
+      // inside the menu itself.
+      if (ref.current && !ref.current.contains(t) && dropdownRef.current && !dropdownRef.current.contains(t)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
@@ -2554,8 +2595,8 @@ function ExpenseAddMenu({ scenario, store, label, defaultCategory, compact }: {
       >
         {label} <span aria-hidden="true">▾</span>
       </button>
-      {open && (
-        <div className="menu-dropdown" role="listbox" style={{ minWidth: 280, maxHeight: '70vh', overflowY: 'auto' }}>
+      {open && createPortal(
+        <div ref={dropdownRef} className={`menu-dropdown ${placement === 'above' ? 'open-above' : ''}`} role="listbox" style={{ ...popStyle }}>
           {items.map((ce) => (
             <button
               key={ce.name}
@@ -2593,7 +2634,8 @@ function ExpenseAddMenu({ scenario, store, label, defaultCategory, compact }: {
               <span className="income-add-hint">{defaultCategory ? prettify(defaultCategory) : 'Other'} · blank row, edit yourself</span>
             </span>
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -2798,6 +2840,8 @@ function IncomeAddMenu({ scenario, store, label, defaultPhase, compact }: {
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const { style: popStyle, placement } = usePopoverPosition(ref, open);
   const cur = scenario.assumptions.currentAge;
   const ret = scenario.assumptions.retirementAge;
 
@@ -2820,7 +2864,8 @@ function IncomeAddMenu({ scenario, store, label, defaultPhase, compact }: {
   useEffect(() => {
     if (!open) return;
     const onDocClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (ref.current && !ref.current.contains(t) && dropdownRef.current && !dropdownRef.current.contains(t)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
@@ -2844,8 +2889,8 @@ function IncomeAddMenu({ scenario, store, label, defaultPhase, compact }: {
       >
         {label} <span aria-hidden="true">▾</span>
       </button>
-      {open && (
-        <div className="menu-dropdown" role="listbox" style={{ minWidth: 260 }}>
+      {open && createPortal(
+        <div ref={dropdownRef} className={`menu-dropdown ${placement === 'above' ? 'open-above' : ''}`} role="listbox" style={{ ...popStyle }}>
           {COMMON_INCOME.map((ci) => {
             const { startAge, endAge } = agesFor(ci);
             return (
@@ -2891,7 +2936,8 @@ function IncomeAddMenu({ scenario, store, label, defaultPhase, compact }: {
               <span className="income-add-hint">Blank row, edit details yourself</span>
             </span>
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -3018,11 +3064,14 @@ function EventAddMenu({ scenario, store, label }: {
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const { style: popStyle, placement } = usePopoverPosition(ref, open);
 
   useEffect(() => {
     if (!open) return;
     const onDocClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (ref.current && !ref.current.contains(t) && dropdownRef.current && !dropdownRef.current.contains(t)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
@@ -3046,8 +3095,8 @@ function EventAddMenu({ scenario, store, label }: {
       >
         {label} <span aria-hidden="true">▾</span>
       </button>
-      {open && (
-        <div className="menu-dropdown" role="listbox" style={{ minWidth: 300 }}>
+      {open && createPortal(
+        <div ref={dropdownRef} className={`menu-dropdown ${placement === 'above' ? 'open-above' : ''}`} role="listbox" style={{ ...popStyle }}>
           {EVENT_TYPES.map((t) => {
             const meta = EVENT_META[t];
             const d = EVENT_DEFAULTS[t];
@@ -3079,7 +3128,8 @@ function EventAddMenu({ scenario, store, label }: {
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -3704,6 +3754,14 @@ function getExpenseBreakdown(scenario: NonNullable<ReturnType<typeof usePlanStor
     // Legacy :mortgage linked expenses are computed by the engine now (see
     // below) — skip any that pre-date migration v6 to avoid double-counting.
     if (exp._propertyId?.endsWith(':mortgage')) continue;
+    // In simple mode the whole housing payment (incl. tax + insurance) is
+    // captured by the engine-computed mortgage payment below, so the separate
+    // :tax / :insurance linked entries would double-count. Skip them.
+    if (exp._propertyId) {
+      const propId = exp._propertyId.split(':')[0];
+      const linkedProp = scenario.properties?.find((p) => p.id === propId);
+      if (linkedProp?.mortgageInputMode === 'simple') continue;
+    }
     items.push({ name: exp.name, amount: exp.annualAmount * inflationFactor, category: exp.category });
   }
 
@@ -3715,7 +3773,13 @@ function getExpenseBreakdown(scenario: NonNullable<ReturnType<typeof usePlanStor
       if (prop.saleAge && age >= prop.saleAge) continue;
       if (prop.purchaseAge && age < prop.purchaseAge) continue;
       const payment = mortgagePaymentAtAge(prop, age, a.currentAge);
-      if (payment > 0) items.push({ name: `${prop.name} — Mortgage`, amount: payment, category: 'housing' });
+      if (payment > 0) {
+        // In simple mode the payment bundles tax + insurance (escrow).
+        const label = prop.mortgageInputMode === 'simple'
+          ? `${prop.name} — Mortgage (incl. tax & insurance)`
+          : `${prop.name} — Mortgage`;
+        items.push({ name: label, amount: payment, category: 'housing' });
+      }
     }
   }
 
@@ -4183,6 +4247,7 @@ function PropYearsLeftField({ prop, scenario, store }: {
     <div className="prop-field">
       <label>Years remaining</label>
       <input
+        className="table-input text-right"
         type="number"
         value={shown}
         placeholder="—"
@@ -4191,6 +4256,43 @@ function PropYearsLeftField({ prop, scenario, store }: {
         onChange={(e) => handleChange(e.target.value)}
         onBlur={handleBlur}
       />
+      {notice && <div className="input-snapback">{notice}</div>}
+    </div>
+  );
+}
+
+/**
+ * Monthly payment entry for simple mortgage mode. Presents the monthly amount
+ * (mortgagePayment / 12) but commits the annual figure (v * 12) so the engine
+ * treats it identically to a detailed-mode P+I payment — flat until the
+ * balance amortizes to 0, then 0. The "balance" used for amortization is
+ * implicitly derived; for simple mode the user only provides payment + years.
+ */
+function PropMonthlyPaymentField({ prop, scenario, store }: {
+  prop: Property; scenario: Scenario; store: ScenarioStore;
+}) {
+  // The engine stores mortgagePayment as an ANNUAL figure. Show monthly.
+  const { display, handleChange, handleBlur, notice } = useEditableNumber({
+    value: (prop.mortgagePayment ?? 0) / 12,
+    onCommit: (v) => store.updateProperty(scenario.id, prop.id, { mortgagePayment: v * 12 }),
+    min: 0,
+    toInput: (v) => v.toFixed(0),
+  });
+  return (
+    <div className="prop-field">
+      <label>Monthly payment (incl. tax &amp; insurance)</label>
+      <div className="input-with-unit">
+        <span className="unit">$</span>
+        <input
+          className="table-input text-right"
+          type="number"
+          value={display}
+          min={0}
+          onChange={(e) => handleChange(e.target.value)}
+          onBlur={handleBlur}
+        />
+        <span className="unit">/mo</span>
+      </div>
       {notice && <div className="input-snapback">{notice}</div>}
     </div>
   );
@@ -4218,6 +4320,7 @@ function PropSaleAgeField({ prop, scenario, store, equity }: {
     <div className="prop-field">
       <label>Sell at age</label>
       <input
+        className="table-input text-right"
         type="number"
         value={shown}
         placeholder="—"
@@ -4247,6 +4350,7 @@ function PropPurchaseAgeField({ prop, scenario, store }: {
     <div className="prop-field">
       <label>Buy at age</label>
       <input
+        className="table-input text-right"
         type="number"
         value={shown}
         placeholder="—"
@@ -4270,6 +4374,7 @@ function PropMortgageTermField({ prop, scenario, store }: {
     <div className="prop-field">
       <label>Mortgage term (years)</label>
       <input
+        className="table-input text-right"
         type="number"
         value={display}
         onChange={(e) => handleChange(e.target.value)}
