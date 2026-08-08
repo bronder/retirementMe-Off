@@ -3454,6 +3454,51 @@ h1 svg, h2 svg, h3 svg {
   background: var(--panel);
 }
 
+/* Badge on expense rows auto-created from the Homes & Property page. Signals
+   "don't duplicate this — edit it on the property page." */
+.exp-linked-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+/* Inline variant used inside the info-banner's text (no padding/border). */
+.exp-linked-badge-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: inherit;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* Info banner inside an expense category group (e.g. the Housing group gets
+   one when the user has properties, warning against double-counting). */
+.info-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--accent-dim);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+.info-banner svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--accent);
+}
+
 .income-row-type {
   width: auto !important;
   min-width: 110px;

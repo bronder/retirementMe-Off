@@ -88,6 +88,8 @@ import {
   Lamp,
   Trophy,
   Tent,
+  Link2,
+  Info,
   Clock,
   CircleDollarSign,
   Lock,
@@ -2437,8 +2439,10 @@ function PropertiesPanel({ scenario, store }: {
         })}>+ Add Property</button>
       </div>
       <p className="section-help">
-        Track properties you own and model future purchases or sales. Property tax and insurance are automatically included in your retirement expenses.
-        Your home equity and any sale proceeds are factored into your retirement plan.
+        Track properties you own and model future purchases or sales. Your <strong>mortgage payment</strong> (flat until
+        payoff), <strong>property tax</strong>, and <strong>home insurance</strong> are automatically added as expenses on
+        the Expenses page — you'll see them tagged with a <em>from property</em> badge. Your home equity and any sale
+        proceeds are factored into your net worth and retirement plan.
       </p>
       <div className="summary-strip">
         <div className="summary-strip-item">
@@ -2616,6 +2620,11 @@ function ExpenseRow({ exp, scenario, store }: {
           placeholder="Expense name"
           aria-label="Expense name"
         />
+        {exp._propertyId && (
+          <span className="exp-linked-badge" title="Auto-created from your Homes &amp; Property page — edit it there">
+            <Link2 size={11} aria-hidden="true" /> from property
+          </span>
+        )}
         <select
           className="table-select income-row-type"
           value={exp.category}
@@ -2817,7 +2826,8 @@ function ExpensesPanel({ scenario, store }: {
       </div>
       <p className="section-help">
         Enter your monthly costs for each category. Toggle <strong>Before</strong> and/or <strong>After</strong> to control
-        when each expense applies in your retirement plan.
+        when each expense applies in your retirement plan. If you own a home, its mortgage, tax, and insurance are
+        managed on the <strong>Homes &amp; Property</strong> page and appear here automatically — don't add them twice.
       </p>
 
       <div className="summary-strip">
@@ -2859,6 +2869,12 @@ function ExpensesPanel({ scenario, store }: {
                   )}
                   <ExpenseAddMenu scenario={scenario} store={store} label="+ Add" defaultCategory={g.category} compact />
                 </div>
+                {g.category === 'housing' && (scenario.properties?.length ?? 0) > 0 && (
+                  <div className="info-banner">
+                    <Info size={14} aria-hidden="true" />
+                    <span>Mortgage, property tax, and home insurance from your <strong>Homes &amp; Property</strong> page are already included here — look for the <span className="exp-linked-badge-inline"><Link2 size={10} aria-hidden="true" /> from property</span> badge. Don't add them again, or they'll be double-counted.</span>
+                  </div>
+                )}
                 {openQuickAdd === g.category && (
                   <div className="quick-add-panel">
                     <div className="quick-add-grid">

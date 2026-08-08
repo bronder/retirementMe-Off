@@ -94,7 +94,6 @@ export function defaultScenario(name = 'Baseline'): Scenario {
       },
     ],
     expenses: [
-      { id: createId(), name: 'Mortgage / Rent', category: 'housing', annualAmount: 24000, preRetirement: true, postRetirement: false, startAge: null, endAge: null },
       { id: createId(), name: 'Food & Groceries', category: 'food', annualAmount: 12000, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
       { id: createId(), name: 'Transportation', category: 'transportation', annualAmount: 9000, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
       { id: createId(), name: 'Healthcare (pre-Medicare)', category: 'healthcare', annualAmount: 12000, preRetirement: false, postRetirement: true, startAge: null, endAge: 64 },
