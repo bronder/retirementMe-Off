@@ -117,6 +117,11 @@ export interface Property {
   mortgagePayment?: number;
   /** Years remaining on the mortgage. */
   mortgageYearsLeft?: number;
+  /** How the user enters housing costs. 'detailed' (default) = separate
+   *  balance, P+I payment, tax, insurance. 'simple' = one flat monthly
+   *  payment that includes everything (P+I + tax + insurance) and drops to
+   *  $0 when the mortgage pays off. */
+  mortgageInputMode?: 'simple' | 'detailed';
   /** Expected annual appreciation rate (decimal, e.g., 0.03 = 3%). */
   annualAppreciation: number;
   /** Annual property tax in today's dollars. */

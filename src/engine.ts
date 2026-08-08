@@ -387,6 +387,11 @@ export function runProjectionCore(
         if (prop) {
           if (prop.saleAge && age >= prop.saleAge) continue;
           if (prop.purchaseAge && age < prop.purchaseAge) continue;
+          // In simple mode the user enters one flat monthly payment that
+          // already includes tax and insurance (the escrow), so the separate
+          // :tax / :insurance linked expenses would double-count. The engine
+          // counts the whole payment via mortgagePaymentAtAge below.
+          if (prop.mortgageInputMode === 'simple') continue;
         }
         // Legacy :mortgage linked expenses are no longer the source of truth —
         // the engine computes the mortgage payment directly (see below) so the
