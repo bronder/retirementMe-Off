@@ -47,12 +47,47 @@ import {
   Smartphone,
   Tv,
   PawPrint,
+  // Quick-add chip icons (specific expense items)
+  Flame,
+  Droplets,
+  Fuel,
+  Film,
+  Music,
+  Gamepad2,
+  Bus,
+  Coffee,
+  Wine,
+  Salad,
+  Ticket,
+  Cookie,
+  ShoppingCart,
+  Wrench,
+  ParkingSquare,
+  CarTaxiFront,
+  Wifi,
+  Recycle,
   Banknote,
   PiggyBank,
   Building2,
   Sprout,
   Coins,
   Briefcase,
+  // Quick-add chip icons: remaining categories
+  Flower2,
+  Dumbbell,
+  Stethoscope,
+  Baby,
+  Ship,
+  Camera,
+  Heart,
+  HandHeart,
+  HandCoins,
+  ReceiptText,
+  Building,
+  Bed,
+  Lamp,
+  Trophy,
+  Tent,
   Clock,
   CircleDollarSign,
   Lock,
@@ -164,6 +199,121 @@ const COMMON_EXPENSES: { name: string; icon: LucideIcon; category: ExpenseCatego
   { name: 'Utilities (gas, electric, water)', icon: Lightbulb, category: 'utilities', annualAmount: 4725, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
   { name: 'Vehicle Insurance', icon: ShieldCheck, category: 'insurance', annualAmount: 1905, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
   { name: 'Vehicle Payment & Gas', icon: CarFront, category: 'transportation', annualAmount: 12285, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+];
+
+/** Specific, named quick-add items shown as collapsible chips inside each
+ *  expense category group. Kept SEPARATE from COMMON_EXPENSES so the "+ Add"
+ *  dropdown stays short and clean — these live only in the in-group chip row.
+ *  Amounts are rough US averages in today's dollars (annual). */
+const QUICK_ADD_EXPENSES: { name: string; icon: LucideIcon; category: ExpenseCategory; annualAmount: number; preRetirement: boolean; postRetirement: boolean; startAge: number | null; endAge: number | null }[] = [
+  // --- Entertainment ---
+  { name: 'Netflix', icon: Tv, category: 'entertainment', annualAmount: 204, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Amazon Prime', icon: Package, category: 'entertainment', annualAmount: 139, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Disney+', icon: Film, category: 'entertainment', annualAmount: 160, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Spotify', icon: Music, category: 'entertainment', annualAmount: 132, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'YouTube Premium', icon: Tv, category: 'entertainment', annualAmount: 144, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Apple One / iCloud', icon: Music, category: 'entertainment', annualAmount: 149, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'AI Subscription', icon: Sparkles, category: 'entertainment', annualAmount: 240, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Movies & Theater', icon: Ticket, category: 'entertainment', annualAmount: 720, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Gaming', icon: Gamepad2, category: 'entertainment', annualAmount: 600, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Books & Kindle', icon: BookOpen, category: 'entertainment', annualAmount: 240, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+
+  // --- Utilities ---
+  { name: 'Cell Phone Plan', icon: Smartphone, category: 'utilities', annualAmount: 900, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Home Internet', icon: Wifi, category: 'utilities', annualAmount: 840, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Electricity', icon: Lightbulb, category: 'utilities', annualAmount: 1740, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Natural Gas', icon: Flame, category: 'utilities', annualAmount: 900, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Water & Sewer', icon: Droplets, category: 'utilities', annualAmount: 600, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Trash & Recycling', icon: Recycle, category: 'utilities', annualAmount: 360, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Streaming TV (YouTube TV)', icon: Tv, category: 'utilities', annualAmount: 816, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Home Security', icon: ShieldCheck, category: 'utilities', annualAmount: 600, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+
+  // --- Food ---
+  { name: 'Groceries', icon: ShoppingCart, category: 'food', annualAmount: 7800, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Dining Out', icon: Utensils, category: 'food', annualAmount: 3600, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Coffee', icon: Coffee, category: 'food', annualAmount: 780, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Alcohol', icon: Wine, category: 'food', annualAmount: 720, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Meal Kit Delivery', icon: Salad, category: 'food', annualAmount: 2400, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Snacks', icon: Cookie, category: 'food', annualAmount: 480, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Work / School Lunches', icon: Pizza, category: 'food', annualAmount: 1200, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+
+  // --- Transportation ---
+  { name: 'Auto Loan / Lease', icon: CreditCard, category: 'transportation', annualAmount: 5520, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Gasoline', icon: Fuel, category: 'transportation', annualAmount: 3000, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Auto Insurance', icon: ShieldCheck, category: 'transportation', annualAmount: 1905, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Registration & Fees', icon: Receipt, category: 'transportation', annualAmount: 220, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Maintenance & Tires', icon: Wrench, category: 'transportation', annualAmount: 900, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Rideshare / Taxi', icon: CarTaxiFront, category: 'transportation', annualAmount: 720, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Public Transit', icon: Bus, category: 'transportation', annualAmount: 600, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Parking & Tolls', icon: ParkingSquare, category: 'transportation', annualAmount: 480, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+
+  // --- Housing (ongoing costs; mortgage/rent is usually on the Homes tab) ---
+  { name: 'Rent', icon: Home, category: 'housing', annualAmount: 18000, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'HOA / Condo Fees', icon: Building, category: 'housing', annualAmount: 3600, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Home Maintenance', icon: Wrench, category: 'housing', annualAmount: 2208, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Lawn & Garden', icon: Flower2, category: 'housing', annualAmount: 720, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Pest Control', icon: Sprout, category: 'housing', annualAmount: 360, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Furniture & Decor', icon: Lamp, category: 'housing', annualAmount: 1200, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Appliance Repair', icon: Wrench, category: 'housing', annualAmount: 480, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Septic / Well Service', icon: Droplets, category: 'housing', annualAmount: 360, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+
+  // --- Healthcare ---
+  { name: 'Health Insurance Premium', icon: HeartPulse, category: 'healthcare', annualAmount: 3000, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Dental & Vision', icon: Stethoscope, category: 'healthcare', annualAmount: 900, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Prescriptions / Medications', icon: Pill, category: 'healthcare', annualAmount: 720, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Co-pays & Doctor Visits', icon: Stethoscope, category: 'healthcare', annualAmount: 600, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Gym / Fitness Membership', icon: Dumbbell, category: 'healthcare', annualAmount: 600, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Vision / Eyewear', icon: HeartPulse, category: 'healthcare', annualAmount: 360, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Hearing / Medical Devices', icon: Stethoscope, category: 'healthcare', annualAmount: 480, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Supplements & Vitamins', icon: Pill, category: 'healthcare', annualAmount: 360, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+
+  // --- Insurance ---
+  { name: 'Homeowners Insurance', icon: House, category: 'insurance', annualAmount: 1716, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Auto Insurance', icon: ShieldCheck, category: 'insurance', annualAmount: 1905, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Life Insurance', icon: ClipboardList, category: 'insurance', annualAmount: 680, preRetirement: true, postRetirement: false, startAge: null, endAge: null },
+  { name: 'Health Insurance', icon: HeartPulse, category: 'insurance', annualAmount: 3000, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Umbrella Liability', icon: ShieldCheck, category: 'insurance', annualAmount: 360, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Long-Term Care', icon: HandHeart, category: 'insurance', annualAmount: 2400, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Disability Insurance', icon: ShieldCheck, category: 'insurance', annualAmount: 600, preRetirement: true, postRetirement: false, startAge: null, endAge: null },
+  { name: 'Valuables / Jewelry Rider', icon: Lock, category: 'insurance', annualAmount: 240, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+
+  // --- Travel ---
+  { name: 'Annual Vacation', icon: Plane, category: 'travel', annualAmount: 4500, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Weekend Trips', icon: CarFront, category: 'travel', annualAmount: 1800, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Cruise', icon: Ship, category: 'travel', annualAmount: 3000, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Camping / RV', icon: Tent, category: 'travel', annualAmount: 1200, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Hotels & Lodging', icon: Bed, category: 'travel', annualAmount: 2400, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Visiting Family', icon: Heart, category: 'travel', annualAmount: 1500, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Travel Insurance', icon: ShieldCheck, category: 'travel', annualAmount: 240, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Souvenirs & Excursions', icon: Camera, category: 'travel', annualAmount: 600, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+
+  // --- Debt Payment ---
+  { name: 'Credit Card Payment', icon: CreditCard, category: 'debt_payment', annualAmount: 3600, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Student Loan', icon: GraduationCap, category: 'debt_payment', annualAmount: 3600, preRetirement: true, postRetirement: false, startAge: null, endAge: null },
+  { name: 'Personal Loan', icon: HandCoins, category: 'debt_payment', annualAmount: 2400, preRetirement: true, postRetirement: false, startAge: null, endAge: null },
+  { name: 'Medical Debt', icon: HeartPulse, category: 'debt_payment', annualAmount: 1800, preRetirement: true, postRetirement: false, startAge: null, endAge: null },
+  { name: 'Buy Now Pay Later', icon: CreditCard, category: 'debt_payment', annualAmount: 1200, preRetirement: true, postRetirement: false, startAge: null, endAge: null },
+  { name: 'Tax Debt / Installment', icon: Receipt, category: 'debt_payment', annualAmount: 2400, preRetirement: true, postRetirement: false, startAge: null, endAge: null },
+
+  // --- Taxes ---
+  { name: 'Federal Income Tax', icon: ReceiptText, category: 'taxes', annualAmount: 12000, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'State Income Tax', icon: Landmark, category: 'taxes', annualAmount: 4000, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Property Tax', icon: Home, category: 'taxes', annualAmount: 3600, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Vehicle Registration', icon: CarFront, category: 'taxes', annualAmount: 220, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Sales Tax (estimated)', icon: Receipt, category: 'taxes', annualAmount: 2400, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Estimated / Self-Employment Tax', icon: Briefcase, category: 'taxes', annualAmount: 6000, preRetirement: true, postRetirement: false, startAge: null, endAge: null },
+
+  // --- Other ---
+  { name: 'Childcare / Daycare', icon: Baby, category: 'other', annualAmount: 12000, preRetirement: true, postRetirement: false, startAge: null, endAge: null },
+  { name: 'Child Support', icon: Heart, category: 'other', annualAmount: 7200, preRetirement: true, postRetirement: false, startAge: null, endAge: null },
+  { name: 'Pet Care / Vet', icon: PawPrint, category: 'other', annualAmount: 1200, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Gifts & Donations', icon: Gift, category: 'other', annualAmount: 2551, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Clothing', icon: Shirt, category: 'other', annualAmount: 1833, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Personal Care', icon: SprayCan, category: 'other', annualAmount: 1010, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Education / Classes', icon: GraduationCap, category: 'other', annualAmount: 1200, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Hobbies', icon: Trophy, category: 'other', annualAmount: 720, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Subscriptions (misc)', icon: Package, category: 'other', annualAmount: 480, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
+  { name: 'Charitable Giving', icon: HandHeart, category: 'other', annualAmount: 1200, preRetirement: true, postRetirement: true, startAge: null, endAge: null },
 ];
 
 /** Quick-add templates for accounts — sensible defaults per type (typical
@@ -2648,6 +2798,10 @@ function ExpensesPanel({ scenario, store }: {
   const preRetTotal = scenario.expenses.filter(e => e.preRetirement).reduce((s, e) => s + e.annualAmount, 0) / 12;
   const postRetTotal = scenario.expenses.filter(e => e.postRetirement).reduce((s, e) => s + e.annualAmount, 0) / 12;
 
+  // Which category's quick-add chip panel is open (null = none). Only one
+  // group's chips can be expanded at a time — keeps the page tidy.
+  const [openQuickAdd, setOpenQuickAdd] = useState<ExpenseCategory | null>(null);
+
   // Group by category
   const groups = EXPENSE_CATEGORIES.map((cat) => ({
     category: cat,
@@ -2694,8 +2848,30 @@ function ExpensesPanel({ scenario, store }: {
                   <span className="income-group-label">{prettify(g.category)}</span>
                   <span className="income-group-count">{g.expenses.length}</span>
                   <span className="income-group-total-muted">{formatCurrency(groupTotal, { compact: true })}/mo</span>
+                  {QUICK_ADD_EXPENSES.some((q) => q.category === g.category) && (
+                    <button
+                      className={`btn btn-sm quick-add-trigger${openQuickAdd === g.category ? ' active' : ''}`}
+                      onClick={() => setOpenQuickAdd(openQuickAdd === g.category ? null : g.category)}
+                      title="Quick add common items"
+                    >
+                      <Zap size={13} aria-hidden="true" /> Quick add <span aria-hidden="true">{openQuickAdd === g.category ? '▴' : '▾'}</span>
+                    </button>
+                  )}
                   <ExpenseAddMenu scenario={scenario} store={store} label="+ Add" defaultCategory={g.category} compact />
                 </div>
+                {openQuickAdd === g.category && (
+                  <div className="quick-add-panel">
+                    <div className="quick-add-grid">
+                      {QUICK_ADD_EXPENSES.filter((q) => q.category === g.category).map((q) => (
+                        <button key={q.name} className="quick-add-btn" onClick={() => store.addExpense(scenario.id, { ...q })}>
+                          <span className="quick-add-icon" aria-hidden="true"><Glyph i={q.icon} /></span>
+                          <span>{q.name}</span>
+                          <span className="quick-add-amount">{formatCurrency(q.annualAmount / 12, { compact: true })}/mo</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="income-group-rows">
                   {g.expenses.map((exp) => (
                     <ExpenseRow key={exp.id} exp={exp} scenario={scenario} store={store} />

@@ -3267,6 +3267,38 @@ h1 svg, h2 svg, h3 svg {
   white-space: nowrap;
 }
 
+/* Quick-add trigger button — sits in the expense group header beside "+ Add".
+   Accent-tinted so it reads as a distinct action and stays discoverable. */
+.quick-add-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  background: var(--accent-dim);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.quick-add-trigger:hover {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.quick-add-trigger.active {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+/* Expanded chip panel — sits between the group header and the expense rows. */
+.quick-add-panel {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
 /* ============================================================
    INCOME ROWS (Redesigned)
    ============================================================ */
