@@ -6,7 +6,7 @@
  * Reuses the existing `useThemeColors()` color hook from App.tsx so the
  * percentile chart respects the active theme without duplicate code.
  */
-import { useMemo, useState, useRef, useEffect } from 'react';
+import { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import { Dices } from 'lucide-react';
 import {
   AreaChart,
@@ -22,6 +22,7 @@ import {
 } from 'recharts';
 import { runMonteCarloProjection } from './engine';
 import type { MonteCarloOptions, MonteCarloResult, Scenario } from './types';
+import type { MonteCarloRequest, MonteCarloResponse } from './monteCarlo.worker';
 import { formatCurrency } from './format';
 import { DataTable } from './inputs/DataTable';
 import { ChartDataDisclosure } from './inputs/ChartDataDisclosure';
@@ -101,6 +102,70 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
     }
   }, [scenario.id]);
 
+  // Worker plumbing. The simulation is 1,000–10,000 synchronous full
+  // projections — on the main thread that froze every input and animation for
+  // the duration. Each request carries an incrementing id; responses whose id
+  // isn't the latest are dropped, which also fixes the old stale-run race
+  // where a pending result could land after the scenario switched or the
+  // panel unmounted.
+  //
+  // No terminate-on-unmount effect on purpose: StrictMode double-mounts
+  // effects in dev, so a cleanup here would kill the auto-run's worker while
+  // the autoRan guard blocks a re-run (the panel wedges at "Running…").
+  // Workers are instead terminated by onmessage when done and by startRun
+  // when superseded — even after a real unmount, the pending worker's
+  // handler still fires and terminates it, so nothing leaks.
+  const workerRef = useRef<Worker | null>(null);
+  const runIdRef = useRef(0);
+
+  const startRun = useCallback((options: MonteCarloOptions) => {
+    setRun({ status: 'running', result: null, error: null });
+    const id = ++runIdRef.current;
+    // A still-busy worker is terminated rather than queued behind: the only
+    // way a second request arrives mid-run is the user (or scenario switch)
+    // superseding it.
+    workerRef.current?.terminate();
+    workerRef.current = null;
+
+    let worker: Worker;
+    try {
+      worker = new Worker(new URL('./monteCarlo.worker.ts', import.meta.url), {
+        type: 'module',
+      });
+    } catch {
+      // Environments without Worker support: run inline (previous behavior).
+      try {
+        const result = runMonteCarloProjection(scenario, options);
+        setRun({ status: 'done', result, error: null });
+      } catch (e) {
+        setRun({
+          status: 'error',
+          result: null,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+      return;
+    }
+    workerRef.current = worker;
+    worker.onmessage = (event: MessageEvent<MonteCarloResponse>) => {
+      if (event.data.id !== runIdRef.current) return; // superseded run
+      if (event.data.ok) {
+        setRun({ status: 'done', result: event.data.result, error: null });
+      } else {
+        setRun({ status: 'error', result: null, error: event.data.error });
+      }
+      worker.terminate();
+      if (workerRef.current === worker) workerRef.current = null;
+    };
+    worker.onerror = (event) => {
+      if (id !== runIdRef.current) return;
+      setRun({ status: 'error', result: null, error: event.message || 'Worker failed' });
+      worker.terminate();
+      if (workerRef.current === worker) workerRef.current = null;
+    };
+    worker.postMessage({ id, scenario, options } satisfies MonteCarloRequest);
+  }, [scenario]);
+
   // Auto-run once on first mount (and after a scenario switch resets the
   // guard) so the user doesn't land on an idle/blank panel. Uses a FIXED
   // seed so the initial result is stable and reproducible — two users with
@@ -112,45 +177,14 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
   useEffect(() => {
     if (autoRan.current) return;
     autoRan.current = true;
-    setRun({ status: 'running', result: null, error: null });
-    requestAnimationFrame(() => {
-      try {
-        const result = runMonteCarloProjection(scenario, {
-          numRuns,
-          returnStdDev,
-          seed: 42,
-        });
-        setRun({ status: 'done', result, error: null });
-      } catch (e) {
-        setRun({
-          status: 'error',
-          result: null,
-          error: e instanceof Error ? e.message : String(e),
-        });
-      }
-    });
+    startRun({ numRuns, returnStdDev, seed: 42 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scenario.id, numRuns, returnStdDev]);
 
   const handleRun = () => {
-    setRun({ status: 'running', result: null, error: null });
-    // Defer to next tick so the spinner has a chance to render before
-    // we occupy the main thread running the trials.
-    requestAnimationFrame(() => {
-      try {
-        const options: MonteCarloOptions = { numRuns, returnStdDev };
-        // No seed → random each run. We re-randomize on purpose so the user
-        // can hit Run multiple times and see natural variance.
-        const result = runMonteCarloProjection(scenario, options);
-        setRun({ status: 'done', result, error: null });
-      } catch (e) {
-        setRun({
-          status: 'error',
-          result: null,
-          error: e instanceof Error ? e.message : String(e),
-        });
-      }
-    });
+    // No seed → random each run. We re-randomize on purpose so the user
+    // can hit Run multiple times and see natural variance.
+    startRun({ numRuns, returnStdDev });
   };
 
   const tone = run.result ? successTone(run.result.successRate, colors.green, colors.yellow, colors.red) : null;
