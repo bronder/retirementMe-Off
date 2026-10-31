@@ -118,11 +118,18 @@ function loadStored<T>(key: string, fallback: T): T {
  * All data stays client-side; the user provides their own API key.
  */
 export function AiChat() {
-  const store = usePlanStore();
+  // Subscribe to only what the render reads. Subscribing to the whole store
+  // re-rendered the entire chat (re-parsing all history's markdown) on every
+  // plan keystroke. The plan itself is read at send time via getState(),
+  // because this component no longer re-renders when the plan changes.
   const messages = usePlanStore((s) => s.chatHistory);
   const appendChatMessage = usePlanStore((s) => s.appendChatMessage);
   const setChatHistory = usePlanStore((s) => s.setChatHistory);
   const clearChat = usePlanStore((s) => s.clearChat);
+  const aiProvider = usePlanStore((s) => s.aiProvider);
+  const aiApiKeys = usePlanStore((s) => s.aiApiKeys);
+  // Actions + settings read only in callbacks come from the live snapshot.
+  const store = usePlanStore.getState();
   const [isOpen, setIsOpen] = useState(false);
   const [pinned, setPinned] = useState(() => loadStored<boolean>(PIN_STORAGE_KEY, false));
   const [showSettings, setShowSettings] = useState(false);
@@ -144,7 +151,7 @@ export function AiChat() {
   // the streamed text appearing and then vanishing.
   const abortRef = useRef<AbortController | null>(null);
 
-  const hasApiKey = (store.aiApiKeys[store.aiProvider] ?? '').length > 0;
+  const hasApiKey = (aiApiKeys[aiProvider] ?? '').length > 0;
 
   // Auto-dismiss transient UI states when their precondition stops holding,
   // so the user never sees stale chips or a half-cleared confirm.
@@ -161,13 +168,13 @@ export function AiChat() {
   // Validate that the stored model exists for the current provider.
   // The custom provider has no model list, so skip validation for it.
   useEffect(() => {
-    if (store.aiProvider === CUSTOM_PROVIDER_ID) return;
-    const provider = getProvider(store.aiProvider);
+    if (aiProvider === CUSTOM_PROVIDER_ID) return;
+    const provider = getProvider(aiProvider);
     const isValid = provider.models.some((m) => m.id === store.aiModel);
     if (!isValid) {
-      store.setAiModel(getDefaultModel(store.aiProvider));
+      store.setAiModel(getDefaultModel(aiProvider));
     }
-  }, [store.aiProvider]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [aiProvider]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -206,13 +213,25 @@ export function AiChat() {
   const sendMessage = useCallback(
     async (text: string) => {
       if (!text.trim() || loading) return;
-      const activeKey = store.aiApiKeys[store.aiProvider] ?? '';
+      // All AI settings + the plan are read fresh at send time: this
+      // component no longer re-renders on plan or model changes, so a
+      // snapshot captured at render could be stale by the time the user
+      // hits send.
+      const {
+        plan: currentPlan,
+        activeScenarioId: currentScenarioId,
+        aiProvider: provider,
+        aiApiKeys: apiKeys,
+        aiModel: model,
+        aiCustomEndpoint: customEndpoint,
+      } = usePlanStore.getState();
+      const activeKey = apiKeys[provider] ?? '';
       if (!activeKey) {
         // Surface why nothing happened instead of silently flipping to the
         // settings panel, which reads like a bug (textarea won't clear, no
         // message appears). A visible error + opening settings gives the
         // user both the explanation and the path to fix it.
-        setError(`Add an API key for ${getProvider(store.aiProvider).label} to send messages.`);
+        setError(`Add an API key for ${getProvider(provider).label} to send messages.`);
         setShowSettings(true);
         return;
       }
@@ -245,8 +264,8 @@ export function AiChat() {
         appendChatMessage(placeholder);
 
         try {
-          const results = store.plan.scenarios.map((s) => runProjection(s));
-          const planContext = buildPlanContext(store.plan, results, store.activeScenarioId);
+          const results = currentPlan.scenarios.map((s) => runProjection(s));
+          const planContext = buildPlanContext(currentPlan, results, currentScenarioId);
 
           // Send prior turns with their ORIGINAL raw content (not the
           // stripped display version) so the model keeps full context.
@@ -267,11 +286,11 @@ export function AiChat() {
           let accumulated = '';
           let suggestion: ScenarioSuggestion | undefined;
           for await (const chunk of callAI(
-            store.aiProvider,
+            provider,
             activeKey,
-            store.aiModel,
+            model,
             apiMessages,
-            store.aiCustomEndpoint,
+            customEndpoint,
             controller.signal,
           )) {
             accumulated += chunk;
@@ -593,7 +612,7 @@ export function AiChat() {
                 <p className="ai-chat-welcome-title">
                   {hasApiKey
                     ? 'Ask me about your retirement plan!'
-                    : `Add a ${getProvider(store.aiProvider).label} API key to get started`}
+                    : `Add a ${getProvider(aiProvider).label} API key to get started`}
                 </p>
                 {!hasApiKey && (
                   <button className="ai-chat-quick-btn" onClick={() => setShowSettings(true)}>

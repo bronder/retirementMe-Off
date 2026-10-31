@@ -172,7 +172,9 @@ function draftFromScenario(scenario: Scenario): WhatIfDraft {
 
 export function WhatIfPanel({ scenario, defaultOpen = false }: { scenario: Scenario; defaultOpen?: boolean }) {
   const tc = useThemeColors();
-  const store = usePlanStore();
+  // Only the two actions this panel calls — subscribing to the whole store
+  // re-rendered the panel (and its two projections) on every app keystroke.
+  const store = usePlanStore.getState();
   const chartHeight = useResponsiveChartHeight({ min: 220, max: 320, vhFraction: 0.32 });
   const [open, setOpen] = useState(defaultOpen);
 

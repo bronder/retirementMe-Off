@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, Fragment, Component } from 'react';
+import { useState, useMemo, useRef, useEffect, Component, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import {
   LayoutDashboard,
@@ -10,7 +10,6 @@ import {
   CalendarDays,
   ClipboardList,
   TrendingUp,
-  Dices,
   Table2,
   Menu,
   Upload,
@@ -19,7 +18,6 @@ import {
   Wand2,
   Sparkles,
   BookOpen,
-  Scale,
   Users,
   Percent,
   Zap,
@@ -96,64 +94,45 @@ import {
   Palmtree,
   TreePine,
   ArrowLeftRight,
-  Calculator,
   GraduationCap,
-  BadgeDollarSign,
   HelpCircle,
   KeyRound,
   Plus,
   type LucideIcon,
 } from 'lucide-react';
-import {
-  LineChart,
-  Line,
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  ReferenceLine,
-} from 'recharts';
 import { usePlanStore, ASSUMPTION_BOUNDS, flushDebouncedStorage } from './store';
-import { runProjection, getReadinessSummary, computeAnnualMortgage, mortgagePaymentAtAge } from './engine';
+import { getReadinessSummary, computeAnnualMortgage } from './engine';
+import { projectScenario } from './projectionCache';
+import { Glyph, RESOURCE_GROUPS, ContextualResources } from './ui/shared';
 import { ACCOUNT_TAX_TREATMENT } from './types';
 import type { AccountType, IncomeType, ExpenseCategory, EventType, PropertyType, Property, LifeEvent } from './types';
-import { formatCurrency, formatPercent, formatAge, prettify } from './format';
+import { formatCurrency, formatPercent, prettify } from './format';
 import { exportMarkdown } from './markdown';
 import { AiChat } from './AiChat';
-import { MonteCarloPanel } from './MonteCarloPanel';
 import { defaultScenario } from './defaults';
-import { useThemeColors } from './hooks/useThemeColors';
-import { useResponsiveChartHeight } from './hooks/useResponsiveChartHeight';
 import { AgeInput } from './inputs/AgeInput';
 import { PctInputEnhanced } from './inputs/PctInputEnhanced';
 import { FieldGroup } from './inputs/FieldGroup';
 import { ContextWarning } from './inputs/ContextWarning';
 import { useEditableNumber } from './hooks/useEditableNumber';
 import { usePopoverPosition } from './hooks/usePopoverPosition';
-import { DataTable } from './inputs/DataTable';
-import { ChartDataDisclosure } from './inputs/ChartDataDisclosure';
 import { ScenarioWizard } from './inputs/ScenarioWizard';
-import { WhatIfPanel } from './inputs/WhatIfPanel';
-import { PlanOverview } from './inputs/PlanOverview';
+
+// Chart-bearing views load on demand. They pull recharts (the single largest
+// dependency) into an async chunk, so the initial download only carries the
+// data-entry UI.
+const OverviewPanel = lazy(() => import('./panels/OverviewPanel').then((m) => ({ default: m.OverviewPanel })));
+const ResultsView = lazy(() => import('./results/ResultsView').then((m) => ({ default: m.ResultsView })));
+const CompareView = lazy(() => import('./results/CompareView').then((m) => ({ default: m.CompareView })));
+
+/** Loading shell for the lazily-loaded tab views. */
+function TabFallback() {
+  return <div className="panel muted" style={{ padding: 24 }}>Loading…</div>;
+}
 
 type Tab = 'inputs' | 'results' | 'compare';
 type InputSection = 'overview' | 'assumptions' | 'accounts' | 'properties' | 'expenses' | 'income' | 'events';
 type Theme = 'dark' | 'light' | 'sepia' | 'nord' | 'warm-gray' | 'dracula';
-
-/** Renders a Lucide icon component by reference. Used wherever an icon is stored
- *  in a data structure (CATEGORY_ICONS, COMMON_EXPENSES, etc.) so the render
- *  site stays a one-liner: `<Icon i={row.icon} />` instead of a lookup +
- *  conditional render. Inherits color from its parent via lucide's currentColor. */
-function Glyph({ i, size = 16 }: { i: LucideIcon; size?: number }) {
-  const I = i;
-  return <I size={size} aria-hidden="true" />;
-}
 
 const ACCOUNT_TYPES: AccountType[] = [
   'checking_savings',
@@ -365,59 +344,6 @@ const EVENT_TYPES: EventType[] = [
   'large_purchase',
   'windfall',
   'other',
-];
-
-/** Curated external resources (calculators, SSA, IRS, Medicare, investing).
- *  Shown in a collapsible footer so they're accessible without cluttering the
- *  data-entry sidebar on every Inputs screen. */
-const RESOURCE_GROUPS: { label: string; links: { icon: LucideIcon; name: string; url: string }[] }[] = [
-  {
-    label: 'Calculators',
-    links: [
-      { icon: Landmark, name: 'SSA Retirement Estimator', url: 'https://www.ssa.gov/benefits/retirement/estimator.html' },
-      { icon: CalendarClock, name: 'SSA Benefit Calculator', url: 'https://www.ssa.gov/OACT/quickcalc/' },
-      { icon: CircleDollarSign, name: 'Fidelity Retirement Score', url: 'https://www.fidelity.com/calculators-tools/retirement-score' },
-      { icon: Table2, name: 'Vanguard Retirement Nest Egg', url: 'https://retirementplans.vanguard.com/VGApp/pe/pubeducation/calculators/RetirementNestEggCalc.jsf' },
-      { icon: Calculator, name: 'AARP Retirement Calculator', url: 'https://www.aarp.org/work/retirement-calculator/' },
-      { icon: TrendingUp, name: 'Bankrate 401k Calculator', url: 'https://www.bankrate.com/retirement/401-k-calculator/' },
-    ],
-  },
-  {
-    label: 'Social Security',
-    links: [
-      { icon: CreditCard, name: 'my Social Security Account', url: 'https://www.ssa.gov/myaccount/' },
-      { icon: ClipboardList, name: 'SSA Benefit Formulas', url: 'https://www.ssa.gov/oact/cola/Benefits.html' },
-      { icon: Clock, name: 'SS Claiming Age Guide', url: 'https://www.ssa.gov/benefits/retirement/planner/agereduction.html' },
-      { icon: Users, name: 'Spousal Benefits', url: 'https://www.ssa.gov/oact/quickcalc/spouse.html' },
-    ],
-  },
-  {
-    label: 'Taxes',
-    links: [
-      { icon: Receipt, name: 'IRS Tax Bracket Calculator', url: 'https://www.irs.gov/help/ita/whats-my-tax-bracket' },
-      { icon: FileText, name: 'IRS Pub 590-B (IRA Withdrawals)', url: 'https://www.irs.gov/publications/p590b' },
-      { icon: Building2, name: 'IRS Pub 560 (401k Limits)', url: 'https://www.irs.gov/publications/p560' },
-      { icon: BadgeDollarSign, name: 'RMD Calculator (IRS)', url: 'https://www.irs.gov/retirement-plans/required-minimum-distribution-calculators' },
-    ],
-  },
-  {
-    label: 'Medicare & Healthcare',
-    links: [
-      { icon: HeartPulse, name: 'Medicare.gov Official Site', url: 'https://www.medicare.gov/' },
-      { icon: HeartPulse, name: 'Medicare Eligibility Tool', url: 'https://www.medicare.gov/eligibilitypremiumcalc/' },
-      { icon: Pill, name: 'Plan Finder (Drug Coverage)', url: 'https://www.medicare.gov/plan-compare/' },
-      { icon: BookOpen, name: 'Medicare & You Handbook', url: 'https://www.medicare.gov/medicare-and-you' },
-    ],
-  },
-  {
-    label: 'Investing & Education',
-    links: [
-      { icon: GraduationCap, name: 'Investor.gov (SEC)', url: 'https://www.investor.gov/' },
-      { icon: BookOpen, name: 'Compound Interest Calc', url: 'https://www.investor.gov/financial-tools-calculators/calculators/compound-interest-calculator' },
-      { icon: Scale, name: 'FINRA Broker Check', url: 'https://brokercheck.finra.org/' },
-      { icon: Lock, name: 'SIPC Protection Info', url: 'https://www.sipc.org/for-investors/what-sipc-protects' },
-    ],
-  },
 ];
 
 /** Theme picker config. Short labels for the popover, swatch for visual. */
@@ -641,36 +567,6 @@ function ResourcesFooter() {
 }
 
 /**
- * Contextual resource section — shown at the bottom of an Inputs panel with
- * ONLY the links relevant to that panel's data (e.g. SSA links on Income,
- * tax links on Assumptions). Collapsed by default so it adds one line of
- * height until the user expands it. Reuses the shared .resource-link styling.
- */
-function ContextualResources({ group }: { group: { label: string; links: { icon: LucideIcon; name: string; url: string }[] } }) {
-  return (
-    <details className="contextual-resources">
-      <summary><BookOpen size={15} aria-hidden="true" /> {group.label} resources</summary>
-      <div className="contextual-resources-grid">
-        {group.links.map((link) => (
-          <a
-            key={link.url}
-            href={link.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="resource-link"
-            title={link.name}
-          >
-            <span className="resource-icon" aria-hidden="true"><Glyph i={link.icon} /></span>
-            <span className="resource-name">{link.name}</span>
-            <span className="resource-ext" aria-hidden="true">↗</span>
-          </a>
-        ))}
-      </div>
-    </details>
-  );
-}
-
-/**
  * Header resources popover — shows ALL resource groups in a dropdown so the
  * full list is reachable from anywhere in the app. Mirrors the ThemePicker
  * pattern (self-contained open state, outside-click + Escape to close).
@@ -791,7 +687,15 @@ function UndoToast() {
 }
 
 export default function App() {
-  const store = usePlanStore();
+  // Subscribe to only the two state slices App renders from. Subscribing to
+  // the whole store re-rendered the entire tree on every state change —
+  // including every streamed AI chat chunk and undoState flip. Actions (and
+  // the rare fields App never renders) come from the live snapshot below.
+  const plan = usePlanStore((s) => s.plan);
+  const activeScenarioId = usePlanStore((s) => s.activeScenarioId);
+  // Actions are stable since store creation; spread the snapshot once so the
+  // many `store.someAction(...)` call sites below keep working unchanged.
+  const store = { ...usePlanStore.getState(), plan, activeScenarioId };
   const [tab, setTab] = useState<Tab>(() => (localStorage.getItem('retirement-tab') as Tab) || 'inputs');
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('retirement-theme') as Theme) || 'light');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -841,20 +745,23 @@ export default function App() {
 
   // Ensure we have a valid active scenario after mount/hydration.
   const activeScenario = useMemo(() => {
-    const s = store.plan.scenarios.find((s) => s.id === store.activeScenarioId);
-    return s ?? store.plan.scenarios[0];
-  }, [store.plan, store.activeScenarioId]);
+    const s = plan.scenarios.find((s) => s.id === activeScenarioId);
+    return s ?? plan.scenarios[0];
+  }, [plan, activeScenarioId]);
 
-  // Run projection for active scenario.
+  // Run projection for active scenario (cached per scenario identity — see
+  // projectScenario). The same cache backs allResults, the Overview panel,
+  // and exports, so each scenario projects at most once per edit.
   const activeResult = useMemo(
-    () => (activeScenario ? runProjection(activeScenario) : null),
+    () => (activeScenario ? projectScenario(activeScenario) : null),
     [activeScenario],
   );
 
-  // Run projections for ALL scenarios (for comparison view).
+  // Projections for ALL scenarios (for comparison view + exports) — cache
+  // hits for every scenario the current edit didn't touch.
   const allResults = useMemo(
-    () => store.plan.scenarios.map((s) => runProjection(s)),
-    [store.plan.scenarios],
+    () => plan.scenarios.map(projectScenario),
+    [plan.scenarios],
   );
 
   const readiness = activeResult && activeScenario
@@ -1026,15 +933,19 @@ export default function App() {
       )}
 
       {tab === 'results' && (
-        <ResultsView
-          scenario={activeScenario}
-          result={activeResult}
-          readiness={readiness}
-        />
+        <Suspense fallback={<TabFallback />}>
+          <ResultsView
+            scenario={activeScenario}
+            result={activeResult}
+            readiness={readiness}
+          />
+        </Suspense>
       )}
 
       {tab === 'compare' && (
-        <CompareView results={allResults} scenarios={store.plan.scenarios} />
+        <Suspense fallback={<TabFallback />}>
+          <CompareView results={allResults} scenarios={store.plan.scenarios} />
+        </Suspense>
       )}
 
       <ResourcesFooter />
@@ -1479,7 +1390,11 @@ function InputsView({ scenario, store }: {
         </ul>
       </aside>
       <div className="inputs-content">
-        {section === 'overview' && <OverviewPanel scenario={scenario} store={store} />}
+        {section === 'overview' && (
+          <Suspense fallback={<TabFallback />}>
+            <OverviewPanel scenario={scenario} />
+          </Suspense>
+        )}
         {section === 'assumptions' && <AssumptionsPanel scenario={scenario} store={store} />}
         {section === 'accounts' && <AccountsPanel scenario={scenario} store={store} />}
         {section === 'properties' && <PropertiesPanel scenario={scenario} store={store} />}
@@ -1487,214 +1402,6 @@ function InputsView({ scenario, store }: {
         {section === 'income' && <IncomePanel scenario={scenario} store={store} />}
         {section === 'events' && <EventsPanel scenario={scenario} store={store} />}
       </div>
-    </div>
-  );
-}
-
-/* ============ OVERVIEW PANEL ============ */
-
-function OverviewPanel({ scenario, store }: {
-  scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
-  store: ReturnType<typeof usePlanStore.getState>;
-}) {
-  void store;
-  const tc = useThemeColors();
-  const miniChartHeight = useResponsiveChartHeight({ min: 220, max: 360, vhFraction: 0.32 });
-  const result = useMemo(() => runProjection(scenario), [scenario]);
-  const readiness = useMemo(
-    () => getReadinessSummary(result, scenario.assumptions.retirementAge, scenario.assumptions.safeWithdrawalRate),
-    [result, scenario.assumptions.retirementAge, scenario.assumptions.safeWithdrawalRate],
-  );
-
-  const currentNetWorth = scenario.accounts.reduce((s, a) => s + a.balance, 0);
-  const totalContributions = scenario.accounts.reduce((s, a) => s + a.annualContribution + a.employerMatch, 0);
-
-  // Net worth includes both financial-account balances AND home equity
-  // (property market value minus outstanding mortgage). The mortgage
-  // balance is treated as static here — see propertyValueAtAge in engine.ts
-  // for the matching treatment in the year-by-year chart.
-  const propertyEquityNow = (scenario.properties ?? []).reduce(
-    (s, p) => s + Math.max(0, (p.currentValue ?? 0) - (p.mortgageBalance ?? 0)),
-    0,
-  );
-  const totalNetWorth = currentNetWorth + propertyEquityNow;
-
-  const checks = [
-    { label: 'Has at least 1 account', pass: scenario.accounts.length > 0, weight: 8 },
-    { label: 'Account balances > $0', pass: scenario.accounts.some(a => a.balance > 0), weight: 7 },
-    { label: 'Has retirement contributions', pass: scenario.accounts.some(a => a.annualContribution > 0), weight: 8 },
-    { label: `Well-balanced accounts (${Math.min(scenario.accounts.length, 5)}/5)`, pass: scenario.accounts.length >= 5, weight: 12, partial: Math.min(12, Math.round((Math.min(scenario.accounts.length, 5) / 5) * 12)) },
-    { label: 'Has expenses defined', pass: scenario.expenses.length > 0, weight: 8 },
-    { label: 'Has post-retirement expenses', pass: scenario.expenses.some(e => e.postRetirement), weight: 5 },
-    { label: `Covers ${Math.min(10, scenario.expenses.length)}/10+ common categories`, pass: scenario.expenses.length >= 10, weight: 12, partial: Math.min(12, Math.round((Math.min(scenario.expenses.length, 10) / 10) * 12)) },
-    { label: 'Has income sources', pass: scenario.incomeSources.length > 0, weight: 10 },
-    { label: 'Has Social Security or pension', pass: scenario.incomeSources.some(i => i.type === 'social_security' || i.type === 'pension'), weight: 10 },
-    { label: 'Current age < retirement age', pass: scenario.assumptions.currentAge < scenario.assumptions.retirementAge, weight: 5 },
-    { label: 'Retirement age < end age', pass: scenario.assumptions.retirementAge < scenario.assumptions.endAge, weight: 5 },
-    { label: 'Realistic withdrawal rate (3-5%)', pass: scenario.assumptions.safeWithdrawalRate >= 0.03 && scenario.assumptions.safeWithdrawalRate <= 0.05, weight: 5 },
-    { label: 'Realistic pre-retirement return (5-10%)', pass: scenario.assumptions.preRetirementReturn >= 0.05 && scenario.assumptions.preRetirementReturn <= 0.10, weight: 5 },
-  ];
-  const wellnessScore = checks.reduce((sum, c) => {
-    const earned = 'partial' in c && (c as { partial?: number }).partial !== undefined
-      ? Math.max((c as { partial?: number }).partial!, c.pass ? c.weight : 0)
-      : (c.pass ? c.weight : 0);
-    return sum + earned;
-  }, 0);
-  const wellnessColor = wellnessScore >= 80 ? 'var(--green)' : wellnessScore >= 50 ? 'var(--yellow)' : 'var(--red)';
-  const wellnessLabel = wellnessScore >= 80 ? 'Detailed' : wellnessScore >= 50 ? 'Basic' : 'Sparse';
-  const gaugeDeg = Math.min(180, (wellnessScore / 100) * 180);
-
-  // Mini-chart series: stacked liquid + property equity so users see both
-  // the financial-account trajectory and how much of their wealth is tied
-  // up in real estate. `total` is the convenience top-line sum.
-  const miniChartData = result.years.map((y) => ({
-    age: y.age,
-    liquid: Math.round(y.realAssets),
-    propertyEquity: Math.round(y.realPropertyEquity),
-    total: Math.round(y.realAssets + y.realPropertyEquity),
-  }));
-
-  // Build the sub-line under "Current Net Worth" — distinguishes liquid
-  // accounts vs. home equity so users understand what the total includes.
-  const accountCount = scenario.accounts.length;
-  const netWorthSub = propertyEquityNow > 0
-    ? `${formatCurrency(currentNetWorth, { compact: true })} liquid · ${formatCurrency(propertyEquityNow, { compact: true })} equity`
-    : `${accountCount} ${accountCount === 1 ? 'account' : 'accounts'}`;
-
-  return (
-    <div>
-      <div className="summary-grid">
-        <div className="summary-card">
-          <div className="label">Current Net Worth</div>
-          <div className="value">{formatCurrency(totalNetWorth, { compact: true })}</div>
-          <div className="sub">{netWorthSub}</div>
-        </div>
-        <div className="summary-card">
-          <div className="label">Projected at Retirement</div>
-          <div className="value">
-            {formatCurrency(
-              readiness.nestEggAtRetirement +
-                (result.years.find((y) => y.age === scenario.assumptions.retirementAge)?.propertyEquity ?? 0),
-              { compact: true },
-            )}
-          </div>
-          <div className="sub">
-            {formatCurrency(
-              readiness.nestEggAtRetirementReal +
-                (result.years.find((y) => y.age === scenario.assumptions.retirementAge)?.realPropertyEquity ?? 0),
-              { compact: true },
-            )} in today's $
-          </div>
-        </div>
-        <div className="summary-card">
-          <div className="label">Annual Savings Rate</div>
-          <div className="value">{formatCurrency(totalContributions, { compact: true })}</div>
-          <div className="sub">{totalContributions > 0 && totalNetWorth > 0 ? `${formatPercent(totalContributions / totalNetWorth)} of net worth` : '—'}</div>
-        </div>
-        <div className="summary-card">
-          <div className="label">Plan Outcome</div>
-          <div className={`value ${result.success ? 'value-good' : 'value-bad'}`}>{result.success ? '✓ On Track' : '✗ At Risk'}</div>
-          <div className="sub">{result.success ? `Lasts to age ${scenario.assumptions.endAge}` : `Depleted at age ${formatAge(result.depletionAge)}`}</div>
-        </div>
-      </div>
-
-      <div className="overview-wellness-grid">
-        <div className="panel overview-gauge-card">
-          <h3 className="overview-section-title"><ClipboardList size={16} aria-hidden="true" /> Plan Detail</h3>
-          <div className="overview-gauge-container">
-            <div className="overview-gauge" style={{ background: `conic-gradient(from 270deg, ${wellnessColor} 0deg ${gaugeDeg}deg, var(--bg-subtle) ${gaugeDeg}deg 180deg, transparent 180deg)` }}>
-              <div className="overview-gauge-inner">
-                <span className="overview-gauge-score" style={{ color: wellnessColor }}>{wellnessScore}%</span>
-                <span className="overview-gauge-label">{wellnessLabel}</span>
-              </div>
-            </div>
-          </div>
-          <div className="overview-gauge-hint">How much of your plan you've filled in — not a measure of whether it will succeed</div>
-        </div>
-        <div className="panel overview-checks-card">
-          <h3 className="overview-section-title">✅ Checklist</h3>
-          <div className="overview-checks-list">
-            {checks.map((c, i) => (
-              <div key={i} className="overview-check-item">
-                <span className={`overview-check-icon ${c.pass ? 'pass' : 'fail'}`}>{c.pass ? '✓' : '○'}</span>
-                <span className={`overview-check-label ${c.pass ? '' : 'incomplete'}`}>{c.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="chart-container">
-        <h3><TrendingUp size={16} aria-hidden="true" /> Projected Net Worth (Today's Dollars)</h3>
-        <ResponsiveContainer width="100%" height={miniChartHeight} aria-label={`Projected net worth in today's dollars, ${miniChartData.length} yearly data points from age ${miniChartData[0]?.age ?? ''} to ${miniChartData[miniChartData.length - 1]?.age ?? ''}`}>
-          <AreaChart data={miniChartData}>
-            <defs>
-              <linearGradient id="overviewGradientLiquid" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={tc.chart} stopOpacity={0.35} />
-                <stop offset="100%" stopColor={tc.chart} stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="overviewGradientProperty" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={tc.chart3} stopOpacity={0.35} />
-                <stop offset="100%" stopColor={tc.chart3} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
-            <XAxis dataKey="age" stroke={tc.textDim} />
-            <YAxis stroke={tc.textDim} tickFormatter={(v) => formatCurrency(v, { compact: true })} />
-            <Tooltip contentStyle={{ background: tc.panel, border: `1px solid ${tc.border}`, borderRadius: 8 }} formatter={(v: number) => formatCurrency(v)} labelFormatter={(l) => `Age ${l}`} labelStyle={{ color: tc.text }} itemStyle={{ color: tc.text }} />
-            <Legend />
-            {/* Stacked: liquid assets on the bottom, property equity on top. */}
-            <Area type="monotone" dataKey="liquid" stackId="networth" name="Liquid Assets" stroke={tc.chart} strokeWidth={2} fill="url(#overviewGradientLiquid)" />
-            <Area type="monotone" dataKey="propertyEquity" stackId="networth" name="Home Equity" stroke={tc.chart3} strokeWidth={2} fill="url(#overviewGradientProperty)" />
-            {/* Top-line overlay showing total net worth so the user can read it directly. */}
-            <Area type="monotone" dataKey="total" name="Total Net Worth" stroke={tc.text} strokeWidth={1.5} fill="none" strokeDasharray="0" />
-            <ReferenceLine x={scenario.assumptions.retirementAge} stroke={tc.yellow} strokeDasharray="5 5" label={{ value: 'Retire', fill: tc.yellow, fontSize: 11 }} />
-            {scenario.events.filter((ev) => ev.proceeds > 0 || ev.cost > 0).map((ev) => (
-              <ReferenceLine
-                key={ev.id}
-                x={ev.age}
-                stroke={ev.proceeds >= ev.cost ? tc.green : tc.red}
-                strokeDasharray="3 3"
-                label={{ value: ev.name || (ev.proceeds >= ev.cost ? '▲' : '▼'), fill: ev.proceeds >= ev.cost ? tc.green : tc.red, fontSize: 10, position: 'top' }}
-              />
-            ))}
-            {scenario.properties?.filter((p) => p.saleAge || p.purchaseAge).flatMap((p) => {
-              const lines = [];
-              if (p.saleAge) lines.push(<ReferenceLine key={`${p.id}-sale`} x={p.saleAge} stroke={tc.green} strokeDasharray="3 3" label={{ value: '🏡 Sale', fill: tc.green, fontSize: 10, position: 'top' }} />);
-              if (p.purchaseAge) lines.push(<ReferenceLine key={`${p.id}-buy`} x={p.purchaseAge} stroke={tc.red} strokeDasharray="3 3" label={{ value: '🏠 Buy', fill: tc.red, fontSize: 10, position: 'top' }} />);
-              return lines;
-            })}
-          </AreaChart>
-        </ResponsiveContainer>
-        <ChartDataDisclosure summaryLabel="View as data table" rowCount={miniChartData.length}>
-          <DataTable
-            rows={miniChartData}
-            caption="Projected net worth in today's dollars, by age"
-            columns={[
-              { key: 'age', label: 'Age' },
-              { key: 'liquid', label: 'Liquid Assets', format: (v) => formatCurrency(v as number) },
-              { key: 'propertyEquity', label: 'Home Equity', format: (v) => formatCurrency(v as number) },
-              { key: 'total', label: 'Total Net Worth', format: (v) => formatCurrency(v as number) },
-            ]}
-          />
-        </ChartDataDisclosure>
-      </div>
-
-      {/* Upcoming Life Events widget — shows the next few events so users can
-          see at a glance what's coming. Each event affects the projection
-          at its `age`; future events show up here but not in today's
-          "Current Net Worth" card (which is always at currentAge). */}
-      <UpcomingEventsWidget scenario={scenario} currentAge={scenario.assumptions.currentAge} />
-
-      <div className="summary-strip">
-        <div className="summary-strip-item"><span className="label">Years to Retirement</span><span className="value">{Math.max(0, scenario.assumptions.retirementAge - scenario.assumptions.currentAge)}</span></div>
-        <div className="summary-strip-item"><span className="label">Years in Retirement</span><span className="value">{scenario.assumptions.endAge - scenario.assumptions.retirementAge}</span></div>
-        <div className="summary-strip-item"><span className="label">Monthly Expenses (Ret.)</span><span className="value">{formatCurrency(readiness.firstYearExpenses / 12, { compact: true })}</span></div>
-        <div className="summary-strip-item"><span className="label">Monthly Income (Ret.)</span><span className="value">{formatCurrency(readiness.firstYearIncome / 12, { compact: true })}</span></div>
-        <div className="summary-strip-item"><span className="label">Life Events</span><span className="value">{scenario.events.length}</span></div>
-      </div>
-
-      <ContextualResources group={RESOURCE_GROUPS[0]} />
     </div>
   );
 }
@@ -3444,904 +3151,6 @@ function EventsPanel({ scenario, store }: {
       )}
 
       <ContextualResources group={RESOURCE_GROUPS[2]} />
-    </div>
-  );
-}
-
-/* ============ UPCOMING EVENTS WIDGET ============
-   Shown on the Summary page so users can see at a glance which life
-   events are configured and when they'll fire. The current net-worth
-   card always reflects *today's* state, so future events don't appear
-   there — this widget makes them visible without forcing the user to
-   dig into the Life Events panel. */
-
-const EVENT_ICON: Record<EventType, LucideIcon> = {
-  home_purchase: Home,
-  home_sale: House,
-  large_purchase: Car,
-  windfall: CircleDollarSign,
-  other: ClipboardList,
-};
-
-function UpcomingEventsWidget({
-  scenario,
-  currentAge,
-}: {
-  scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
-  currentAge: number;
-}) {
-  // Pull the next 5 events sorted by age. "Upcoming" = age >= currentAge.
-  // We also include events that already happened (age < currentAge) so users
-  // can see "yep, this event has already been applied" — but tag them as past.
-  const upcoming = scenario.events
-    .slice()
-    .sort((a, b) => a.age - b.age)
-    .slice(0, 5);
-
-  if (upcoming.length === 0) {
-    return (
-      <div className="upcoming-events-widget">
-        <div className="upcoming-events-header"><CalendarClock size={15} aria-hidden="true" /> Upcoming Life Events</div>
-        <div className="upcoming-events-empty">
-          No life events yet. Add a windfall, home purchase, or other one-time event to see how it
-          affects your plan. <span className="muted">(Events impact net worth and other projections.)</span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="upcoming-events-widget">
-      <div className="upcoming-events-header">
-        <CalendarClock size={15} aria-hidden="true" /> Upcoming Life Events
-        <span className="upcoming-events-hint">
-          These will affect your projection at the indicated age.
-        </span>
-      </div>
-      <div className="upcoming-events-list">
-        {upcoming.map((ev) => {
-          const isPast = ev.age < currentAge;
-          const netAmount = ev.proceeds - ev.cost;
-          const ongoing = ev.ongoingAnnualImpact;
-          return (
-            <div
-              key={ev.id}
-              className={`upcoming-event-row ${isPast ? 'past' : ''}`}
-              title={isPast ? 'This event has already been applied to your current net worth' : 'Future event — not yet reflected in current net worth'}
-            >
-              <span className="upcoming-event-icon"><Glyph i={EVENT_ICON[ev.type] ?? ClipboardList} /></span>
-              <span className="upcoming-event-name">{ev.name || prettify(ev.type)}</span>
-              <span className="upcoming-event-age">
-                {isPast ? `Past (age ${ev.age})` : `Age ${ev.age}`}
-              </span>
-              {netAmount !== 0 && (
-                <span
-                  className="upcoming-event-amount"
-                  style={{ color: netAmount > 0 ? 'var(--green)' : 'var(--red)' }}
-                >
-                  {netAmount > 0 ? '+' : ''}
-                  {formatCurrency(netAmount, { compact: true })}
-                </span>
-              )}
-              {ongoing !== 0 && (
-                <span className="upcoming-event-ongoing" title="Ongoing annual impact (inflation-adjusted)">
-                  {ongoing > 0 ? '+' : ''}
-                  {formatCurrency(ongoing, { compact: true })}/yr
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ============ RESULTS VIEW ============ */
-
-/**
- * Results tab sub-sections. Deterministic is the default landing because
- * it renders fully on first view — charts, cash flow, and the year table
- * all populate immediately. Monte Carlo is gated behind a manual "Run"
- * (it starts idle), so defaulting to it showed a blank body beneath the
- * summary cards. Users still land on the straight-line projection and can
- * click into Monte Carlo for the probability view.
- */
-type ResultSection = 'monte-carlo' | 'deterministic' | 'what-if' | 'overview';
-const DEFAULT_RESULT_SECTION: ResultSection = 'overview';
-
-function ResultsView({ scenario, result, readiness }: {
-  scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
-  result: NonNullable<ReturnType<typeof runProjection>>;
-  readiness: NonNullable<ReturnType<typeof getReadinessSummary>>;
-}) {
-  const tc = useThemeColors();
-  const nwChartHeight = useResponsiveChartHeight({ min: 260, max: 420, vhFraction: 0.38 });
-  const cashFlowChartHeight = useResponsiveChartHeight({ min: 240, max: 380, vhFraction: 0.36 });
-
-  const [section, setSection] = useState<ResultSection>(
-    () => (localStorage.getItem('retirement-result-section') as ResultSection) || DEFAULT_RESULT_SECTION,
-  );
-  useEffect(() => {
-    localStorage.setItem('retirement-result-section', section);
-  }, [section]);
-
-  // Net-worth chart view mode: show nominal OR real (today's $), not both.
-  // Showing both at once produces 4 overlapping areas + reference lines — too
-  // dense. Defaults to real (today's $) since that's the more meaningful number.
-  const [nwView, setNwView] = useState<'real' | 'nominal'>(
-    () => (localStorage.getItem('retirement-nw-view') as 'real' | 'nominal') || 'real',
-  );
-  useEffect(() => { localStorage.setItem('retirement-nw-view', nwView); }, [nwView]);
-
-  // Headline-card → year-table drill-down. When the user clicks a headline
-  // card, we set focusAge + flip to the deterministic section; the YearTable
-  // (which only mounts under that section) consumes focusAge, scrolls the
-  // matching row into view, and flashes a highlight. Cleared after the
-  // highlight expires so re-clicking the same age re-triggers.
-  const [focusAge, setFocusAge] = useState<number | null>(null);
-  const focusOn = (age: number) => {
-    setSection('deterministic');
-    setFocusAge(age);
-  };
-
-  const tooltipStyle = { background: tc.panel, border: `1px solid ${tc.border}`, borderRadius: 8 };
-
-  // Net worth chart: liquid (financial accounts) + home equity, stacked.
-  // `nominal` and `real` are summed totals so the user can read total net
-  // worth directly from the legend. The property-component series
-  // (`homeNominal`, `homeReal`) is computed per-year from the engine.
-  // NOTE: keys use the literal U+2019 (') rather than a \u2019 escape so they
-  // match the dataKey attributes in JSX (which do not process backslash escapes).
-  const chartData = result.years.map((y) => ({
-    age: y.age,
-    'Liquid (Nominal)': Math.round(y.endingAssets),
-    'Home Equity (Nominal)': Math.round(y.propertyEquity),
-    'Total (Nominal)': Math.round(y.endingAssets + y.propertyEquity),
-    'Liquid (Today’s $)': Math.round(y.realAssets),
-    'Home Equity (Today’s $)': Math.round(y.realPropertyEquity),
-    'Total (Today’s $)': Math.round(y.realAssets + y.realPropertyEquity),
-  }));
-
-  const cashFlowData = result.years.filter((y) => y.age >= scenario.assumptions.retirementAge).map((y) => ({
-    age: y.age,
-    Income: Math.round(y.income),
-    Withdrawals: Math.round(y.withdrawals),
-    Expenses: Math.round(y.expenses),
-  }));
-
-  const navItems: { id: ResultSection; label: string; icon: LucideIcon; help: string }[] = [
-    {
-      id: 'overview',
-      label: 'Plan Overview',
-      icon: LayoutDashboard,
-      help: 'A single-page report of your plan: net worth, allocation, accounts, and cash flow.',
-    },
-    {
-      id: 'monte-carlo',
-      label: 'Monte Carlo Stress Test',
-      icon: Dices,
-      help: 'Probability of success across thousands of random futures.',
-    },
-    {
-      id: 'deterministic',
-      label: 'Straight-Line Projection',
-      icon: Table2,
-      help: 'Single-trajectory view at your expected returns.',
-    },
-    {
-      id: 'what-if',
-      label: 'What If?',
-      icon: Wand2,
-      help: 'Drag sliders to compare an alternate retirement future.',
-    },
-  ];
-
-  return (
-    <div>
-      {/* === Headline summary cards — always visible across sections ===
-          The "Nest Egg" and "Final Assets" cards are clickable: they drill
-          down into the year-by-year table at the relevant age so the user
-          can see how the number was derived. The "Plan Outcome" card jumps
-          to the depletion age (if the plan runs out) or the end age. */}
-      <div className="summary-grid">
-        <button type="button" className="summary-card summary-card-drilldown" onClick={() => focusOn(scenario.assumptions.retirementAge)} title="See the year-by-year breakdown at retirement">
-          <div className="label">Nest Egg at Retirement</div>
-          <div className="value">{formatCurrency(readiness.nestEggAtRetirement, { compact: true })}</div>
-          <div className="sub">{formatCurrency(readiness.nestEggAtRetirementReal, { compact: true })} in today's dollars</div>
-          <span className="summary-card-drilldown-hint" aria-hidden="true">View breakdown →</span>
-        </button>
-        <button type="button" className="summary-card summary-card-drilldown" onClick={() => focusOn(result.depletionAge ?? scenario.assumptions.endAge)} title="See the year the plan depletes (or the final year)">
-          <div className="label">Plan Outcome</div>
-          <div className={`value ${result.success ? 'value-good' : 'value-bad'}`}>
-            {result.success ? '✓ Sustainable' : '✗ Runs Out'}
-          </div>
-          <div className="sub">{result.success ? `Lasts to age ${scenario.assumptions.endAge}` : `Depleted at age ${formatAge(result.depletionAge)}`}</div>
-          <span className="summary-card-drilldown-hint" aria-hidden="true">View breakdown →</span>
-        </button>
-        <button type="button" className="summary-card summary-card-drilldown" onClick={() => focusOn(scenario.assumptions.retirementAge)} title="See the retirement-year row showing the first year of withdrawals">
-          <div className="label">Year-1 Withdrawal Rate</div>
-          <div className={`value ${readiness.neededWithdrawalRate <= scenario.assumptions.safeWithdrawalRate ? 'value-good' : 'value-bad'}`}>
-            {formatPercent(readiness.neededWithdrawalRate)}
-          </div>
-          <div className="sub">Safe rate: {formatPercent(scenario.assumptions.safeWithdrawalRate)}</div>
-          <span className="summary-card-drilldown-hint" aria-hidden="true">View breakdown →</span>
-        </button>
-        <button type="button" className="summary-card summary-card-drilldown" onClick={() => focusOn(scenario.assumptions.endAge)} title="See the final-year breakdown">
-          <div className="label">Final Assets (age {scenario.assumptions.endAge})</div>
-          <div className="value">{formatCurrency(result.finalAssets, { compact: true })}</div>
-          <div className="sub">{formatCurrency(result.finalAssetsReal, { compact: true })} in today's dollars</div>
-          <span className="summary-card-drilldown-hint" aria-hidden="true">View breakdown →</span>
-        </button>
-      </div>
-
-      {/* === Sidebar layout: chart panels live behind a left rail === */}
-      <div className="results-layout">
-        <aside className="results-sidebar">
-          <ul className="results-nav">
-            {navItems.map((item) => (
-              <li key={item.id}>
-                <button
-                  className={`results-nav-item ${section === item.id ? 'active' : ''}`}
-                  onClick={() => setSection(item.id)}
-                  title={item.help}
-                >
-                  <span className="results-nav-icon"><Glyph i={item.icon} /></span>
-                  {item.label}
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div className="sidebar-divider" />
-          <div className="sidebar-resources-label">About</div>
-          <p className="muted" style={{ fontSize: 'var(--text-xs)', padding: '0 16px', lineHeight: 1.5 }}>
-            {section === 'overview'
-              ? 'A single-page report built from your plan — net worth, asset allocation, accounts, and cash flow. Use Print to save as PDF.'
-              : section === 'monte-carlo'
-                ? 'Monte Carlo runs the plan many times with randomized returns to surface the probability of success across random futures.'
-                : section === 'what-if'
-                  ? 'What If? builds a throwaway copy of your plan and re-projects it live as you drag sliders. Apply to keep the changes — or close to discard.'
-                  : 'Deterministic view projects the plan at your exact expected return — one possible future.'}
-          </p>
-        </aside>
-
-        <div className="results-content">
-          {section === 'overview' && (
-            <PlanOverview scenario={scenario} result={result} readiness={readiness} />
-          )}
-
-          {section === 'monte-carlo' && (
-            <div className="panel">
-              <div className="panel-header">
-                <h2><Dices size={20} aria-hidden="true" /> Monte Carlo Stress Test</h2>
-                <button
-                  className="btn btn-sm"
-                  onClick={() => setSection('deterministic')}
-                  title="Jump to the deterministic single-trajectory charts"
-                >
-                  Compare to deterministic →
-                </button>
-              </div>
-              <p className="section-help">
-                The straight-line projection shows a single future at your exact expected return. Real
-                markets vary year to year. This panel runs the plan many times with randomized returns
-                to estimate the <strong>probability of success</strong> across thousands of possible futures.
-              </p>
-              <MonteCarloPanel scenario={scenario} colors={tc} />
-            </div>
-          )}
-
-          {section === 'deterministic' && (
-            <>
-              {/* Net worth chart — stacked liquid + home equity.
-                  Toggle between Nominal and Today's $ to avoid 4 overlapping
-                  areas; both views are available but not shown at once. */}
-              <div className="chart-container">
-                <div className="chart-header-row">
-                  <h3>Projected Net Worth Over Time</h3>
-                  <div className="seg-toggle" role="group" aria-label="Net worth view">
-                    <button className={`seg-btn${nwView === 'real' ? ' active' : ''}`} onClick={() => setNwView('real')}>Today's $</button>
-                    <button className={`seg-btn${nwView === 'nominal' ? ' active' : ''}`} onClick={() => setNwView('nominal')}>Nominal</button>
-                  </div>
-                </div>
-                <ResponsiveContainer width="100%" height={nwChartHeight} aria-label={`Projected net worth over time, ${chartData.length} yearly data points from age ${chartData[0]?.age ?? ''} to ${chartData[chartData.length - 1]?.age ?? ''}`}>
-                  <AreaChart data={chartData}>
-                    <defs>
-                      <linearGradient id="detGradientLiquidNom" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={tc.chart} stopOpacity={0.25} />
-                        <stop offset="100%" stopColor={tc.chart} stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="detGradientLiquidReal" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={tc.chart2} stopOpacity={0.2} />
-                        <stop offset="100%" stopColor={tc.chart2} stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="detGradientHomeNom" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={tc.chart3} stopOpacity={0.25} />
-                        <stop offset="100%" stopColor={tc.chart3} stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="detGradientHomeReal" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={tc.chart4} stopOpacity={0.2} />
-                        <stop offset="100%" stopColor={tc.chart4} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
-                    <XAxis dataKey="age" stroke={tc.textDim} />
-                    <YAxis stroke={tc.textDim} tickFormatter={(v) => formatCurrency(v, { compact: true })} />
-                    <Tooltip
-                      contentStyle={tooltipStyle}
-                      formatter={(v: number) => formatCurrency(v)}
-                      labelFormatter={(l) => `Age ${l}`}
-                      labelStyle={{ color: tc.text }}
-                      itemStyle={{ color: tc.text }}
-                    />
-                    <Legend />
-                    {nwView === 'nominal' ? (
-                      <>
-                        <Area type="monotone" dataKey="Liquid (Nominal)" stackId="nom" stroke={tc.chart} fill="url(#detGradientLiquidNom)" strokeWidth={1.5} />
-                        <Area type="monotone" dataKey="Home Equity (Nominal)" stackId="nom" stroke={tc.chart3} fill="url(#detGradientHomeNom)" strokeWidth={1.5} />
-                      </>
-                    ) : (
-                      <>
-                        <Area type="monotone" dataKey="Liquid (Today’s $)" stackId="real" stroke={tc.chart2} fill="url(#detGradientLiquidReal)" strokeWidth={1.5} />
-                        <Area type="monotone" dataKey="Home Equity (Today’s $)" stackId="real" stroke={tc.chart4} fill="url(#detGradientHomeReal)" strokeWidth={1.5} />
-                      </>
-                    )}
-                    <ReferenceLine x={scenario.assumptions.retirementAge} stroke={tc.yellow} strokeDasharray="5 5" label={{ value: 'Retire', fill: tc.yellow, fontSize: 11 }} />
-                    {scenario.events.filter((ev) => ev.proceeds > 0 || ev.cost > 0).map((ev) => (
-                      <ReferenceLine
-                        key={ev.id}
-                        x={ev.age}
-                        stroke={ev.proceeds >= ev.cost ? tc.green : tc.red}
-                        strokeDasharray="3 3"
-                        label={{ value: ev.name || (ev.proceeds >= ev.cost ? '▲' : '▼'), fill: ev.proceeds >= ev.cost ? tc.green : tc.red, fontSize: 10, position: 'top' }}
-                      />
-                    ))}
-                    {scenario.properties?.filter((p) => p.saleAge || p.purchaseAge).flatMap((p) => {
-                      const lines = [];
-                      if (p.saleAge) lines.push(<ReferenceLine key={`${p.id}-sale`} x={p.saleAge} stroke={tc.green} strokeDasharray="3 3" label={{ value: '🏡 Sale', fill: tc.green, fontSize: 10, position: 'top' }} />);
-                      if (p.purchaseAge) lines.push(<ReferenceLine key={`${p.id}-buy`} x={p.purchaseAge} stroke={tc.red} strokeDasharray="3 3" label={{ value: '🏠 Buy', fill: tc.red, fontSize: 10, position: 'top' }} />);
-                      return lines;
-                    })}
-                  </AreaChart>
-                </ResponsiveContainer>
-                <ChartDataDisclosure summaryLabel="View as data table" rowCount={chartData.length}>
-                  <DataTable
-                    rows={chartData}
-                    caption="Projected net worth by year, in both nominal and today's dollars"
-                    columns={[
-                      { key: 'age', label: 'Age' },
-                      { key: 'Liquid (Nominal)', label: 'Liquid (Nominal)', format: (v) => formatCurrency(v as number) },
-                      { key: 'Home Equity (Nominal)', label: 'Home Equity (Nominal)', format: (v) => formatCurrency(v as number) },
-                      { key: 'Total (Nominal)', label: 'Total (Nominal)', format: (v) => formatCurrency(v as number) },
-                      { key: 'Liquid (Today’s $)', label: 'Liquid (Today’s $)', format: (v) => formatCurrency(v as number) },
-                      { key: 'Home Equity (Today’s $)', label: 'Home Equity (Today’s $)', format: (v) => formatCurrency(v as number) },
-                      { key: 'Total (Today’s $)', label: 'Total (Today’s $)', format: (v) => formatCurrency(v as number) },
-                    ]}
-                  />
-                </ChartDataDisclosure>
-              </div>
-
-              {/* Cash flow chart */}
-              <div className="chart-container">
-                <h3>Retirement Cash Flow (Income vs Expenses vs Withdrawals)</h3>
-                <ResponsiveContainer width="100%" height={cashFlowChartHeight} aria-label={`Retirement cash flow from age ${cashFlowData[0]?.age ?? ''} onwards, ${cashFlowData.length} yearly data points`}>
-                  <BarChart data={cashFlowData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
-                    <XAxis dataKey="age" stroke={tc.textDim} />
-                    <YAxis stroke={tc.textDim} tickFormatter={(v) => formatCurrency(v, { compact: true })} />
-                    <Tooltip
-                      contentStyle={tooltipStyle}
-                      formatter={(v: number) => formatCurrency(v)}
-                      labelFormatter={(l) => `Age ${l}`}
-                      labelStyle={{ color: tc.text }}
-                itemStyle={{ color: tc.text }}
-                    />
-                    <Legend />
-                    <Bar dataKey="Income" fill={tc.green} />
-                    <Bar dataKey="Withdrawals" fill={tc.chart} />
-                    <Bar dataKey="Expenses" fill={tc.red} />
-                  </BarChart>
-                </ResponsiveContainer>
-                <ChartDataDisclosure summaryLabel="View as data table" rowCount={cashFlowData.length}>
-                  <DataTable
-                    rows={cashFlowData}
-                    caption="Retirement cash flow: income vs expenses vs withdrawals, by age"
-                    columns={[
-                      { key: 'age', label: 'Age' },
-                      { key: 'Income', label: 'Income', format: (v) => formatCurrency(v as number) },
-                      { key: 'Withdrawals', label: 'Withdrawals', format: (v) => formatCurrency(v as number) },
-                      { key: 'Expenses', label: 'Expenses', format: (v) => formatCurrency(v as number) },
-                    ]}
-                  />
-                </ChartDataDisclosure>
-              </div>
-
-              {/* Year-by-year table */}
-              <YearTable result={result} retirementAge={scenario.assumptions.retirementAge} scenario={scenario} focusAge={focusAge} onFocusConsumed={() => setFocusAge(null)} />
-            </>
-          )}
-
-          {section === 'what-if' && (
-            <WhatIfPanel scenario={scenario} defaultOpen />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** Builds a helpful "why is this empty?" message for the income detail row.
- *  Finds the next income source that will activate after the current age, so
- *  the user understands the gap (e.g. "Social Security starts at 67"). */
-function nextIncomeHint(scenario: NonNullable<ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]>, age: number): string {
-  const upcoming = scenario.incomeSources
-    .filter((i) => i.startAge > age)
-    .sort((a, b) => a.startAge - b.startAge);
-  if (upcoming.length > 0) {
-    const next = upcoming[0];
-    return `No income active at ${age}. Next up: ${next.name} at age ${next.startAge}.`;
-  }
-  const isRetired = age >= scenario.assumptions.retirementAge;
-  return isRetired
-    ? `No income active at ${age}. Add Social Security, a pension, or other sources on the Income tab.`
-    : `No income active at ${age}. Add a salary or other income source on the Income tab.`;
-}
-
-/** Builds a helpful "why is this empty?" message for the expense detail row. */
-function nextExpenseHint(scenario: NonNullable<ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]>, age: number): string {
-  const isRetired = age >= scenario.assumptions.retirementAge;
-  // Check if any expenses exist at all for this phase
-  const hasAnyForPhase = scenario.expenses.some((e) =>
-    isRetired ? e.postRetirement : e.preRetirement,
-  );
-  if (!hasAnyForPhase) {
-    return isRetired
-      ? `No expenses marked for retirement at ${age}. Add housing, healthcare, and living costs on the Expenses tab.`
-      : `No expenses marked for pre-retirement at ${age}. Add your current monthly costs on the Expenses tab.`;
-  }
-  // Expenses exist for the phase but none active at this exact age (age-window gap)
-  return `No expenses active at age ${age}.`;
-}
-
-/** Compute per-source income breakdown for a given age */
-function getIncomeBreakdown(scenario: NonNullable<ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]>, age: number) {
-  const a = scenario.assumptions;
-  const yearsFromNow = age - a.currentAge;
-  const inflationFactor = Math.pow(1 + a.inflationRate, yearsFromNow);
-  const items: { name: string; amount: number; type: string }[] = [];
-
-  for (const inc of scenario.incomeSources) {
-    if (age >= inc.startAge && (inc.endAge === null || age <= inc.endAge)) {
-      let nominalGross: number;
-      if (inc.cola) {
-        // COLA income grows with inflation — inflationFactor alone captures this.
-        nominalGross = inc.annualAmount * inflationFactor;
-      } else {
-        // Non-COLA income: nominal amount is fixed at startAge (inflated from today's $).
-        const startAgeInflation = Math.pow(1 + a.inflationRate, inc.startAge - a.currentAge);
-        nominalGross = inc.annualAmount * startAgeInflation;
-      }
-      const nominalNet = inc.taxable ? nominalGross * (1 - a.retirementTaxRate) : nominalGross;
-      items.push({ name: inc.name, amount: nominalNet, type: inc.type });
-    }
-  }
-  return items;
-}
-
-/** Compute per-source expense breakdown for a given age */
-function getExpenseBreakdown(scenario: NonNullable<ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]>, age: number) {
-  const a = scenario.assumptions;
-  const yearsFromNow = age - a.currentAge;
-  const inflationFactor = Math.pow(1 + a.inflationRate, yearsFromNow);
-  const isRetired = age >= a.retirementAge;
-  const items: { name: string; amount: number; category: string }[] = [];
-
-  // Regular expenses (includes linked :tax and :insurance entries).
-  for (const exp of scenario.expenses) {
-    const activePre = exp.preRetirement && !isRetired;
-    const activePost = exp.postRetirement && isRetired;
-    if (!activePre && !activePost) continue;
-    if (exp.startAge !== null && age < exp.startAge) continue;
-    if (exp.endAge !== null && age > exp.endAge) continue;
-    // Legacy :mortgage linked expenses are computed by the engine now (see
-    // below) — skip any that pre-date migration v6 to avoid double-counting.
-    if (exp._propertyId?.endsWith(':mortgage')) continue;
-    // In simple mode the whole housing payment (incl. tax + insurance) is
-    // captured by the engine-computed mortgage payment below, so the separate
-    // :tax / :insurance linked entries would double-count. Skip them.
-    if (exp._propertyId) {
-      const propId = exp._propertyId.split(':')[0];
-      const linkedProp = scenario.properties?.find((p) => p.id === propId);
-      if (linkedProp?.mortgageInputMode === 'simple') continue;
-    }
-    items.push({ name: exp.name, amount: exp.annualAmount * inflationFactor, category: exp.category });
-  }
-
-  // Mortgage payments (engine-computed, contractual — NOT inflated).
-  // Counted in retirement only, matching the projection engine. Tax and
-  // insurance are already covered above via their linked expense entries.
-  if (isRetired && scenario.properties) {
-    for (const prop of scenario.properties) {
-      if (prop.saleAge && age >= prop.saleAge) continue;
-      if (prop.purchaseAge && age < prop.purchaseAge) continue;
-      const payment = mortgagePaymentAtAge(prop, age, a.currentAge);
-      if (payment > 0) {
-        // In simple mode the payment bundles tax + insurance (escrow).
-        const label = prop.mortgageInputMode === 'simple'
-          ? `${prop.name} — Mortgage (incl. tax & insurance)`
-          : `${prop.name} — Mortgage`;
-        items.push({ name: label, amount: payment, category: 'housing' });
-      }
-    }
-  }
-
-  // Life events ongoing
-  for (const ev of scenario.events) {
-    if (age >= ev.age && ev.ongoingAnnualImpact !== 0) {
-      const dur = ev.ongoingDurationYears;
-      if (dur === null || age < ev.age + dur) {
-        items.push({ name: `${ev.name} — Ongoing`, amount: ev.ongoingAnnualImpact * inflationFactor, category: 'other' });
-      }
-    }
-  }
-
-  return items;
-}
-
-function YearTable({ result, retirementAge, scenario, focusAge, onFocusConsumed }: { result: NonNullable<ReturnType<typeof runProjection>>; retirementAge: number; scenario: NonNullable<ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]>; focusAge?: number | null; onFocusConsumed?: () => void }) {
-  const [showAll, setShowAll] = useState(false);
-  const [expandedAge, setExpandedAge] = useState<number | null>(null);
-  // If a focusAge arrives that falls outside the default summary window,
-  // widen the view so the row is actually rendered and scrollable to.
-  const focusOutsideWindow = focusAge !== null && focusAge !== undefined && (focusAge < retirementAge - 5 || focusAge > retirementAge + 15);
-  const data = (showAll || focusOutsideWindow) ? result.years : result.years.filter((y) => y.age >= retirementAge - 5 && y.age <= retirementAge + 15);
-
-  // Refs to each year row so we can scrollIntoView when a headline card
-  // drills down to a specific age.
-  const rowRefs = useRef<Record<number, HTMLTableRowElement | null>>({});
-  const [highlightAge, setHighlightAge] = useState<number | null>(null);
-
-  // Toggle a row open/closed. When the user collapses the row that was just
-  // highlighted by a card click, also clear the highlight — the persistent
-  // outline otherwise has no obvious way to be dismissed.
-  const toggleRow = (age: number) => {
-    if (expandedAge === age) {
-      setExpandedAge(null);
-      if (highlightAge === age) setHighlightAge(null);
-    } else {
-      setExpandedAge(age);
-    }
-  };
-
-  // When a focusAge arrives (from a headline card click), expand the row,
-  // scroll it into view, and attach a highlight so the user sees exactly
-  // which row backs the number they clicked. The highlight is now persistent
-  // (no auto-clear timer) — it's only removed when the user clicks another
-  // card OR manually collapses the highlighted row. Previously a 2.5s timer
-  // raced screen-reader announcements and slow-scroll users.
-  useEffect(() => {
-    if (focusAge === null || focusAge === undefined) return;
-    setExpandedAge(focusAge);
-    setHighlightAge(focusAge);
-    // Defer the scroll until React has rendered the row (and potentially
-    // widened the data range via focusOutsideWindow).
-    const scrollT = setTimeout(() => {
-      rowRefs.current[focusAge]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 60);
-    // Reset the parent's focusAge shortly after so re-clicking the same card
-    // can re-fire this effect (without this, focusAge stays at the same
-    // value and React skips the effect). The visual highlight is independent
-    // of focusAge, so it persists across the reset.
-    const consumeT = setTimeout(() => onFocusConsumed?.(), 800);
-    return () => { clearTimeout(scrollT); clearTimeout(consumeT); };
-  }, [focusAge, onFocusConsumed]);
-
-  return (
-    <div className="panel">
-      <div className="panel-header">
-        <h2><Table2 size={20} aria-hidden="true" /> Year-by-Year Detail</h2>
-        <button className="btn btn-sm" onClick={() => setShowAll(!showAll)}>{showAll ? 'Show Summary' : 'Show All Years'}</button>
-      </div>
-      <div className="table-scroll">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th style={{ width: 28 }}></th>
-              <th>Age</th>
-              <th className="text-right col-optional">Start Assets</th>
-              <th className="text-right col-optional">Contrib.</th>
-              <th className="text-right col-optional">Deposits</th>
-              <th className="text-right col-optional">Growth</th>
-              <th className="text-right">Income</th>
-              <th className="text-right">Withdrawals</th>
-              <th className="text-right">Expenses</th>
-              <th className="text-right">End Assets</th>
-              <th className="text-right col-optional">Real $</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((y) => (
-              <Fragment key={y.age}>
-                <tr
-                  ref={(el) => { rowRefs.current[y.age] = el; }}
-                  style={y.depleted ? { color: 'var(--red)' } : {}}
-                  className={`year-row${highlightAge === y.age ? ' year-row-highlight' : ''}`}
-                  tabIndex={0}
-                  role="button"
-                  aria-expanded={expandedAge === y.age}
-                  aria-label={`Age ${y.age}, ${expandedAge === y.age ? 'collapse' : 'expand'} details`}
-                  onClick={() => toggleRow(y.age)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      toggleRow(y.age);
-                    }
-                  }}
-                >
-                  <td className="drag-handle" style={{ cursor: 'pointer', opacity: 1 }} aria-hidden="true">{expandedAge === y.age ? '▼' : '▶'}</td>
-                  <td style={{ cursor: 'pointer' }}>{y.age}</td>
-                  <td className="text-right col-optional">{formatCurrency(y.beginningAssets, { compact: true })}</td>
-                  <td className="text-right col-optional">{y.contributions > 0 ? formatCurrency(y.contributions, { compact: true }) : '—'}</td>
-                  <td className="text-right col-optional" style={{ color: 'var(--chart-2)' }}>{y.deposits > 0 ? '+' + formatCurrency(y.deposits, { compact: true }) : '—'}</td>
-                  <td className="text-right col-optional" style={{ color: 'var(--green)' }}>{y.growth > 0 ? '+' + formatCurrency(y.growth, { compact: true }) : '—'}</td>
-                  <td className="text-right">{y.income > 0 ? formatCurrency(y.income, { compact: true }) : '—'}</td>
-                  <td className="text-right" style={{ color: y.withdrawals > 0 ? 'var(--red)' : undefined }}>{y.withdrawals > 0 ? '-' + formatCurrency(y.withdrawals, { compact: true }) : '—'}</td>
-                  <td className="text-right">{y.expenses > 0 ? formatCurrency(y.expenses, { compact: true }) : '—'}</td>
-                  <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(y.endingAssets, { compact: true })}</td>
-                  <td className="text-right col-optional muted">{formatCurrency(y.realAssets, { compact: true })}</td>
-                </tr>
-                {expandedAge === y.age && (
-                  <tr key={`${y.age}-detail`} className="year-detail-row">
-                    <td colSpan={11} style={{ padding: 0 }}>
-                      <div className="year-detail">
-                        <div className="year-detail-grid">
-                          <div className="year-detail-section">
-                            <div className="year-detail-title"><Wallet size={15} aria-hidden="true" /> Income Sources</div>
-                            <table className="data-table year-detail-table">
-                              <tbody>
-                                {(() => {
-                                  const items = getIncomeBreakdown(scenario, y.age);
-                                  if (items.length === 0) return <tr><td className="muted">{nextIncomeHint(scenario, y.age)}</td></tr>;
-                                  const total = items.reduce((s, it) => s + it.amount, 0);
-                                  return (
-                                    <>
-                                      {items.map((item, i) => (
-                                        <tr key={i}>
-                                          <td>{item.name}</td>
-                                          <td className="muted" style={{ fontSize: 11 }}>{prettify(item.type)}</td>
-                                          <td className="text-right" style={{ color: 'var(--green)' }}>{formatCurrency(item.amount)}</td>
-                                        </tr>
-                                      ))}
-                                      <tr className="year-detail-total">
-                                        <td colSpan={2}>Total / yr</td>
-                                        <td className="text-right" style={{ color: 'var(--green)' }}>{formatCurrency(total)}</td>
-                                      </tr>
-                                    </>
-                                  );
-                                })()}
-                              </tbody>
-                            </table>
-                          </div>
-                          <div className="year-detail-section">
-                            <div className="year-detail-title"><ListChecks size={15} aria-hidden="true" /> Expenses</div>
-                            <table className="data-table year-detail-table">
-                              <tbody>
-                                {(() => {
-                                  const items = getExpenseBreakdown(scenario, y.age);
-                                  if (items.length === 0) return <tr><td className="muted">{nextExpenseHint(scenario, y.age)}</td></tr>;
-                                  const total = items.reduce((s, it) => s + it.amount, 0);
-                                  return (
-                                    <>
-                                      {items.map((item, i) => (
-                                        <tr key={i}>
-                                          <td>{item.name}</td>
-                                          <td className="muted" style={{ fontSize: 11 }}>{prettify(item.category)}</td>
-                                          <td className="text-right" style={{ color: 'var(--red)' }}>{formatCurrency(item.amount)}</td>
-                                        </tr>
-                                      ))}
-                                      <tr className="year-detail-total">
-                                        <td colSpan={2}>Total / yr</td>
-                                        <td className="text-right" style={{ color: 'var(--red)' }}>{formatCurrency(total)}</td>
-                                      </tr>
-                                    </>
-                                  );
-                                })()}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-/* ============ COMPARE VIEW ============ */
-
-function CompareView({ results, scenarios }: { results: NonNullable<ReturnType<typeof runProjection>>[]; scenarios: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'] }) {
-  const tc = useThemeColors();
-  const tooltipStyle = { background: tc.panel, border: `1px solid ${tc.border}`, borderRadius: 8 };
-  const compareChartHeight = useResponsiveChartHeight({ min: 280, max: 480, vhFraction: 0.42 });
-  // Need the store to offer a one-click "duplicate" from the empty state so a
-  // user landing on Compare with a single scenario isn't staring at a lonely
-  // card and a hidden diff table — they get a clear path to a 2nd scenario.
-  const duplicateScenario = usePlanStore((s) => s.duplicateScenario);
-  const activeScenarioId = usePlanStore((s) => s.activeScenarioId);
-
-  // Assumption fields to compare, with label + formatter. Only fields that
-  // DIFFER across scenarios are shown — identical values add noise, not signal.
-  const assumptionFields: { key: keyof Scenario['assumptions']; label: string; fmt: (v: number) => string }[] = [
-    { key: 'currentAge', label: 'Current age', fmt: (v) => String(v) },
-    { key: 'retirementAge', label: 'Retirement age', fmt: (v) => String(v) },
-    { key: 'endAge', label: 'Plan end age', fmt: (v) => String(v) },
-    { key: 'inflationRate', label: 'Inflation', fmt: (v) => formatPercent(v) },
-    { key: 'socialSecurityCola', label: 'SS COLA', fmt: (v) => formatPercent(v) },
-    { key: 'retirementTaxRate', label: 'Retirement tax rate', fmt: (v) => formatPercent(v) },
-    { key: 'safeWithdrawalRate', label: 'Safe withdrawal', fmt: (v) => formatPercent(v) },
-    { key: 'preRetirementReturn', label: 'Pre-retirement return', fmt: (v) => formatPercent(v) },
-    { key: 'postRetirementReturn', label: 'Post-retirement return', fmt: (v) => formatPercent(v) },
-  ];
-  // Map results back to their scenarios so the diff columns align with the
-  // summary cards above (same scenario order).
-  const orderedScenarios = results
-    .map((r) => scenarios.find((s) => s.id === r.scenarioId))
-    .filter((s): s is Scenario => !!s);
-  const differingFields = assumptionFields.filter((f) => {
-    const vals = orderedScenarios.map((s) => s.assumptions[f.key]);
-    return !vals.every((v) => v === vals[0]);
-  });
-  // Each scenario gets two parallel lines: liquid and total (incl. home equity).
-  // Total - Liquid === Home Equity at that age, so the gap between the lines
-  // visually communicates how much of each scenario's wealth is real estate.
-  const compareData = useMemo(() => {
-    const maxAge = Math.max(...results.map((r) => r.years[r.years.length - 1]?.age ?? 0));
-    const data: Record<string, number | string>[] = [];
-    for (let age = results[0]?.years[0]?.age ?? 0; age <= maxAge; age++) {
-      const row: Record<string, number | string> = { age };
-      results.forEach((r) => {
-        const y = r.years.find((y) => y.age === age);
-        if (!y) return;
-        row[`${r.scenarioName} (Liquid)`] = Math.round(y.realAssets);
-        row[`${r.scenarioName} (Total)`] = Math.round(y.realAssets + y.realPropertyEquity);
-      });
-      data.push(row);
-    }
-    return data;
-  }, [results]);
-
-  // Scenario palette: derived from the active theme so switching themes
-  // recolors these lines along with the rest of the chart. Slots 1–4 take the
-  // four `--chart` tokens; slots 5–6 reuse `--red` / `--yellow` so a
-  // scenario that's depleting its savings lands visually as "at risk" without
-  // needing an extra legend.
-  const colors = [tc.chart, tc.chart2, tc.chart3, tc.chart4, tc.chart5, tc.chart6];
-
-  return (
-    <div>
-      {results.length < 2 && (
-        <div className="panel mb-16 compare-empty">
-          <div className="compare-empty-icon" aria-hidden="true"><Scale size={32} /></div>
-          <div className="compare-empty-body">
-            <h3>Compare needs at least two scenarios</h3>
-            <p className="section-help" style={{ marginBottom: 0 }}>
-              You currently have {results.length === 1 ? 'one' : 'none'}. Duplicate your active scenario and tweak an
-              assumption (retirement age, withdrawal rate, returns) to see how the outcome changes side by side.
-            </p>
-          </div>
-          {results.length === 1 && (
-            <button
-              className="btn"
-              onClick={() => duplicateScenario(activeScenarioId)}
-            >
-              ⧉ Duplicate “{scenarios.find((s) => s.id === activeScenarioId)?.name ?? 'scenario'}”
-            </button>
-          )}
-        </div>
-      )}
-
-      <div className="summary-grid">
-        {results.map((r, i) => (
-          <div key={r.scenarioId} className="summary-card">
-            <div className="label" style={{ color: colors[i % colors.length] }}>{r.scenarioName}</div>
-            <div className={`value ${r.success ? 'value-good' : 'value-bad'}`}>
-              {r.success ? '✓ Sustainable' : '✗ Depleted'}
-            </div>
-            <div className="sub">
-              {r.success ? `${formatCurrency(r.finalAssetsReal, { compact: true })} at end` : `Runs out at age ${formatAge(r.depletionAge)}`}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {differingFields.length > 0 && (
-        <div className="panel mb-16">
-          <div className="panel-header">
-            <h3>What's different?</h3>
-          </div>
-          <p className="section-help">
-            Only the assumptions that vary between scenarios are shown — so you can see <em>why</em> the outcomes differ without switching back to Inputs.
-          </p>
-          <div className="table-scroll">
-            <table className="data-table compare-diff-table">
-              <thead>
-                <tr>
-                  <th>Assumption</th>
-                  {orderedScenarios.map((s, i) => (
-                    <th key={s.id} className="text-right" style={{ color: colors[i % colors.length] }}>{s.name}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {differingFields.map((f) => (
-                  <tr key={f.key}>
-                    <td>{f.label}</td>
-                    {orderedScenarios.map((s) => (
-                      <td key={s.id} className="text-right">{f.fmt(s.assumptions[f.key] as number)}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      <div className="chart-container">
-        <h3>Net Worth Comparison (Today's Dollars)</h3>
-        <ResponsiveContainer width="100%" height={compareChartHeight} aria-label={`Net worth comparison across ${orderedScenarios.length} scenario${orderedScenarios.length === 1 ? '' : 's'}, in today's dollars, ${compareData.length} yearly data points`}>
-          <LineChart data={compareData}>
-            <CartesianGrid strokeDasharray="3 3" stroke={tc.border} />
-            <XAxis dataKey="age" stroke={tc.textDim} />
-            <YAxis stroke={tc.textDim} tickFormatter={(v) => formatCurrency(v, { compact: true })} />
-            <Tooltip
-              contentStyle={tooltipStyle}
-              formatter={(v: number) => formatCurrency(v)}
-              labelFormatter={(l) => `Age ${l}`}
-              labelStyle={{ color: tc.text }}
-              itemStyle={{ color: tc.text }}
-            />
-            <Legend />
-            {results.map((r, i) => {
-              const c = colors[i % colors.length];
-              // Two lines per scenario: solid for liquid assets, dashed for
-              // total (incl. home equity). The gap between them is the home
-              // equity contribution at each age.
-              // NOTE: <Line> must be a DIRECT child of <LineChart> — Recharts
-              // discovers series via React.Children and skips anything nested
-              // in a wrapper like <g> or <Fragment>, so we return a flat array.
-              return [
-                <Line key={`${r.scenarioId}-liquid`} type="monotone" dataKey={`${r.scenarioName} (Liquid)`} name={r.scenarioName} stroke={c} strokeWidth={2} dot={false} />,
-                <Line key={`${r.scenarioId}-total`} type="monotone" dataKey={`${r.scenarioName} (Total)`} name={`${r.scenarioName} (+ home)`} stroke={c} strokeWidth={1.5} strokeDasharray="4 3" dot={false} />,
-              ];
-            })}
-          </LineChart>
-        </ResponsiveContainer>
-        <ChartDataDisclosure summaryLabel="View as data table" rowCount={compareData.length}>
-          <DataTable
-            rows={compareData}
-            caption="Net worth comparison across scenarios in today's dollars"
-            columns={[
-              { key: 'age', label: 'Age' },
-              ...orderedScenarios.flatMap((s, i) => {
-                // Tint both of this scenario's columns with its chart color so
-                // the eye groups them together and ties them to the line above.
-                const accentColor = colors[i % colors.length];
-                return [
-                  { key: `${s.name} (Liquid)` as never, label: `${s.name} (Liquid)`, format: (v: unknown) => formatCurrency(v as number), accentColor },
-                  { key: `${s.name} (Total)` as never, label: `${s.name} (Total, incl. home)`, format: (v: unknown) => formatCurrency(v as number), accentColor },
-                ];
-              }),
-            ]}
-          />
-        </ChartDataDisclosure>
-      </div>
     </div>
   );
 }
