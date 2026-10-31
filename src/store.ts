@@ -218,7 +218,9 @@ interface PlanStore {
   deleteEvent: (scenarioId: string, eventId: string) => void;
 
   // Import/export
-  loadPlan: (plan: Plan) => void;
+  /** Validates the payload (see repairPlan) and throws on a schema mismatch,
+   *  so the import UI can surface the failure instead of bricking the app. */
+  loadPlan: (plan: unknown) => void;
   resetPlan: () => void;
 }
 
@@ -226,6 +228,70 @@ function getScenario(plan: Plan, id: string): Scenario {
   const s = plan.scenarios.find((s) => s.id === id);
   if (!s) throw new Error(`Scenario ${id} not found`);
   return s;
+}
+
+/**
+ * Structural validation for untrusted plan JSON (file imports, corrupted
+ * localStorage). Returns a normalized Plan, or null when the payload doesn't
+ * look like a plan at all — callers must not blindly trust a JSON.parse'd
+ * value: a schema-mismatched import used to brick the app (empty scenario id
+ * → blank render) and then persist the broken plan.
+ *
+ * Deliberately lenient about optional/legacy fields so older exports still
+ * import: missing collections default to [], missing names get placeholders.
+ * The numeric assumption fields are the hard requirement — without them the
+ * projection engine can't run.
+ */
+export function repairPlan(value: unknown): Plan | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const v = value as Record<string, unknown>;
+  if (!Array.isArray(v.scenarios) || v.scenarios.length === 0) return null;
+
+  const requiredNumbers: (keyof Assumptions)[] = [
+    'currentAge',
+    'retirementAge',
+    'endAge',
+    'inflationRate',
+    'socialSecurityCola',
+    'retirementTaxRate',
+    'safeWithdrawalRate',
+    'preRetirementReturn',
+    'postRetirementReturn',
+  ];
+
+  const seenIds = new Set<string>();
+  const scenarios: Scenario[] = [];
+  for (const raw of v.scenarios) {
+    if (typeof raw !== 'object' || raw === null) return null;
+    const s = raw as Record<string, unknown>;
+    const a = s.assumptions;
+    if (typeof a !== 'object' || a === null) return null;
+    for (const field of requiredNumbers) {
+      const n = (a as Record<string, unknown>)[field];
+      if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+    }
+    let id = typeof s.id === 'string' && s.id ? s.id : createId();
+    while (seenIds.has(id)) id = `${id}-${createId()}`;
+    seenIds.add(id);
+    scenarios.push({
+      id,
+      name: typeof s.name === 'string' && s.name ? s.name : 'Imported scenario',
+      assumptions: a as Assumptions,
+      accounts: Array.isArray(s.accounts) ? (s.accounts as Account[]) : [],
+      properties: Array.isArray(s.properties) ? (s.properties as Property[]) : [],
+      incomeSources: Array.isArray(s.incomeSources) ? (s.incomeSources as IncomeSource[]) : [],
+      expenses: Array.isArray(s.expenses) ? (s.expenses as Expense[]) : [],
+      events: Array.isArray(s.events) ? (s.events as LifeEvent[]) : [],
+    });
+  }
+
+  return {
+    version: PLAN_VERSION,
+    name: typeof v.name === 'string' && v.name ? v.name : 'Imported plan',
+    lastModified:
+      typeof v.lastModified === 'string' ? v.lastModified : new Date().toISOString(),
+    scenarios,
+  };
 }
 
 /** Event types often have empty names, so fall back to a prettified type. */
@@ -875,9 +941,12 @@ export const usePlanStore = create<PlanStore>()(
           };
         }),
 
-      loadPlan: (plan) => {
-        const firstId = plan.scenarios[0]?.id ?? '';
-        set({ plan: { ...plan, version: PLAN_VERSION }, activeScenarioId: firstId });
+      loadPlan: (raw) => {
+        const plan = repairPlan(raw);
+        if (!plan) {
+          throw new Error("Imported file doesn't match the plan schema");
+        }
+        set({ plan, activeScenarioId: plan.scenarios[0].id });
       },
 
       resetPlan: () => {
@@ -916,6 +985,14 @@ export const usePlanStore = create<PlanStore>()(
       }),
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as PlanStore;
+        // A corrupted or hand-edited persisted plan would throw inside the
+        // migration loops below (non-object scenarios, missing arrays) and
+        // brick rehydration. Normalize first; if the payload isn't a plan at
+        // all, drop it and let the store fall back to defaults.
+        if (!state || typeof state !== 'object') return {} as PlanStore;
+        const plan = repairPlan(state.plan);
+        if (!plan) return {} as PlanStore;
+        state.plan = plan;
         // v0→v2: rename legacy default plan name to "retirementMe-Off"
         if (version < 2 && state?.plan) {
           if (state.plan.name === 'My Retirement Plan') {
@@ -1027,18 +1104,22 @@ export const usePlanStore = create<PlanStore>()(
         return state;
       },
       onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        // Second line of defense behind migrate's repairPlan guard: if the
+        // persisted plan is unusable, start from defaults rather than leaving
+        // the app in a state where the active scenario can't resolve.
+        const plan = repairPlan(state.plan) ?? defaultPlan();
+        state.plan = plan;
         // Ensure activeScenarioId is valid after rehydration.
-        if (state && state.plan.scenarios.length > 0) {
-          const exists = state.plan.scenarios.some((s) => s.id === state.activeScenarioId);
-          if (!exists) {
-            state.activeScenarioId = state.plan.scenarios[0].id;
-          }
+        const exists = plan.scenarios.some((s) => s.id === state.activeScenarioId);
+        if (!exists) {
+          state.activeScenarioId = plan.scenarios[0].id;
         }
         // Belt-and-braces: sync property housing costs to expenses on every load.
         // The v4→v5 migration handles persisted plans, but this also covers
         // edge cases where migration didn't run or localStorage was edited.
-        if (state && state.syncPropertiesToExpenses) {
-          for (const scenario of state.plan.scenarios) {
+        if (state.syncPropertiesToExpenses) {
+          for (const scenario of plan.scenarios) {
             state.syncPropertiesToExpenses(scenario.id);
           }
         }

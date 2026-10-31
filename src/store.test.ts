@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { MAX_CHAT_HISTORY } from './store';
+import { MAX_CHAT_HISTORY, repairPlan, usePlanStore } from './store';
+import { defaultPlan } from './defaults';
 
 /**
  * Tripwire tests for the chat-history cap.
@@ -31,5 +32,109 @@ describe('MAX_CHAT_HISTORY', () => {
     // Upper bound: 200 messages. Anything larger starts to bloat localStorage
     // and request body size for marginal context gain.
     expect(MAX_CHAT_HISTORY).toBeLessThanOrEqual(200);
+  });
+});
+
+/**
+ * repairPlan guards every untrusted plan payload (file imports, corrupted
+ * localStorage). Regression: a JSON-valid but schema-mismatched import used
+ * to reach the app with no resolvable scenario — blank render, and the broken
+ * plan was persisted so a reload didn't fix it.
+ */
+describe('repairPlan', () => {
+  it('rejects payloads that are not plans at all', () => {
+    expect(repairPlan(null)).toBeNull();
+    expect(repairPlan('not an object')).toBeNull();
+    expect(repairPlan({ foo: 1 })).toBeNull();
+    expect(repairPlan({ scenarios: 'nope' })).toBeNull();
+    expect(repairPlan({ scenarios: [] })).toBeNull();
+  });
+
+  it('rejects scenarios whose assumptions are missing numeric fields', () => {
+    const base = defaultPlan();
+    const bad = {
+      ...base,
+      scenarios: [
+        {
+          id: 's1',
+          name: 'Broken',
+          assumptions: { currentAge: 40, retirementAge: 65 }, // no endAge/rates
+        },
+      ],
+    };
+    expect(repairPlan(bad)).toBeNull();
+  });
+
+  it('rejects a non-numeric (NaN-poisoned) assumption value', () => {
+    const base = defaultPlan();
+    const poisoned = {
+      ...base,
+      scenarios: base.scenarios.map((s) => ({
+        ...s,
+        assumptions: { ...s.assumptions, inflationRate: 'high' },
+      })),
+    };
+    expect(repairPlan(poisoned)).toBeNull();
+  });
+
+  it('normalizes valid minimal plans: missing collections become []', () => {
+    const minimal = {
+      name: 'Imported',
+      scenarios: [
+        {
+          id: 's1',
+          name: 'Main',
+          assumptions: defaultPlan().scenarios[0].assumptions,
+          // no accounts/properties/incomeSources/expenses/events
+        },
+      ],
+    };
+    const plan = repairPlan(minimal);
+    expect(plan).not.toBeNull();
+    expect(plan!.scenarios[0].accounts).toEqual([]);
+    expect(plan!.scenarios[0].properties).toEqual([]);
+    expect(plan!.scenarios[0].incomeSources).toEqual([]);
+    expect(plan!.scenarios[0].expenses).toEqual([]);
+    expect(plan!.scenarios[0].events).toEqual([]);
+    expect(plan!.version).toBeTruthy();
+  });
+
+  it('preserves collections from older exports untouched', () => {
+    const exported = defaultPlan();
+    const plan = repairPlan(exported);
+    expect(plan).not.toBeNull();
+    expect(plan!.scenarios).toHaveLength(exported.scenarios.length);
+    expect(plan!.scenarios[0].assumptions).toEqual(exported.scenarios[0].assumptions);
+    expect(plan!.scenarios[0].expenses).toEqual(exported.scenarios[0].expenses);
+  });
+
+  it('generates ids for scenarios missing them and de-duplicates collisions', () => {
+    const s = defaultPlan().scenarios[0];
+    const dup = defaultPlan().scenarios[0];
+    const plan = repairPlan({ scenarios: [{ ...s, id: '' }, dup] });
+    expect(plan).not.toBeNull();
+    const ids = plan!.scenarios.map((x) => x.id);
+    expect(ids[0]).not.toBe('');
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+/**
+ * loadPlan is the import entry point; it must throw (not brick) on bad data.
+ * The store itself runs fine in node — the debounced storage adapter no-ops
+ * without window.localStorage.
+ */
+describe('loadPlan validation', () => {
+  it('throws on schema-mismatched JSON and leaves the current plan intact', () => {
+    const before = usePlanStore.getState().plan;
+    expect(() => usePlanStore.getState().loadPlan({ foo: 1 })).toThrow();
+    expect(usePlanStore.getState().plan).toBe(before);
+  });
+
+  it('accepts a valid plan and activates its first scenario', () => {
+    const plan = defaultPlan();
+    usePlanStore.getState().loadPlan(plan);
+    const state = usePlanStore.getState();
+    expect(state.activeScenarioId).toBe(plan.scenarios[0].id);
   });
 });
