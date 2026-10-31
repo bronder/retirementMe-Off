@@ -89,12 +89,13 @@ function computeAssetBuckets(
 }
 
 /** Effective growth assumption for an account: its own rate, or the
- *  assumption fallback (matching the engine's rule for annualReturn === 0). */
+ *  assumption fallback (matching the engine's rule for an unset
+ *  annualReturn — a deliberate 0% is honored). */
 function effectiveReturn(
   account: ScenarioLike['accounts'][0],
   scenario: ScenarioLike,
 ): number {
-  return account.annualReturn !== 0
+  return account.annualReturn != null
     ? account.annualReturn
     : scenario.assumptions.preRetirementReturn;
 }
