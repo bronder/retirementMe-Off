@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { MAX_CHAT_HISTORY, repairPlan, usePlanStore } from './store';
-import { defaultPlan } from './defaults';
+import { defaultPlan, defaultAssumptions } from './defaults';
 
 /**
  * Tripwire tests for the chat-history cap.
@@ -136,5 +136,36 @@ describe('loadPlan validation', () => {
     usePlanStore.getState().loadPlan(plan);
     const state = usePlanStore.getState();
     expect(state.activeScenarioId).toBe(plan.scenarios[0].id);
+  });
+});
+
+/**
+ * Reset Plan ("Erase all data?") and the welcome banner's "Start fresh" must
+ * leave a BLANK plan. Regression: resetPlan used defaultPlan(), which ships
+ * the sample scenario — resetting visibly re-seeded demo accounts, income,
+ * and expenses instead of removing the user's inputs.
+ */
+describe('resetPlan', () => {
+  it('clears all inputs to a blank plan with default assumptions', () => {
+    usePlanStore.getState().resetPlan();
+    const state = usePlanStore.getState();
+    expect(state.plan.scenarios).toHaveLength(1);
+    const sc = state.plan.scenarios[0];
+    expect(sc.accounts).toEqual([]);
+    expect(sc.incomeSources).toEqual([]);
+    expect(sc.expenses).toEqual([]);
+    expect(sc.events).toEqual([]);
+    expect(sc.properties ?? []).toEqual([]);
+    // Assumptions are settings, not inputs — they keep their defaults.
+    expect(sc.assumptions.currentAge).toBe(defaultAssumptions().currentAge);
+    expect(state.activeScenarioId).toBe(sc.id);
+    // The reset is undoable like other destructive ops.
+    expect(state.undoState?.label).toBe('Reset plan');
+  });
+
+  it('clears stale chat history along with the plan', () => {
+    usePlanStore.getState().setChatHistory([{ role: 'user', content: 'old plan question', timestamp: 0 }]);
+    usePlanStore.getState().resetPlan();
+    expect(usePlanStore.getState().chatHistory).toEqual([]);
   });
 });

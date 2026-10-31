@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Plan, Scenario, Account, IncomeSource, Expense, LifeEvent, Assumptions, Property } from './types';
-import { defaultPlan, defaultScenario, defaultAssumptions, createId, PLAN_VERSION } from './defaults';
+import { defaultPlan, blankPlan, defaultScenario, defaultAssumptions, createId, PLAN_VERSION } from './defaults';
 import type { ChatMessage, ScenarioSuggestion } from './ai';
 
 /** Hard cap on persisted chat history. Last 20 turns (40 messages) are kept;
@@ -951,10 +951,16 @@ export const usePlanStore = create<PlanStore>()(
 
       resetPlan: () => {
         const prev = get();
-        const plan = defaultPlan();
+        // Blank, not sample: "Erase all data?" (menu) and "start with a blank
+        // plan" (welcome banner) both promise a clean slate. Sample data is a
+        // first-run / explicit "Start with sample data" choice. Stale chat
+        // about the erased plan goes with it; API keys stay (settings, not
+        // plan data).
+        const plan = blankPlan();
         set({
           plan,
           activeScenarioId: plan.scenarios[0].id,
+          chatHistory: [],
           undoState: {
             plan: prev.plan,
             activeScenarioId: prev.activeScenarioId,

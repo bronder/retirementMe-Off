@@ -116,3 +116,29 @@ export function defaultPlan(): Plan {
     scenarios: [defaultScenario()],
   };
 }
+
+/** A scenario with default assumptions and NO data. Reset Plan and the
+ *  welcome banner's "Start fresh" promise to erase all inputs — resetting
+ *  into defaultScenario() would re-seed the demo accounts/income/expenses
+ *  instead. Sample data remains a first-run / explicit choice via
+ *  defaultScenario(). */
+export function blankScenario(name = 'Baseline'): Scenario {
+  return {
+    id: createId(),
+    name,
+    assumptions: defaultAssumptions(),
+    accounts: [],
+    incomeSources: [],
+    expenses: [],
+    events: [],
+  };
+}
+
+export function blankPlan(): Plan {
+  return {
+    version: PLAN_VERSION,
+    name: 'retirementMe-Off',
+    lastModified: new Date().toISOString(),
+    scenarios: [blankScenario()],
+  };
+}
