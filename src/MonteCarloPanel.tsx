@@ -229,8 +229,9 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
     const sortedRet = [...retirementAssets].sort((a, b) => a - b);
     const medianRetirement = sortedRet[Math.floor(sortedRet.length / 2)];
     const medianDrawdown = medianPeak - median;
+    // Percent of the peak that was lost (0% = kept everything, 100% = depleted).
     const medianDrawdownPct =
-      medianPeak > 0 ? Math.max(0, (median / medianPeak) * 100) : 0;
+      medianPeak > 0 ? Math.max(0, (1 - median / medianPeak) * 100) : 0;
     return {
       age: selectedBin,
       count: matchingIndices.length,
@@ -663,7 +664,7 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
                         {formatCurrency(selectedBinDetails.medianDrawdown, { compact: true })}
                         {selectedBinDetails.medianDrawdownPct > 0 && (
                           <span className="muted" style={{ fontSize: 'var(--text-xs)', marginLeft: 4 }}>
-                            ({(100 - selectedBinDetails.medianDrawdownPct).toFixed(0)}% left)
+                            ({selectedBinDetails.medianDrawdownPct.toFixed(0)}% of peak)
                           </span>
                         )}
                       </div>
@@ -694,7 +695,9 @@ export function MonteCarloPanel({ scenario, colors }: MonteCarloPanelProps) {
                         {selectedBinDetails.runs.map((r) => {
                           const drop = r.peakAssets - r.finalAssets;
                           const dropPct =
-                            r.peakAssets > 0 ? (r.finalAssets / r.peakAssets) * 100 : 0;
+                            r.peakAssets > 0
+                              ? Math.max(0, (1 - r.finalAssets / r.peakAssets) * 100)
+                              : 0;
                           return (
                             <tr key={r.trialIndex}>
                               <td>#{r.trialIndex}</td>
