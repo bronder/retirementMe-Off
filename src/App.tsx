@@ -2927,7 +2927,17 @@ function IncomePanel({ scenario, store }: {
   scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
   store: ReturnType<typeof usePlanStore.getState>;
 }) {
-  const totalMonthly = scenario.incomeSources.reduce((s, i) => s + i.annualAmount, 0) / 12;
+  // Snapshot totals, not a blind sum: a source only counts while it is
+  // actually active (startAge <= age && (endAge null or >= age)), so a salary
+  // ending at 64 and Social Security starting at 67 never coexist in one
+  // number. Amounts are entered in today's dollars, like every other panel
+  // total, so no inflation/COLA math here.
+  const activeAt = (age: number) =>
+    scenario.incomeSources
+      .filter((i) => i.startAge <= age && (i.endAge === null || i.endAge >= age))
+      .reduce((s, i) => s + i.annualAmount, 0) / 12;
+  const monthlyNow = activeAt(scenario.assumptions.currentAge);
+  const monthlyAtRetirement = activeAt(scenario.assumptions.retirementAge);
   const ssCount = scenario.incomeSources.filter(i => i.type === 'social_security').length;
 
   // Group by phase
@@ -2954,8 +2964,12 @@ function IncomePanel({ scenario, store }: {
 
       <div className="summary-strip">
         <div className="summary-strip-item">
-          <span className="label">Total Monthly</span>
-          <span className="value">{formatCurrency(totalMonthly, { compact: true })}<span className="muted" style={{ fontSize: 12 }}> /mo</span></span>
+          <span className="label">Monthly Now</span>
+          <span className="value">{formatCurrency(monthlyNow, { compact: true })}<span className="muted" style={{ fontSize: 12 }}> /mo</span></span>
+        </div>
+        <div className="summary-strip-item">
+          <span className="label">Monthly at Retirement</span>
+          <span className="value">{formatCurrency(monthlyAtRetirement, { compact: true })}<span className="muted" style={{ fontSize: 12 }}> /mo</span></span>
         </div>
         <div className="summary-strip-item">
           <span className="label">Sources</span>
