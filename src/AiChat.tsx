@@ -328,14 +328,17 @@ export function AiChat() {
     [messages, loading, store, appendChatMessage],
   );
 
-  const handleApplySuggestion = () => {
-    const lastMsg = messages[messages.length - 1];
-    if (lastMsg?.suggestion) {
-      store.applyScenarioSuggestion(lastMsg.suggestion);
+  // Applies the suggestion attached to a *specific* message. Reading the last
+  // message here would silently apply the newest suggestion when the user
+  // clicks an older card.
+  const handleApplySuggestion = (index: number) => {
+    const msg = messages[index];
+    if (msg?.suggestion) {
+      store.applyScenarioSuggestion(msg.suggestion);
       // Persist that the suggestion has been applied so it doesn't render again.
       setChatHistory(
         messages.map((m, i) =>
-          i === messages.length - 1 ? { ...m, suggestion: undefined } : m,
+          i === index ? { ...m, suggestion: undefined } : m,
         ),
       );
     }
@@ -644,7 +647,7 @@ export function AiChat() {
                       </div>
                     )}
                     <div className="ai-chat-suggestion-actions">
-                      <button className="ai-chat-apply-btn" onClick={handleApplySuggestion}>
+                      <button className="ai-chat-apply-btn" onClick={() => handleApplySuggestion(i)}>
                         ✓ Create Scenario &amp; Switch to It
                       </button>
                       <p className="ai-chat-suggestion-note">
