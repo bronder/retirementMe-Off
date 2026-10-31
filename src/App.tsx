@@ -300,15 +300,15 @@ const QUICK_ADD_EXPENSES: { name: string; icon: LucideIcon; category: ExpenseCat
 /** Quick-add templates for accounts — sensible defaults per type (typical
  *  long-term return + contribution). Mirrors the Expenses Quick Add pattern so
  *  all three data panels offer one-click setup. */
-const COMMON_ACCOUNTS: { name: string; icon: LucideIcon; type: AccountType; balance: number; annualReturn: number; annualContribution: number; employerMatch: number; hint: string }[] = [
-  { name: 'Checking', icon: Banknote, type: 'checking_savings', balance: 10000, annualReturn: 0.01, annualContribution: 0, employerMatch: 0, hint: 'Cash' },
-  { name: 'Savings', icon: PiggyBank, type: 'checking_savings', balance: 25000, annualReturn: 0.03, annualContribution: 3600, employerMatch: 0, hint: 'Emergency fund' },
-  { name: 'Taxable Brokerage', icon: TrendingUp, type: 'taxable_brokerage', balance: 50000, annualReturn: 0.07, annualContribution: 6000, employerMatch: 0, hint: 'Invested' },
-  { name: 'Traditional 401(k)', icon: Landmark, type: 'traditional_401k', balance: 120000, annualReturn: 0.07, annualContribution: 12000, employerMatch: 4000, hint: '+ match' },
-  { name: 'Roth 401(k)', icon: Sprout, type: 'roth_401k', balance: 0, annualReturn: 0.07, annualContribution: 12000, employerMatch: 0, hint: 'Tax-free' },
-  { name: 'Traditional IRA', icon: FileText, type: 'traditional_ira', balance: 30000, annualReturn: 0.07, annualContribution: 7000, employerMatch: 0, hint: 'Tax-deferred' },
-  { name: 'Roth IRA', icon: Coins, type: 'roth_ira', balance: 60000, annualReturn: 0.07, annualContribution: 7000, employerMatch: 0, hint: 'Tax-free' },
-  { name: 'HSA (invested)', icon: HeartPulse, type: 'hsa', balance: 8000, annualReturn: 0.06, annualContribution: 4150, employerMatch: 0, hint: 'Triple-tax-free' },
+const COMMON_ACCOUNTS: { name: string; icon: LucideIcon; type: AccountType; balance: number; annualReturn: number; annualContribution: number; contributionEndAge: number | null; employerMatch: number; hint: string }[] = [
+  { name: 'Checking', icon: Banknote, type: 'checking_savings', balance: 10000, annualReturn: 0.01, annualContribution: 0, contributionEndAge: null, employerMatch: 0, hint: 'Cash' },
+  { name: 'Savings', icon: PiggyBank, type: 'checking_savings', balance: 25000, annualReturn: 0.03, annualContribution: 3600, contributionEndAge: null, employerMatch: 0, hint: 'Emergency fund' },
+  { name: 'Taxable Brokerage', icon: TrendingUp, type: 'taxable_brokerage', balance: 50000, annualReturn: 0.07, annualContribution: 6000, contributionEndAge: null, employerMatch: 0, hint: 'Invested' },
+  { name: 'Traditional 401(k)', icon: Landmark, type: 'traditional_401k', balance: 120000, annualReturn: 0.07, annualContribution: 12000, contributionEndAge: null, employerMatch: 4000, hint: '+ match' },
+  { name: 'Roth 401(k)', icon: Sprout, type: 'roth_401k', balance: 0, annualReturn: 0.07, annualContribution: 12000, contributionEndAge: null, employerMatch: 0, hint: 'Tax-free' },
+  { name: 'Traditional IRA', icon: FileText, type: 'traditional_ira', balance: 30000, annualReturn: 0.07, annualContribution: 7000, contributionEndAge: null, employerMatch: 0, hint: 'Tax-deferred' },
+  { name: 'Roth IRA', icon: Coins, type: 'roth_ira', balance: 60000, annualReturn: 0.07, annualContribution: 7000, contributionEndAge: null, employerMatch: 0, hint: 'Tax-free' },
+  { name: 'HSA (invested)', icon: HeartPulse, type: 'hsa', balance: 8000, annualReturn: 0.06, annualContribution: 4150, contributionEndAge: null, employerMatch: 0, hint: 'Triple-tax-free' },
 ];
 
 /** Quick-add templates for income sources — typical amounts and ages so the
@@ -1701,6 +1701,27 @@ function AccountCard({ acct, scenario, store }: {
           <label>Annual Contribution</label>
           <CurrencyCellInput value={acct.annualContribution} onChange={(v) => store.updateAccount(scenario.id, acct.id, { annualContribution: v })} />
         </div>
+        <div className="acct-card-field">
+          <label>Contribution ends</label>
+          {/* Same two-state toggle as IncomeRow's End control: "Until retirement"
+              (null = engine default) vs "At age" (inclusive). Match stops with
+              the contribution, so one control covers both. */}
+          <span className="income-end-toggle">
+            <button
+              className={`income-lifetime-btn ${acct.contributionEndAge == null ? 'active' : ''}`}
+              title="Contribute until retirement age"
+              onClick={() => store.updateAccount(scenario.id, acct.id, { contributionEndAge: null })}
+            >Until retirement</button>
+            <button
+              className={`income-lifetime-btn ${acct.contributionEndAge != null ? 'active' : ''}`}
+              title="Stop contributing at a specific age"
+              onClick={() => store.updateAccount(scenario.id, acct.id, { contributionEndAge: acct.contributionEndAge ?? scenario.assumptions.retirementAge })}
+            >At age</button>
+            {acct.contributionEndAge != null && (
+              <NumCellInput value={acct.contributionEndAge} onChange={(v) => store.updateAccount(scenario.id, acct.id, { contributionEndAge: v || null })} />
+            )}
+          </span>
+        </div>
         {is401k && (
           <div className="acct-card-field acct-card-match">
             <label>Employer Match</label>
@@ -1750,7 +1771,7 @@ function AccountsPanel({ scenario, store }: {
         <div className="quick-add-grid">
           {COMMON_ACCOUNTS.map((ca) => (
             <button key={ca.name} className="quick-add-btn" onClick={() => store.addAccount(scenario.id, {
-              name: ca.name, type: ca.type, balance: ca.balance, annualReturn: ca.annualReturn, annualContribution: ca.annualContribution, employerMatch: ca.employerMatch,
+              name: ca.name, type: ca.type, balance: ca.balance, annualReturn: ca.annualReturn, annualContribution: ca.annualContribution, contributionEndAge: ca.contributionEndAge, employerMatch: ca.employerMatch,
             })}>
               <span className="quick-add-icon" aria-hidden="true"><Glyph i={ca.icon} /></span>
               <span>{ca.name}</span>
@@ -1833,7 +1854,7 @@ function AccountsPanel({ scenario, store }: {
               <span className="acct-group-total">{formatCurrency(groupTotal, { compact: true })}</span>
               {groupContrib > 0 && <span className="acct-group-contrib">+{formatCurrency(groupContrib, { compact: true })}/yr</span>}
               <button className="btn btn-sm acct-group-add" onClick={() => store.addAccount(scenario.id, {
-                name: 'New ' + g.label.replace(/ &.*/, ''), type: g.types[0], balance: 0, annualReturn: g.types[0] === 'checking_savings' ? 0.02 : 0.07, annualContribution: 0, employerMatch: 0,
+                name: 'New ' + g.label.replace(/ &.*/, ''), type: g.types[0], balance: 0, annualReturn: g.types[0] === 'checking_savings' ? 0.02 : 0.07, annualContribution: 0, contributionEndAge: null, employerMatch: 0,
               })}>+ Add</button>
             </div>
             <div className="acct-group-hint muted">{g.hint}</div>

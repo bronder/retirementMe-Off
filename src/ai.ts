@@ -176,8 +176,9 @@ export function buildPlanContext(
     const totalContrib = scenario.accounts.reduce((s, x) => s + x.annualContribution + x.employerMatch, 0);
     lines.push(`**Accounts** (total: ${formatCurrency(totalBalance)}, annual savings: ${formatCurrency(totalContrib)}):`);
     for (const acct of scenario.accounts) {
+      const endClause = acct.contributionEndAge != null ? `, stopping at age ${acct.contributionEndAge}` : '';
       lines.push(
-        `  - ${acct.name} (${prettify(acct.type)}): ${formatCurrency(acct.balance)} @ ${acct.annualReturn != null ? formatPercent(acct.annualReturn) : 'plan default rate'}, contributing ${formatCurrency(acct.annualContribution)}/yr${acct.employerMatch > 0 ? ` + ${formatCurrency(acct.employerMatch)} match` : ''}`,
+        `  - ${acct.name} (${prettify(acct.type)}): ${formatCurrency(acct.balance)} @ ${acct.annualReturn != null ? formatPercent(acct.annualReturn) : 'plan default rate'}, contributing ${formatCurrency(acct.annualContribution)}/yr${acct.employerMatch > 0 ? ` + ${formatCurrency(acct.employerMatch)} match` : ''}${endClause}`,
       );
     }
     lines.push('');

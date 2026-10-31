@@ -108,6 +108,23 @@ describe('repairPlan', () => {
     expect(plan!.scenarios[0].expenses).toEqual(exported.scenarios[0].expenses);
   });
 
+  it('backfills contributionEndAge on accounts from plans written before the field existed', () => {
+    const base = defaultPlan();
+    // Simulate a pre-existing persisted plan: strip the field from every account.
+    const old = {
+      ...base,
+      scenarios: base.scenarios.map((s) => ({
+        ...s,
+        accounts: s.accounts.map(({ contributionEndAge: _omit, ...rest }) => rest),
+      })),
+    };
+    const plan = repairPlan(old);
+    expect(plan).not.toBeNull();
+    for (const acct of plan!.scenarios[0].accounts) {
+      expect(acct.contributionEndAge).toBeNull();
+    }
+  });
+
   it('generates ids for scenarios missing them and de-duplicates collisions', () => {
     const s = defaultPlan().scenarios[0];
     const dup = defaultPlan().scenarios[0];

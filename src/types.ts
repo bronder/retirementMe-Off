@@ -41,6 +41,9 @@ export interface Account {
   annualReturn?: number;
   /** Current annual contribution (today's dollars). 0 in retirement. */
   annualContribution: number;
+  /** Age at which contributions stop (inclusive). null = contribute until
+   *  retirement age. Employer match stops with the contribution. */
+  contributionEndAge: number | null;
   /** Employer match (annual), if applicable (today's dollars). */
   employerMatch: number;
 }

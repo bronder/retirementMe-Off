@@ -344,9 +344,14 @@ export function runProjectionCore(
     const beginningAssets = sumBalances(accountStates);
 
     // --- Contributions (pre-retirement only) ---
+    // Each account can stop contributing early via contributionEndAge
+    // (inclusive, mirroring IncomeSource.endAge); null = until retirement.
+    // Employer match rides along — no match without a contribution.
     let contributions = 0;
     if (!isRetired) {
       for (const s of accountStates) {
+        const ended = s.account.contributionEndAge != null && age > s.account.contributionEndAge;
+        if (ended) continue;
         const nominalContribution = s.account.annualContribution * inflationFactor;
         const nominalMatch = s.account.employerMatch * inflationFactor;
         const total = nominalContribution + nominalMatch;

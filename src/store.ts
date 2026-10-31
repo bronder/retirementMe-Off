@@ -277,7 +277,9 @@ export function repairPlan(value: unknown): Plan | null {
       id,
       name: typeof s.name === 'string' && s.name ? s.name : 'Imported scenario',
       assumptions: a as Assumptions,
-      accounts: Array.isArray(s.accounts) ? (s.accounts as Account[]) : [],
+      accounts: Array.isArray(s.accounts)
+        ? (s.accounts as Account[]).map((a) => ({ ...a, contributionEndAge: a.contributionEndAge ?? null }))
+        : [],
       properties: Array.isArray(s.properties) ? (s.properties as Property[]) : [],
       incomeSources: Array.isArray(s.incomeSources) ? (s.incomeSources as IncomeSource[]) : [],
       expenses: Array.isArray(s.expenses) ? (s.expenses as Expense[]) : [],
@@ -482,6 +484,7 @@ export const usePlanStore = create<PlanStore>()(
                   balance: data.currentSavings,
                   annualReturn: 0.07,
                   annualContribution: 0,
+                  contributionEndAge: null,
                   employerMatch: 0,
                 }]
               : [],

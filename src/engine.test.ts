@@ -38,7 +38,7 @@ describe('runProjection', () => {
   it('projects growth with no contributions or expenses', () => {
     const scenario = makeScenario({
       accounts: [
-        { id: 'a1', name: 'Savings', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.07, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Savings', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.07, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
     });
     const result = runProjection(scenario);
@@ -52,7 +52,7 @@ describe('runProjection', () => {
   it('models pre-retirement contributions', () => {
     const scenario = makeScenario({
       accounts: [
-        { id: 'a1', name: '401k', type: 'traditional_401k', balance: 0, annualReturn: 0.07, annualContribution: 10000, employerMatch: 5000 },
+        { id: 'a1', name: '401k', type: 'traditional_401k', balance: 0, annualReturn: 0.07, annualContribution: 10000, contributionEndAge: null, employerMatch: 5000 },
       ],
     });
     const result = runProjection(scenario);
@@ -63,6 +63,25 @@ describe('runProjection', () => {
     expect(result.years[0].endingAssets).toBeCloseTo(16050, 0);
   });
 
+  it('stops contributions at contributionEndAge (inclusive)', () => {
+    const scenario = makeScenario({
+      accounts: [
+        // Match rides along: both 10k contribution and 5k match stop at age 45.
+        { id: 'a1', name: '401k', type: 'traditional_401k', balance: 0, annualReturn: 0.07, annualContribution: 10000, employerMatch: 5000, contributionEndAge: 45 },
+      ],
+    });
+    const result = runProjection(scenario);
+    // Ages 40–45 (years 0–5): full 15000/yr, inflation-adjusted.
+    for (let i = 0; i <= 5; i++) {
+      expect(result.years[i].contributions).toBeCloseTo(15000 * Math.pow(1.03, i), 0);
+    }
+    // Age 46 (year 6): one year past the inclusive end — nothing, not even match.
+    expect(result.years[6].contributions).toBe(0);
+    // Growth continues on the accumulated balance after contributions stop.
+    const after = result.years[6].endingAssets;
+    expect(result.years[7].endingAssets).toBeGreaterThan(after);
+  });
+
   it('falls back to assumption returns when annualReturn is unset', () => {
     // An account with annualReturn omitted should grow at preRetirementReturn
     // during accumulation and postRetirementReturn after retirement — so the
@@ -70,7 +89,7 @@ describe('runProjection', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 40, retirementAge: 41, endAge: 43, preRetirementReturn: 0.08, postRetirementReturn: 0.04 },
       accounts: [
-        { id: 'a1', name: 'Unset', type: 'taxable_brokerage', balance: 100000, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Unset', type: 'taxable_brokerage', balance: 100000, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
     });
     const result = runProjection(scenario);
@@ -88,7 +107,7 @@ describe('runProjection', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 40, retirementAge: 41, endAge: 42, preRetirementReturn: 0.08, postRetirementReturn: 0.04 },
       accounts: [
-        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 100000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 100000, annualReturn: 0, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
     });
     const result = runProjection(scenario);
@@ -102,7 +121,7 @@ describe('runProjection', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 40, retirementAge: 41, endAge: 42, preRetirementReturn: 0.08, postRetirementReturn: 0.04 },
       accounts: [
-        { id: 'a1', name: 'Set', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.06, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Set', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.06, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
     });
     const result = runProjection(scenario);
@@ -115,7 +134,7 @@ describe('runProjection', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 64, retirementAge: 65, endAge: 70 },
       accounts: [
-        { id: 'a1', name: '401k', type: 'traditional_401k', balance: 100000, annualReturn: 0.05, annualContribution: 10000, employerMatch: 0 },
+        { id: 'a1', name: '401k', type: 'traditional_401k', balance: 100000, annualReturn: 0.05, annualContribution: 10000, contributionEndAge: null, employerMatch: 0 },
       ],
     });
     const result = runProjection(scenario);
@@ -129,7 +148,7 @@ describe('runProjection', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 65, retirementAge: 65, endAge: 75, inflationRate: 0 },
       accounts: [
-        { id: 'a1', name: '401k', type: 'traditional_401k', balance: 1000000, annualReturn: 0.05, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: '401k', type: 'traditional_401k', balance: 1000000, annualReturn: 0.05, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       expenses: [
         { id: 'e1', name: 'Living', category: 'housing', annualAmount: 60000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
@@ -146,7 +165,7 @@ describe('runProjection', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 67, retirementAge: 67, endAge: 75, inflationRate: 0, socialSecurityCola: 0 },
       accounts: [
-        { id: 'a1', name: 'IRA', type: 'traditional_ira', balance: 500000, annualReturn: 0.05, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'IRA', type: 'traditional_ira', balance: 500000, annualReturn: 0.05, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       incomeSources: [
         { id: 'i1', name: 'SS', type: 'social_security', annualAmount: 30000, startAge: 67, endAge: null, cola: false, taxable: false },
@@ -166,7 +185,7 @@ describe('runProjection', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 65, retirementAge: 65, endAge: 80, inflationRate: 0 },
       accounts: [
-        { id: 'a1', name: 'Savings', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.02, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Savings', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.02, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       expenses: [
         { id: 'e1', name: 'Living', category: 'housing', annualAmount: 50000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
@@ -183,7 +202,7 @@ describe('runProjection', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 50, retirementAge: 65, endAge: 70, inflationRate: 0 },
       accounts: [
-        { id: 'a1', name: 'Savings', type: 'taxable_brokerage', balance: 500000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Savings', type: 'taxable_brokerage', balance: 500000, annualReturn: 0, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       events: [
         { id: 'ev1', name: 'Buy house', type: 'home_purchase', age: 52, cost: 100000, proceeds: 0, ongoingAnnualImpact: 15000, ongoingDurationYears: 15, notes: 'Down payment + mortgage' },
@@ -205,7 +224,7 @@ describe('runProjection', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 50, retirementAge: 65, endAge: 70, inflationRate: 0 },
       accounts: [
-        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 100000, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 100000, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       events: [
         { id: 'ev1', name: 'Sell house', type: 'home_sale', age: 52, cost: 0, proceeds: 300000, ongoingAnnualImpact: 0, ongoingDurationYears: null, notes: '' },
@@ -226,7 +245,7 @@ describe('runProjection', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 62, retirementAge: 65, endAge: 70, inflationRate: 0 },
       accounts: [
-        { id: 'a1', name: 'Savings', type: 'taxable_brokerage', balance: 10000000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Savings', type: 'taxable_brokerage', balance: 10000000, annualReturn: 0, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       expenses: [
         // Expense active in BOTH pre and post retirement
@@ -252,7 +271,7 @@ describe('runProjection', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 60, retirementAge: 67, endAge: 75, inflationRate: 0.03, socialSecurityCola: 0.025 },
       accounts: [
-        { id: 'a1', name: 'Savings', type: 'taxable_brokerage', balance: 10000000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Savings', type: 'taxable_brokerage', balance: 10000000, annualReturn: 0, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       incomeSources: [
         { id: 'i1', name: 'SS', type: 'social_security', annualAmount: 34800, startAge: 67, endAge: null, cola: true, taxable: false },
@@ -282,7 +301,7 @@ describe('runProjection', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 60, retirementAge: 67, endAge: 75, inflationRate: 0.03, socialSecurityCola: 0.03 },
       accounts: [
-        { id: 'a1', name: 'Savings', type: 'taxable_brokerage', balance: 10000000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Savings', type: 'taxable_brokerage', balance: 10000000, annualReturn: 0, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       incomeSources: [
         { id: 'i1', name: 'SS', type: 'social_security', annualAmount: 34800, startAge: 67, endAge: null, cola: true, taxable: false },
@@ -301,7 +320,7 @@ describe('runProjection', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 60, retirementAge: 65, endAge: 75, inflationRate: 0.03 },
       accounts: [
-        { id: 'a1', name: 'Savings', type: 'taxable_brokerage', balance: 10000000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Savings', type: 'taxable_brokerage', balance: 10000000, annualReturn: 0, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       incomeSources: [
         { id: 'i1', name: 'Pension', type: 'pension', annualAmount: 20000, startAge: 65, endAge: null, cola: false, taxable: false },
@@ -322,7 +341,7 @@ describe('runProjection', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 40, retirementAge: 41, endAge: 45, inflationRate: 0.03 },
       accounts: [
-        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 10000000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 10000000, annualReturn: 0, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       expenses: [
         { id: 'e1', name: 'Living', category: 'housing', annualAmount: 50000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
@@ -378,7 +397,7 @@ describe('runMonteCarloProjection', () => {
   it('is fully deterministic given the same seed', () => {
     const scenario = makeScenario({
       accounts: [
-        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 500000, annualReturn: 0.07, annualContribution: 12000, employerMatch: 0 },
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 500000, annualReturn: 0.07, annualContribution: 12000, contributionEndAge: null, employerMatch: 0 },
       ],
     });
     const a = runMonteCarloProjection(scenario, { numRuns: 200, returnStdDev: 0.15, seed: 42 });
@@ -397,7 +416,7 @@ describe('runMonteCarloProjection', () => {
   it('returns a bounded successRate in [0, 1]', () => {
     const scenario = makeScenario({
       accounts: [
-        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.05, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.05, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       expenses: [
         { id: 'e1', name: 'Living', category: 'housing', annualAmount: 60000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
@@ -413,8 +432,8 @@ describe('runMonteCarloProjection', () => {
     const scenario = makeScenario({
       // Realistic early-career plan with steady contributions.
       accounts: [
-        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 250000, annualReturn: 0.07, annualContribution: 24000, employerMatch: 0 },
-        { id: 'a2', name: '401k', type: 'traditional_401k', balance: 400000, annualReturn: 0.07, annualContribution: 23000, employerMatch: 7000 },
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 250000, annualReturn: 0.07, annualContribution: 24000, contributionEndAge: null, employerMatch: 0 },
+        { id: 'a2', name: '401k', type: 'traditional_401k', balance: 400000, annualReturn: 0.07, annualContribution: 23000, contributionEndAge: null, employerMatch: 7000 },
       ],
       expenses: [
         { id: 'e1', name: 'Living', category: 'housing', annualAmount: 60000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
@@ -431,7 +450,7 @@ describe('runMonteCarloProjection', () => {
   it('has a very low success rate when the nest egg is tiny', () => {
     const scenario = makeScenario({
       accounts: [
-        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 10000, annualReturn: 0.02, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 10000, annualReturn: 0.02, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       expenses: [
         { id: 'e1', name: 'Living', category: 'housing', annualAmount: 60000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
@@ -446,7 +465,7 @@ describe('runMonteCarloProjection', () => {
   it('produces monotone percentile paths (P10 ≤ P50 ≤ P90 at every age)', () => {
     const scenario = makeScenario({
       accounts: [
-        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 200000, annualReturn: 0.07, annualContribution: 12000, employerMatch: 0 },
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 200000, annualReturn: 0.07, annualContribution: 12000, contributionEndAge: null, employerMatch: 0 },
       ],
     });
     const mc = runMonteCarloProjection(scenario, { numRuns: 200, returnStdDev: 0.15, seed: 5 });
@@ -459,7 +478,7 @@ describe('runMonteCarloProjection', () => {
   it('returns one percentile path entry per age in the plan', () => {
     const scenario = makeScenario({
       accounts: [
-        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.07, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.07, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
     });
     const mc = runMonteCarloProjection(scenario, { numRuns: 50, returnStdDev: 0.15, seed: 11 });
@@ -474,7 +493,7 @@ describe('runMonteCarloProjection', () => {
     // ALL runs, with successful runs (no depletion) right-censored at plan end.
     const scenario = makeScenario({
       accounts: [
-        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 5000, annualReturn: 0.02, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 5000, annualReturn: 0.02, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       expenses: [
         { id: 'e1', name: 'Living', category: 'housing', annualAmount: 60000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
@@ -492,7 +511,7 @@ describe('runMonteCarloProjection', () => {
   it('exposes trialFinalAssets parallel to depletionAges for histogram drill-down', () => {
     const scenario = makeScenario({
       accounts: [
-        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 200000, annualReturn: 0.07, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 200000, annualReturn: 0.07, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
     });
     const mc = runMonteCarloProjection(scenario, { numRuns: 50, returnStdDev: 0.15, seed: 11 });
@@ -514,7 +533,7 @@ describe('runMonteCarloProjection', () => {
     //   - peak ≥ retirement_assets ≥ final_assets (peak is the high-water mark)
     const scenario = makeScenario({
       accounts: [
-        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 5000, annualReturn: 0.02, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 5000, annualReturn: 0.02, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       expenses: [
         { id: 'e1', name: 'Living', category: 'housing', annualAmount: 60000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
@@ -552,7 +571,7 @@ describe('runProjection property net worth', () => {
   it('reports zero propertyValue when no properties exist', () => {
     const scenario = makeScenario({
       accounts: [
-        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.05, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.05, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
     });
     const result = runProjection(scenario);
@@ -725,7 +744,7 @@ describe('runProjection property net worth', () => {
     };
     const scenario = makeScenario({
       accounts: [
-        { id: 'a1', name: '401k', type: 'traditional_401k', balance: 600000, annualReturn: 0.07, annualContribution: 15000, employerMatch: 5000 },
+        { id: 'a1', name: '401k', type: 'traditional_401k', balance: 600000, annualReturn: 0.07, annualContribution: 15000, contributionEndAge: null, employerMatch: 5000 },
       ],
       properties: [prop],
     });
@@ -763,7 +782,7 @@ describe('runProjection property net worth', () => {
         retirementTaxRate: 0,
       },
       accounts: [
-        { id: 'a1', name: 'IRA', type: 'traditional_ira', balance: 1000000, annualReturn: 0.05, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'IRA', type: 'traditional_ira', balance: 1000000, annualReturn: 0.05, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       incomeSources: [
         { id: 'i1', name: 'SS', type: 'social_security', annualAmount: 60000, startAge: 65, endAge: null, cola: false, taxable: false },
@@ -802,7 +821,7 @@ describe('runProjection property net worth', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 60, retirementAge: 65, endAge: 75, inflationRate: 0.03 },
       accounts: [
-        { id: 'a1', name: 'IRA', type: 'traditional_ira', balance: 100000, annualReturn: 0.05, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'IRA', type: 'traditional_ira', balance: 100000, annualReturn: 0.05, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       expenses: [
         { id: 'e1', name: 'Living', category: 'housing', annualAmount: 50000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
@@ -825,7 +844,7 @@ describe('runProjection property net worth', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 50, retirementAge: 65, endAge: 70, inflationRate: 0 },
       accounts: [
-        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.07, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.07, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       incomeSources: [
         { id: 'i1', name: 'Salary', type: 'salary', annualAmount: 60000, startAge: 50, endAge: 64, cola: false, taxable: false },
@@ -997,7 +1016,7 @@ describe('runProjection mortgage expenses', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 64, retirementAge: 65, endAge: 68, inflationRate: 0.05 },
       accounts: [
-        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 10_000_000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 10_000_000, annualReturn: 0, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       properties: [
         {
@@ -1043,7 +1062,7 @@ describe('runProjection mortgage expenses', () => {
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 40, retirementAge: 40, endAge: 52, inflationRate: 0 },
       accounts: [
-        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 10_000_000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 10_000_000, annualReturn: 0, annualContribution: 0, contributionEndAge: null, employerMatch: 0 },
       ],
       properties: [
         {

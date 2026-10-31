@@ -33,6 +33,7 @@ export function defaultScenario(name = 'Baseline'): Scenario {
         balance: 25000,
         annualReturn: 0.02,
         annualContribution: 0,
+        contributionEndAge: null,
         employerMatch: 0,
       },
       {
@@ -42,6 +43,7 @@ export function defaultScenario(name = 'Baseline'): Scenario {
         balance: 50000,
         annualReturn: 0.07,
         annualContribution: 6000,
+        contributionEndAge: null,
         employerMatch: 0,
       },
       {
@@ -51,6 +53,7 @@ export function defaultScenario(name = 'Baseline'): Scenario {
         balance: 120000,
         annualReturn: 0.07,
         annualContribution: 12000,
+        contributionEndAge: null,
         employerMatch: 4000,
       },
       {
@@ -60,6 +63,7 @@ export function defaultScenario(name = 'Baseline'): Scenario {
         balance: 60000,
         annualReturn: 0.07,
         annualContribution: 7000,
+        contributionEndAge: null,
         employerMatch: 0,
       },
     ],

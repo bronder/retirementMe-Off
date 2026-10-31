@@ -61,10 +61,11 @@ export function exportMarkdown(plan: Plan, results: ProjectionResult[]): string 
     // Accounts
     if (scenario.accounts.length > 0) {
       lines.push('### Accounts');
-      lines.push('| Account | Type | Balance | Return | Contribution | Match |');
-      lines.push('|---------|------|---------|--------|-------------|-------|');
+      lines.push('| Account | Type | Balance | Return | Contribution | Ends | Match |');
+      lines.push('|---------|------|---------|--------|-------------|------|-------|');
       for (const acct of scenario.accounts) {
-        lines.push(`| ${acct.name} | ${prettify(acct.type)} | ${formatCurrency(acct.balance)} | ${acct.annualReturn != null ? formatPercent(acct.annualReturn) : 'plan default'} | ${formatCurrency(acct.annualContribution)} | ${formatCurrency(acct.employerMatch)} |`);
+        const endLabel = acct.contributionEndAge != null ? `age ${acct.contributionEndAge}` : 'retirement';
+        lines.push(`| ${acct.name} | ${prettify(acct.type)} | ${formatCurrency(acct.balance)} | ${acct.annualReturn != null ? formatPercent(acct.annualReturn) : 'plan default'} | ${formatCurrency(acct.annualContribution)} | ${endLabel} | ${formatCurrency(acct.employerMatch)} |`);
       }
       lines.push('');
     }

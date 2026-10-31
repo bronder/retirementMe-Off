@@ -102,7 +102,7 @@ export function ScenarioWizard({ onCreate, onCancel }: ScenarioWizardProps) {
         postRetirementReturn: 0.05,
       },
       accounts: currentSavings > 0
-        ? [{ id: 'a', name: 'Savings', type: 'taxable_brokerage' as const, balance: currentSavings, annualReturn: 0.07, annualContribution: 0, employerMatch: 0 }]
+        ? [{ id: 'a', name: 'Savings', type: 'taxable_brokerage' as const, balance: currentSavings, annualReturn: 0.07, annualContribution: 0, contributionEndAge: null, employerMatch: 0 }]
         : [],
       properties: [],
       incomeSources: [
