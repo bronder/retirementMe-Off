@@ -2,7 +2,7 @@
  *  Extracted from App.tsx so lazily-loaded panels (Overview, Results,
  *  Compare) can import them without dragging App.tsx into their chunks. */
 import {
-  Landmark, CalendarClock, CircleDollarSign, Table2, Calculator, TrendingUp,
+  Landmark, CalendarClock, CircleDollarSign, Table2, Calculator,
   CreditCard, ClipboardList, Clock, Users, Receipt, FileText, Building2,
   BadgeDollarSign, HeartPulse, Pill, BookOpen, GraduationCap, Scale, Lock,
 } from 'lucide-react';
@@ -26,10 +26,9 @@ export const RESOURCE_GROUPS: { label: string; links: { icon: LucideIcon; name: 
     links: [
       { icon: Landmark, name: 'SSA Retirement Estimator', url: 'https://www.ssa.gov/benefits/retirement/estimator.html' },
       { icon: CalendarClock, name: 'SSA Benefit Calculator', url: 'https://www.ssa.gov/OACT/quickcalc/' },
-      { icon: CircleDollarSign, name: 'Fidelity Retirement Score', url: 'https://www.fidelity.com/calculators-tools/retirement-score' },
-      { icon: Table2, name: 'Vanguard Retirement Nest Egg', url: 'https://retirementplans.vanguard.com/VGApp/pe/pubeducation/calculators/RetirementNestEggCalc.jsf' },
-      { icon: Calculator, name: 'AARP Retirement Calculator', url: 'https://www.aarp.org/work/retirement-calculator/' },
-      { icon: TrendingUp, name: 'Bankrate 401k Calculator', url: 'https://www.bankrate.com/retirement/401-k-calculator/' },
+      { icon: CircleDollarSign, name: 'Fidelity Retirement Income Calculator', url: 'https://www.fidelity.com/calculators-tools/retirement-income-calculator2_1/' },
+      { icon: Table2, name: 'Vanguard Retirement Income Calc', url: 'https://investor.vanguard.com/tools-calculators/retirement-income-calculator' },
+      { icon: Calculator, name: 'AARP Retirement Calculator', url: 'https://www.aarp.org/money/retirement/retirement-calculator' },
     ],
   },
   {
@@ -44,10 +43,10 @@ export const RESOURCE_GROUPS: { label: string; links: { icon: LucideIcon; name: 
   {
     label: 'Taxes',
     links: [
-      { icon: Receipt, name: 'IRS Tax Bracket Calculator', url: 'https://www.irs.gov/help/ita/whats-my-tax-bracket' },
+      { icon: Receipt, name: 'IRS Tax Rates & Brackets', url: 'https://www.irs.gov/filing/federal-income-tax-rates-and-brackets' },
       { icon: FileText, name: 'IRS Pub 590-B (IRA Withdrawals)', url: 'https://www.irs.gov/publications/p590b' },
       { icon: Building2, name: 'IRS Pub 560 (401k Limits)', url: 'https://www.irs.gov/publications/p560' },
-      { icon: BadgeDollarSign, name: 'RMD Calculator (IRS)', url: 'https://www.irs.gov/retirement-plans/required-minimum-distribution-calculators' },
+      { icon: BadgeDollarSign, name: 'RMD Rules (IRS FAQs)', url: 'https://www.irs.gov/retirement-plans/retirement-plan-and-ira-required-minimum-distributions-faqs' },
     ],
   },
   {
