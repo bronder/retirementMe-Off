@@ -2923,6 +2923,98 @@ function IncomeAddMenu({ scenario, store, label, defaultPhase, compact }: {
   );
 }
 
+/**
+ * Gantt-style income timeline for the Income panel: one lane per source
+ * spanning its active ages, with a retirement tick. Shows the story the
+ * summary numbers can't — e.g. salary ends at 57, savings-funded gap, then
+ * Social Security resumes at 62. Pure display: amounts are the entered
+ * today's-dollars values, matching every other panel total.
+ */
+function IncomeTimeline({ scenario }: {
+  scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
+}) {
+  const { currentAge, retirementAge, endAge } = scenario.assumptions;
+  // Mirror the engine's horizon: spouse planning can extend the plan.
+  const planEnd = scenario.assumptions.spouse?.enabled
+    ? Math.max(endAge, scenario.assumptions.spouse.endAge)
+    : endAge;
+  const totalYears = planEnd - currentAge;
+  if (scenario.incomeSources.length === 0 || totalYears <= 0) return null;
+
+  // Positions are fractions of the track's width; ages are inclusive on
+  // both ends (engine pays income for age <= endAge), so a span covers
+  // end - start + 1 year-cells, clamped to the track.
+  const leftPct = (age: number) =>
+    `${Math.max(0, Math.min(100, ((age - currentAge) / totalYears) * 100))}%`;
+  const spanPct = (start: number, end: number) => {
+    const left = Math.max(0, start - currentAge) / totalYears;
+    const width = (Math.min(end, planEnd) - Math.max(start, currentAge) + 1) / totalYears;
+    return `${Math.max(0, Math.min(1 - left, width)) * 100}%`;
+  };
+
+  const describe = (s: typeof scenario.incomeSources[0]) =>
+    `${s.name}: ${s.startAge} to ${s.endAge ?? 'end of plan'}`;
+
+  // Chronological lane order — a timeline reads top-down like a schedule.
+  // Lifetime sources (endAge null) sort last within the same start age.
+  const END_OF_PLAN = Number.MAX_SAFE_INTEGER;
+  const sources = [...scenario.incomeSources].sort((a, b) =>
+    a.startAge - b.startAge || (a.endAge ?? END_OF_PLAN) - (b.endAge ?? END_OF_PLAN)
+  );
+
+  return (
+    <div
+      className="income-timeline"
+      role="img"
+      aria-label={`Income timeline. ${sources.map(describe).join('. ')}. Retirement at age ${retirementAge}.`}
+    >
+      <div className="income-timeline-head">
+        <span className="income-timeline-title">Timeline</span>
+        <span className="income-timeline-legend">
+          <span className="income-timeline-key income-timeline-key-pre" aria-hidden="true" /> Working years
+          <span className="income-timeline-key income-timeline-key-post" aria-hidden="true" /> Retirement
+        </span>
+      </div>
+      <div className="income-timeline-grid">
+        <div className="income-timeline-labels">
+          {sources.map((s) => (
+            <span key={s.id} className="income-timeline-name" title={s.name}>{s.name}</span>
+          ))}
+        </div>
+        <div className="income-timeline-tracks">
+          {sources.map((s) => {
+            const phase = formatTiming(s.startAge, s.endAge, retirementAge).phase;
+            const wide = (Math.min(s.endAge ?? planEnd, planEnd) - Math.max(s.startAge, currentAge) + 1) / totalYears >= 0.18;
+            return (
+              <div key={s.id} className="income-timeline-row">
+                <div
+                  className={`income-timeline-bar income-timeline-bar-${phase}`}
+                  style={{ left: leftPct(s.startAge), width: spanPct(s.startAge, s.endAge ?? planEnd) }}
+                  title={`${describe(s)} · ${formatCurrency(s.annualAmount / 12, { compact: true })}/mo`}
+                >
+                  {wide && (
+                    <span className="income-timeline-amount">
+                      {formatCurrency(s.annualAmount / 12, { compact: true })}/mo
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          <div className="income-timeline-retire" style={{ left: leftPct(retirementAge) }}>
+            <span className="income-timeline-retire-label">Retire {retirementAge}</span>
+          </div>
+          <div className="income-timeline-axis" aria-hidden="true">
+            <span>{currentAge}</span>
+            <span className="income-timeline-axis-retire" style={{ left: leftPct(retirementAge) }}>{retirementAge}</span>
+            <span>{planEnd}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function IncomePanel({ scenario, store }: {
   scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
   store: ReturnType<typeof usePlanStore.getState>;
@@ -2982,6 +3074,8 @@ function IncomePanel({ scenario, store }: {
           </div>
         )}
       </div>
+
+      <IncomeTimeline scenario={scenario} />
 
       {scenario.incomeSources.length === 0 ? (
         <p className="muted" style={{ padding: '8px 0' }}>No income sources added yet. Click "Add Income" to start tracking salary, Social Security, pensions, and more.</p>
