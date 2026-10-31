@@ -3,10 +3,50 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>retirementMe-Off</title>
+    <title>retirementMe-Off — Private Browser-Based Retirement Planner</title>
+    <meta
+      name="description"
+      content="Project retirement savings, withdrawals, taxes and Monte Carlo odds year by year. Free, no account — your data never leaves your browser."
+    />
+    <link rel="canonical" href="https://retirement.scottbronder.com/" />
+
+    <!-- Icons + browser chrome -->
+    <link rel="icon" type="image/png" sizes="64x64" href="./images/favicon.png" />
+    <link rel="apple-touch-icon" href="./images/apple-touch-icon.png" />
+    <meta name="theme-color" content="#e8590c" />
+
+    <!-- Open Graph (link previews) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="retirementMe-Off" />
+    <meta property="og:title" content="retirementMe-Off — Private Browser-Based Retirement Planner" />
+    <meta
+      property="og:description"
+      content="Project retirement savings, withdrawals, taxes and Monte Carlo odds year by year. Free, no account — your data never leaves your browser."
+    />
+    <meta property="og:url" content="https://retirement.scottbronder.com/" />
+    <meta property="og:image" content="https://retirement.scottbronder.com/images/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+
+    <!-- Twitter/X card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="retirementMe-Off — Private Browser-Based Retirement Planner" />
+    <meta
+      name="twitter:description"
+      content="Project retirement savings, withdrawals, taxes and Monte Carlo odds year by year. Free, no account — your data never leaves your browser."
+    />
+    <meta name="twitter:image" content="https://retirement.scottbronder.com/images/og-image.jpg" />
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <p>
+        retirementMe-Off is a free, privacy-first retirement planner that runs entirely in
+        your browser. It projects savings growth, retirement withdrawals, taxes, Social
+        Security and Monte Carlo success rates year by year across multiple what-if
+        scenarios — with no account and no tracking. Please enable JavaScript to use it.
+      </p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
