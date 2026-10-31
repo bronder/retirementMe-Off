@@ -1,4 +1,5 @@
 import { useEditableNumber } from '../hooks/useEditableNumber';
+import { useFieldControlId } from './FieldGroup';
 
 /** Percent input that stores values in the 0..1 range but displays them
  *  in the 0..100 range (e.g. 0.045 → "4.50%"). The toInput/fromInput pair
@@ -20,10 +21,12 @@ export function PctInputEnhanced({ value, onChange, min, max }: {
     max,
     formatValue: (v) => `${(v * 100).toFixed(2)}%`,
   });
+  const id = useFieldControlId();
   return (
     <>
       <div className="input-wrapper">
         <input
+          id={id}
           type="number"
           value={display}
           step={0.1}

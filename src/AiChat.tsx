@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import {
   Bot,
   Pin,
@@ -176,7 +176,17 @@ export function AiChat() {
     }
   }, [aiProvider]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Stick-to-bottom autoscroll: only follow new content while the user is
+  // already at (or near) the bottom. Forcing scrollIntoView on every stream
+  // chunk yanked the view back down whenever the user scrolled up to re-read
+  // an earlier answer.
+  const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
+    const el = messagesScrollRef.current;
+    if (el) {
+      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+      if (!nearBottom) return;
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
@@ -605,7 +615,7 @@ export function AiChat() {
             </div>
           )}
 
-          <div className="ai-chat-messages">
+          <div className="ai-chat-messages" ref={messagesScrollRef} role="log" aria-live="polite" aria-label="Conversation with AI assistant">
 
             {messages.length === 0 && !showSettings && (
               <div className="ai-chat-welcome">
@@ -637,7 +647,7 @@ export function AiChat() {
             )}
 
             {messages.map((msg, i) => (
-              <div key={i} className={`ai-chat-msg ai-chat-msg-${msg.role}`}>
+              <div key={`${msg.timestamp}-${i}`} className={`ai-chat-msg ai-chat-msg-${msg.role}`}>
                 <div className="ai-chat-msg-content">
                   <FormattedContent text={msg.content} />
                 </div>
@@ -712,6 +722,7 @@ export function AiChat() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={hasApiKey ? 'Ask about your plan...' : 'Set API key in settings ⚙️'}
+              aria-label="Message the AI assistant"
               disabled={loading || !hasApiKey}
               rows={1}
               className="ai-chat-textarea"
@@ -737,7 +748,11 @@ export function AiChat() {
  * Handles: **bold**, headings (###, ##, #), bullet lists, numbered lists,
  * and paragraphs. No external dependencies.
  */
-function FormattedContent({ text }: { text: string }) {
+/** Memoized: history messages' markdown only re-parses when their own text
+ *  changes — without this, every streamed chunk re-parsed the whole
+ *  conversation (the text prop of old messages never changes, but their
+ *  parent re-renders on each appendChatMessage). */
+const FormattedContent = memo(function FormattedContent({ text }: { text: string }) {
   const lines = text.split('\n');
   const elements: React.ReactNode[] = [];
   let listItems: string[] = [];
@@ -804,7 +819,7 @@ function FormattedContent({ text }: { text: string }) {
   flushList();
 
   return <>{elements}</>;
-}
+});
 
 /** Render inline markdown: **bold** */
 function renderInline(text: string): React.ReactNode {

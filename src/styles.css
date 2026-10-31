@@ -348,6 +348,16 @@ body {
   display: block;
 }
 
+/* The logo artwork is dark gray text on transparency. On dark-background
+   themes it would vanish; the artwork is grayscale, so inverting it yields
+   clean light text. */
+[data-theme='dark'] .app-logo,
+[data-theme='nord'] .app-logo,
+[data-theme='warm-gray'] .app-logo,
+[data-theme='dracula'] .app-logo {
+  filter: invert(1);
+}
+
 
 .header-actions {
   display: flex;

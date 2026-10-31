@@ -1,4 +1,5 @@
 import { useEditableNumber } from '../hooks/useEditableNumber';
+import { useFieldControlId } from './FieldGroup';
 
 /** Number input with a unit suffix (e.g. "yrs") and bound clamping.
  *  Snap-back notice ("Restored to 65 yrs" / "Maximum is 100 yrs") is
@@ -17,10 +18,12 @@ export function AgeInput({ value, onChange, unit = 'yrs', min, max }: {
     max,
     formatValue: (v) => `${v} ${unit}`,
   });
+  const id = useFieldControlId();
   return (
     <>
       <div className="input-wrapper">
         <input
+          id={id}
           type="number"
           value={display}
           min={min}

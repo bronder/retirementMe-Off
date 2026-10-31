@@ -44,9 +44,18 @@ export function useEditableNumber({
   const valueRef = useRef(value);
   useEffect(() => { valueRef.current = value; }, [value]);
 
-  // If the store value changes externally (scenario switch, undo), drop the
-  // draft so the field reflects the new value.
-  useEffect(() => { setDraft(null); }, [value]);
+  // The last value THIS hook committed. The draft should only be dropped when
+  // `value` changes EXTERNALLY (scenario switch, undo). Clearing it on our own
+  // commit re-formatted the field mid-keystroke: typing "5" instantly became
+  // "5.00", so appending "." produced "5.00." — unparseable — and decimals
+  // could never be typed. Keeping the user's raw draft until blur fixes that.
+  const lastCommittedRef = useRef(value);
+  useEffect(() => {
+    if (value !== lastCommittedRef.current) {
+      lastCommittedRef.current = value;
+      setDraft(null);
+    }
+  }, [value]);
 
   // Auto-dismiss the notice after a short window. Re-armed on every notice
   // change (only one notice is visible at a time, so this is safe).
@@ -63,7 +72,16 @@ export function useEditableNumber({
     setDraft(raw);
     setNotice(null);
     const v = parseNum(raw);
-    if (!Number.isNaN(v)) onCommit(fromInput(v));
+    if (!Number.isNaN(v)) {
+      // Clamp BEFORE committing so out-of-bounds values never reach the store
+      // mid-edit (bounds used to be enforced on blur only). The displayed
+      // draft keeps the user's raw text, so the clamp is invisible until blur.
+      let n = fromInput(v);
+      if (min !== undefined && n < min) n = min;
+      if (max !== undefined && n > max) n = max;
+      lastCommittedRef.current = n;
+      onCommit(n);
+    }
   };
 
   const handleBlur = () => {
