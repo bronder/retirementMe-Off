@@ -2639,6 +2639,36 @@ function formatTiming(startAge: number, endAge: number | null, retirementAge: nu
   return { text: `Age ${startAge} → ${endAge}`, phase };
 }
 
+/**
+ * Patch for an income row whose type just changed. The Pre/Retirement grouping
+ * is driven by start/end ages, so keeping the OLD type's ages strands the card
+ * — a Salary ending at 64 turned into Social Security stayed under
+ * Pre-Retirement. When the current timing's phase disagrees with the new
+ * type's typical phase, re-apply that type's template timing (the same
+ * defaults the "+ Add Income" picker uses) so the card lands where adding
+ * that type fresh would have put it. When the phases already agree (including
+ * 'both'), the user's custom ages are preserved.
+ */
+function incomeTypeChangePatch(
+  startAge: number,
+  endAge: number | null,
+  newType: IncomeType,
+  retirementAge: number,
+): { type: IncomeType; startAge?: number; endAge?: number | null } {
+  const patch: { type: IncomeType; startAge?: number; endAge?: number | null } = { type: newType };
+  const template = COMMON_INCOME.find((t) => t.type === newType && !t.postRetirement);
+  if (!template) return patch;
+  const currentPhase = formatTiming(startAge, endAge, retirementAge).phase;
+  const templatePhase = formatTiming(template.startAge, template.endAge, retirementAge).phase;
+  const incompatible =
+    currentPhase !== templatePhase && currentPhase !== 'both' && templatePhase !== 'both';
+  if (incompatible) {
+    patch.startAge = template.startAge;
+    patch.endAge = template.endAge;
+  }
+  return patch;
+}
+
 function IncomeRow({ inc, scenario, store }: {
   inc: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]['incomeSources'][0];
   scenario: ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0];
@@ -2662,7 +2692,18 @@ function IncomeRow({ inc, scenario, store }: {
         <select
           className="table-select income-row-type"
           value={inc.type}
-          onChange={(e) => store.updateIncome(scenario.id, inc.id, { type: e.target.value as IncomeType })}
+          onChange={(e) =>
+            store.updateIncome(
+              scenario.id,
+              inc.id,
+              incomeTypeChangePatch(
+                inc.startAge,
+                inc.endAge,
+                e.target.value as IncomeType,
+                scenario.assumptions.retirementAge,
+              ),
+            )
+          }
           aria-label="Income type"
         >
           {INCOME_TYPES.map((t) => <option key={t} value={t}>{prettify(t)}</option>)}
