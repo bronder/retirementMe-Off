@@ -25,7 +25,7 @@ export function exportMarkdown(plan: Plan, results: ProjectionResult[]): string 
   for (const r of results) {
     const scenario = plan.scenarios.find((s) => s.id === r.scenarioId);
     if (!scenario) continue;
-    const readiness = getReadinessSummary(r, scenario.assumptions.retirementAge, scenario.assumptions.safeWithdrawalRate);
+    const readiness = getReadinessSummary(r, scenario);
     lines.push(
       `| ${r.scenarioName} | ${r.success ? '✅ Sustainable' : '❌ Depleted'} | ${formatCurrency(readiness.nestEggAtRetirementReal)} | ${formatCurrency(r.finalAssetsReal)} | ${formatAge(r.depletionAge)} |`,
     );
@@ -37,7 +37,7 @@ export function exportMarkdown(plan: Plan, results: ProjectionResult[]): string 
     const scenario = plan.scenarios.find((s) => s.id === r.scenarioId);
     if (!scenario) continue;
     const a = scenario.assumptions;
-    const readiness = getReadinessSummary(r, a.retirementAge, a.safeWithdrawalRate);
+    const readiness = getReadinessSummary(r, { assumptions: a });
 
     lines.push(`## ${r.scenarioName}`);
     lines.push('');
@@ -64,7 +64,7 @@ export function exportMarkdown(plan: Plan, results: ProjectionResult[]): string 
       lines.push('| Account | Type | Balance | Return | Contribution | Match |');
       lines.push('|---------|------|---------|--------|-------------|-------|');
       for (const acct of scenario.accounts) {
-        lines.push(`| ${acct.name} | ${prettify(acct.type)} | ${formatCurrency(acct.balance)} | ${formatPercent(acct.annualReturn)} | ${formatCurrency(acct.annualContribution)} | ${formatCurrency(acct.employerMatch)} |`);
+        lines.push(`| ${acct.name} | ${prettify(acct.type)} | ${formatCurrency(acct.balance)} | ${acct.annualReturn != null ? formatPercent(acct.annualReturn) : 'plan default'} | ${formatCurrency(acct.annualContribution)} | ${formatCurrency(acct.employerMatch)} |`);
       }
       lines.push('');
     }

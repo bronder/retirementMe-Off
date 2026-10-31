@@ -35,8 +35,10 @@ export interface Account {
   type: AccountType;
   /** Current balance, in today's dollars. */
   balance: number;
-  /** Assumed long-term annual rate of return, as a decimal (0.07 = 7%). */
-  annualReturn: number;
+  /** Assumed long-term annual rate of return, as a decimal (0.07 = 7%).
+   *  Omitted (undefined) = use the plan's phase fallback return
+   *  (pre-/post-retirement). An explicit 0 means genuinely 0% (e.g. cash). */
+  annualReturn?: number;
   /** Current annual contribution (today's dollars). 0 in retirement. */
   annualContribution: number;
   /** Employer match (annual), if applicable (today's dollars). */
@@ -196,7 +198,11 @@ export interface Assumptions {
   /** Social Security COLA (annual, decimal). Drives the growth of COLA-flagged
    *  income (e.g. Social Security) independently of general inflation. */
   socialSecurityCola: number;
-  /** Effective tax rate during retirement (decimal). Applied to taxable + tax-deferred withdrawals. */
+  /** Effective tax rate during retirement (decimal). Applied as a gross-up
+   *  when withdrawing from tax-DEFERRED accounts (traditional 401(k)/IRA,
+   *  some pensions) — those dollars were never taxed. Taxable brokerage
+   *  withdrawals are taken at face value (cost-basis simplification), and
+   *  Roth withdrawals are tax-free. */
   retirementTaxRate: number;
   /** Safe withdrawal rate (decimal). 0.04 = 4% rule. Used for guidance indicators. */
   safeWithdrawalRate: number;

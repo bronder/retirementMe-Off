@@ -10,7 +10,7 @@ import {
 import { Dices, ListChecks, Table2, Wallet, LayoutDashboard, Wand2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { usePlanStore } from '../store';
-import { runProjection, getReadinessSummary, mortgagePaymentAtAge } from '../engine';
+import { runProjection, getReadinessSummary, mortgagePaymentAtAge, incomeNominalAtAge } from '../engine';
 import { formatCurrency, formatPercent, formatAge, prettify } from '../format';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { useResponsiveChartHeight } from '../hooks/useResponsiveChartHeight';
@@ -403,21 +403,13 @@ function nextExpenseHint(scenario: NonNullable<ReturnType<typeof usePlanStore.ge
 /** Compute per-source income breakdown for a given age */
 function getIncomeBreakdown(scenario: NonNullable<ReturnType<typeof usePlanStore.getState>['plan']['scenarios'][0]>, age: number) {
   const a = scenario.assumptions;
-  const yearsFromNow = age - a.currentAge;
-  const inflationFactor = Math.pow(1 + a.inflationRate, yearsFromNow);
   const items: { name: string; amount: number; type: string }[] = [];
 
   for (const inc of scenario.incomeSources) {
     if (age >= inc.startAge && (inc.endAge === null || age <= inc.endAge)) {
-      let nominalGross: number;
-      if (inc.cola) {
-        // COLA income grows with inflation — inflationFactor alone captures this.
-        nominalGross = inc.annualAmount * inflationFactor;
-      } else {
-        // Non-COLA income: nominal amount is fixed at startAge (inflated from today's $).
-        const startAgeInflation = Math.pow(1 + a.inflationRate, inc.startAge - a.currentAge);
-        nominalGross = inc.annualAmount * startAgeInflation;
-      }
+      // Shared with the engine so the breakdown can never drift from the
+      // projection (COLA income grows at SS COLA, not general inflation).
+      const nominalGross = incomeNominalAtAge(inc, age, a);
       const nominalNet = inc.taxable ? nominalGross * (1 - a.retirementTaxRate) : nominalGross;
       items.push({ name: inc.name, amount: nominalNet, type: inc.type });
     }

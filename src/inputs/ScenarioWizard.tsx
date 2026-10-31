@@ -5,7 +5,7 @@ import { formatCurrency, formatPercent } from '../format';
 import type { WizardScenarioData } from '../store';
 import { useEditableNumber } from '../hooks/useEditableNumber';
 import { AgeInput } from './AgeInput';
-import { FieldGroup } from './FieldGroup';
+import { FieldGroup, useFieldControlId } from './FieldGroup';
 
 /**
  * Scenario wizard — a 3-step guided creator that builds a personalized scenario
@@ -115,7 +115,7 @@ export function ScenarioWizard({ onCreate, onCancel }: ScenarioWizardProps) {
       events: [],
     };
     const result = runProjection(scenario);
-    const readiness = getReadinessSummary(result, retirementAge, 0.04);
+    const readiness = getReadinessSummary(result, scenario);
     return { result, readiness };
   }, [name, currentAge, retirementAge, endAge, currentSavings, annualSalary, lifestyle]);
 
@@ -157,11 +157,16 @@ export function ScenarioWizard({ onCreate, onCancel }: ScenarioWizardProps) {
           <button className="wizard-close" onClick={onCancel} aria-label="Close wizard">✕</button>
         </div>
 
-        <div className="wizard-progress" aria-hidden="true">
-          {Array.from({ length: TOTAL_STEPS }, (_, i) => (
-            <span key={i} className={`wizard-progress-dot${i + 1 <= step ? ' active' : ''}`} />
-          ))}
-          <span className="wizard-progress-label">Step {step} of {TOTAL_STEPS}</span>
+        <div className="wizard-progress">
+          {/* Dots are decorative; the text label carries the state and is
+              announced ("Step 2 of 3" + aria-current). It used to sit inside
+              aria-hidden="true", hiding progress from screen readers. */}
+          <span className="wizard-progress-dots" aria-hidden="true">
+            {Array.from({ length: TOTAL_STEPS }, (_, i) => (
+              <span key={i} className={`wizard-progress-dot${i + 1 <= step ? ' active' : ''}`} />
+            ))}
+          </span>
+          <span className="wizard-progress-label" aria-current="step">Step {step} of {TOTAL_STEPS}</span>
         </div>
 
         <div className="wizard-body">
@@ -252,6 +257,13 @@ export function ScenarioWizard({ onCreate, onCancel }: ScenarioWizardProps) {
         )}
 
         <div className="wizard-footer">
+          {/* Explain WHY the primary action is disabled (step 3 needs an
+              income) — a silently disabled "Create plan" reads as a bug. */}
+          {!canAdvance && step === 3 && (
+            <span className="wizard-blocked-hint muted" role="status">
+              Enter an annual salary above $0 to create the plan.
+            </span>
+          )}
           <button className="btn btn-sm" onClick={onCancel}>Cancel</button>
           <div className="wizard-footer-right">
             {step > 1 && (
@@ -283,11 +295,13 @@ function CurrencyInput({ value, onChange }: { value: number; onChange: (v: numbe
     min: 0,
     formatValue: (v) => formatCurrency(v),
   });
+  const id = useFieldControlId();
   return (
     <>
       <div className="input-wrapper">
         <span className="unit-prefix" aria-hidden="true">$</span>
         <input
+          id={id}
           type="number"
           value={display}
           min={0}

@@ -63,14 +63,14 @@ describe('runProjection', () => {
     expect(result.years[0].endingAssets).toBeCloseTo(16050, 0);
   });
 
-  it('falls back to assumption returns when an account has no annualReturn (0)', () => {
-    // An account with annualReturn === 0 (the "unconfigured" sentinel) should
-    // grow at preRetirementReturn during accumulation and postRetirementReturn
-    // after retirement — so the assumption fields actually drive the projection.
+  it('falls back to assumption returns when annualReturn is unset', () => {
+    // An account with annualReturn omitted should grow at preRetirementReturn
+    // during accumulation and postRetirementReturn after retirement — so the
+    // assumption fields actually drive the projection.
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 40, retirementAge: 41, endAge: 43, preRetirementReturn: 0.08, postRetirementReturn: 0.04 },
       accounts: [
-        { id: 'a1', name: 'Unset', type: 'taxable_brokerage', balance: 100000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Unset', type: 'taxable_brokerage', balance: 100000, annualContribution: 0, employerMatch: 0 },
       ],
     });
     const result = runProjection(scenario);
@@ -79,6 +79,21 @@ describe('runProjection', () => {
     // Age 41 (retirement year): grows at the post-retirement rate of 4%.
     // beginningAssets = 108000, growth = 108000 * 0.04 = 4320.
     expect(result.years[1].growth).toBeCloseTo(108000 * 0.04, -1);
+  });
+
+  it('honors an explicit 0% return (cash accounts)', () => {
+    // Regression: 0 used to be the "unconfigured" sentinel, so a deliberate
+    // 0% return silently grew at the 7% assumption fallback. 0 is now a real
+    // value; only an omitted annualReturn means "use the plan default".
+    const scenario = makeScenario({
+      assumptions: { ...makeScenario().assumptions, currentAge: 40, retirementAge: 41, endAge: 42, preRetirementReturn: 0.08, postRetirementReturn: 0.04 },
+      accounts: [
+        { id: 'a1', name: 'Cash', type: 'checking_savings', balance: 100000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+      ],
+    });
+    const result = runProjection(scenario);
+    expect(result.years[0].growth).toBe(0);
+    expect(result.years[1].growth).toBe(0);
   });
 
   it('uses the account explicit return over the assumption fallback', () => {
@@ -185,12 +200,12 @@ describe('runProjection', () => {
 
   it('deposits event proceeds into accounts (home sale grows savings)', () => {
     // A $300k home-sale windfall at age 52 (pre-retirement) should be deposited
-    // into the taxable brokerage account, not vanish. (annualReturn: 0 means
-    // "unconfigured" → grows at the preRetirementReturn fallback, here 7%.)
+    // into the taxable brokerage account, not vanish. (annualReturn omitted →
+    // grows at the preRetirementReturn fallback, here 7%.)
     const scenario = makeScenario({
       assumptions: { ...makeScenario().assumptions, currentAge: 50, retirementAge: 65, endAge: 70, inflationRate: 0 },
       accounts: [
-        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 100000, annualReturn: 0, annualContribution: 0, employerMatch: 0 },
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 100000, annualContribution: 0, employerMatch: 0 },
       ],
       events: [
         { id: 'ev1', name: 'Sell house', type: 'home_sale', age: 52, cost: 0, proceeds: 300000, ongoingAnnualImpact: 0, ongoingDurationYears: null, notes: '' },
@@ -761,7 +776,7 @@ describe('runProjection property net worth', () => {
     // Net need = 105000 − 60000 income = 45000; safe amount = 4% × $1M = 40000.
     // 45000 > 40000 → NOT on track — even though 45000 ≤ 40000 + 60000 was
     // true under the old (buggy) check.
-    const summary = getReadinessSummary(result, 65, base.assumptions.safeWithdrawalRate);
+    const summary = getReadinessSummary(result, base);
     expect(summary.firstYearWithdrawal).toBeCloseTo(45000, 0);
     expect(summary.safeWithdrawalAmount).toBeCloseTo(40000, 0);
     expect(summary.onTrack).toBe(false);
@@ -775,13 +790,87 @@ describe('runProjection property net worth', () => {
         { id: 'e1', name: 'Living', category: 'housing', annualAmount: 35000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
       ],
     });
-    const ok = getReadinessSummary(
-      runProjection(funded),
-      65,
-      funded.assumptions.safeWithdrawalRate,
-    );
+    const ok = getReadinessSummary(runProjection(funded), funded);
     expect(ok.firstYearWithdrawal).toBeCloseTo(35000, 0);
     expect(ok.onTrack).toBe(true);
+  });
+
+  it('reports the real nest egg at the same moment as the nominal one', () => {
+    // The nominal figure is the START of the retirement year; the real figure
+    // used the year row's end-of-year realAssets, understating it by the
+    // first year's spending. Both must describe the same moment.
+    const scenario = makeScenario({
+      assumptions: { ...makeScenario().assumptions, currentAge: 60, retirementAge: 65, endAge: 75, inflationRate: 0.03 },
+      accounts: [
+        { id: 'a1', name: 'IRA', type: 'traditional_ira', balance: 100000, annualReturn: 0.05, annualContribution: 0, employerMatch: 0 },
+      ],
+      expenses: [
+        { id: 'e1', name: 'Living', category: 'housing', annualAmount: 50000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
+      ],
+    });
+    const result = runProjection(scenario);
+    const s = getReadinessSummary(result, scenario);
+    const retYear = result.years.find((y) => y.age === 65)!;
+    const factor = Math.pow(1.03, 5); // inflation at retirement age 65
+    expect(s.nestEggAtRetirement).toBeCloseTo(100000 * Math.pow(1.05, 5), -1);
+    expect(s.nestEggAtRetirementReal).toBeCloseTo(retYear.beginningAssets / factor, -1);
+    // Same-moment proof: strictly larger than the old end-of-year figure.
+    expect(s.nestEggAtRetirementReal).toBeGreaterThan(retYear.realAssets);
+  });
+
+  it('counts mortgage payments and property tax/insurance while still working', () => {
+    // Pre-retirement housing costs reduce the salary surplus that gets
+    // auto-deposited. Regression: they were ignored until retirement, which
+    // overstated the nest egg for homeowners.
+    const scenario = makeScenario({
+      assumptions: { ...makeScenario().assumptions, currentAge: 50, retirementAge: 65, endAge: 70, inflationRate: 0 },
+      accounts: [
+        { id: 'a1', name: 'Brokerage', type: 'taxable_brokerage', balance: 100000, annualReturn: 0.07, annualContribution: 0, employerMatch: 0 },
+      ],
+      incomeSources: [
+        { id: 'i1', name: 'Salary', type: 'salary', annualAmount: 60000, startAge: 50, endAge: 64, cola: false, taxable: false },
+      ],
+      properties: [
+        {
+          id: 'p1', name: 'Home', type: 'primary_residence', currentValue: 400000,
+          mortgageBalance: 100000, mortgagePayment: 12000, annualAppreciation: 0,
+          annualPropertyTax: 6000, annualInsurance: 1800,
+        },
+      ],
+      expenses: [
+        // Linked rows exactly as the store creates them (postRetirement-only
+        // flags; the engine now counts them while working too).
+        { id: 't1', name: 'Home — Property Tax', category: 'housing', annualAmount: 6000, preRetirement: false, postRetirement: true, startAge: null, endAge: null, _propertyId: 'p1:tax' },
+        { id: 't2', name: 'Home — Insurance', category: 'insurance', annualAmount: 1800, preRetirement: false, postRetirement: true, startAge: null, endAge: null, _propertyId: 'p1:insurance' },
+      ],
+    });
+    const result = runProjection(scenario);
+    const working = result.years.find((y) => y.age === 50)!;
+    // Mortgage payment (12k, engine-computed) + tax (6k) + insurance (1.8k).
+    expect(working.expenses).toBeCloseTo(12000 + 6000 + 1800, -1);
+    // Surplus deposited = salary − housing costs, not the full salary.
+    expect(working.deposits).toBeCloseTo(60000 - 19800, -1);
+  });
+
+  it('keeps an already-in-payment income at its entered value instead of deflating it', () => {
+    // Amounts are entered in today's dollars. An income whose startAge is in
+    // the past is already being paid its entered amount today — the old
+    // startAge-inflation branch deflated it back below today's dollars
+    // (forever, for fixed income).
+    const scenario = makeScenario({
+      assumptions: { ...makeScenario().assumptions, currentAge: 60, retirementAge: 65, endAge: 75, inflationRate: 0.03, socialSecurityCola: 0.02 },
+      incomeSources: [
+        { id: 'i1', name: 'SS', type: 'social_security', annualAmount: 30000, startAge: 58, endAge: null, cola: true, taxable: false },
+        { id: 'i2', name: 'Pension', type: 'pension', annualAmount: 12000, startAge: 55, endAge: null, cola: false, taxable: false },
+      ],
+    });
+    const result = runProjection(scenario);
+    const now = result.years.find((y) => y.age === 60)!;
+    // Today: exactly the entered amounts (not 30000 × 1.03^(58−60) < 30000).
+    expect(now.income).toBeCloseTo(30000 + 12000, 0);
+    // COLA income grows from TODAY at its own COLA rate; fixed income stays.
+    const next = result.years.find((y) => y.age === 61)!;
+    expect(next.income).toBeCloseTo(30000 * 1.02 + 12000, 0);
   });
 });
 

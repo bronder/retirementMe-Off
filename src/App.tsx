@@ -106,7 +106,7 @@ import { projectScenario } from './projectionCache';
 import { Glyph, RESOURCE_GROUPS, ContextualResources } from './ui/shared';
 import { ACCOUNT_TAX_TREATMENT } from './types';
 import type { AccountType, IncomeType, ExpenseCategory, EventType, PropertyType, Property, LifeEvent } from './types';
-import { formatCurrency, formatPercent, prettify } from './format';
+import { formatCurrency, formatPercent, prettify, parseNum } from './format';
 import { exportMarkdown } from './markdown';
 import { AiChat } from './AiChat';
 import { defaultScenario } from './defaults';
@@ -765,10 +765,26 @@ export default function App() {
   );
 
   const readiness = activeResult && activeScenario
-    ? getReadinessSummary(activeResult, activeScenario.assumptions.retirementAge, activeScenario.assumptions.safeWithdrawalRate)
+    ? getReadinessSummary(activeResult, activeScenario)
     : null;
 
-  if (!activeScenario || !activeResult || !readiness) return null;
+  if (!activeScenario || !activeResult || !readiness) {
+    // recoverable error state instead of a blank page (which reads as data
+    // loss). repairPlan on rehydrate makes this nearly unreachable, but a
+    // hand-edited localStorage or a future store regression shouldn't strand
+    // the user.
+    return (
+      <div className="app">
+        <div className="panel" role="alert" style={{ maxWidth: 480, margin: '48px auto', padding: 24 }}>
+          <h2>Couldn't load your plan</h2>
+          <p className="muted">
+            No active scenario could be resolved. Your data is still saved — reloading usually
+            fixes this. If it persists, import a JSON backup or use Reset Plan to start over.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const handleExport = () => {
     const blob = new Blob([JSON.stringify(store.plan, null, 2)], { type: 'application/json' });
@@ -835,6 +851,9 @@ export default function App() {
       {/* Compact top bar — logo, scenario tabs, and actions in a single row */}
       <div className="app-topbar">
         <div className="app-topbar-left">
+          {/* The logo artwork is dark text on transparency — fine on light
+              themes, invisible on dark ones. styles.css inverts it (it's
+              grayscale) for the dark theme families. */}
           <img className="app-logo" src="./images/retirementmeoff-dark.png" alt="retirementMe-Off" />
           <ScenarioSwitcher
             scenarios={store.plan.scenarios}
@@ -1676,7 +1695,7 @@ function AccountCard({ acct, scenario, store }: {
         </div>
         <div className="acct-card-field">
           <label>Return Rate</label>
-          <PctCellInput value={acct.annualReturn} onChange={(v) => store.updateAccount(scenario.id, acct.id, { annualReturn: v })} />
+          <OptionalPctCellInput value={acct.annualReturn} onChange={(v) => store.updateAccount(scenario.id, acct.id, { annualReturn: v })} />
         </div>
         <div className="acct-card-field">
           <label>Annual Contribution</label>
@@ -3220,6 +3239,38 @@ function PctCellInput({ value, onChange }: { value: number; onChange: (v: number
       </div>
       {notice && <div className="input-snapback">{notice}</div>}
     </>
+  );
+}
+
+/** Percent cell for OPTIONAL numeric fields (e.g. an account's return).
+ *  Empty = "unset" (fall back to the plan's default), so a deliberate 0%
+ *  stays 0% instead of being swallowed by the old 0-means-unset sentinel. */
+function OptionalPctCellInput({ value, onChange, placeholder = 'Plan %' }: {
+  value: number | undefined;
+  onChange: (v: number | undefined) => void;
+  placeholder?: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = (raw: string) => {
+    const n = parseNum(raw);
+    onChange(Number.isNaN(n) ? undefined : n / 100);
+  };
+  return (
+    <div className="input-with-unit">
+      <input
+        className="table-input text-right"
+        type="number"
+        value={draft ?? (value === undefined ? '' : (value * 100).toFixed(1))}
+        placeholder={placeholder}
+        title="Leave empty to use the plan's default return for this phase"
+        onChange={(e) => { setDraft(e.target.value); if (e.target.value.trim() !== '') commit(e.target.value); }}
+        onBlur={() => {
+          if (draft !== null) commit(draft.trim() === '' ? '' : draft);
+          setDraft(null);
+        }}
+      />
+      <span className="unit">%</span>
+    </div>
   );
 }
 

@@ -193,24 +193,25 @@ export function WhatIfPanel({ scenario, defaultOpen = false }: { scenario: Scena
     });
   }, [baseline]);
 
-  const draftScenario = useMemo(() => buildDraftScenario(scenario, draft), [scenario, draft]);
-  const draftResult = useMemo(() => runProjection(draftScenario), [draftScenario]);
+  // The projections only matter when the panel body is visible. While
+  // collapsed, skip them entirely — they used to recompute on every parent
+  // render (i.e. every keystroke anywhere in the app).
+  const draftScenario = useMemo(
+    () => (open ? buildDraftScenario(scenario, draft) : null),
+    [open, scenario, draft],
+  );
+  const draftResult = useMemo(
+    () => (draftScenario ? runProjection(draftScenario) : null),
+    [draftScenario],
+  );
   const draftReadiness = useMemo(
-    () => getReadinessSummary(
-      draftResult,
-      draftScenario.assumptions.retirementAge,
-      draftScenario.assumptions.safeWithdrawalRate,
-    ),
+    () => (draftResult && draftScenario ? getReadinessSummary(draftResult, draftScenario) : null),
     [draftResult, draftScenario],
   );
 
-  const baselineResult = useMemo(() => runProjection(scenario), [scenario]);
+  const baselineResult = useMemo(() => (open ? runProjection(scenario) : null), [open, scenario]);
   const baselineReadiness = useMemo(
-    () => getReadinessSummary(
-      baselineResult,
-      scenario.assumptions.retirementAge,
-      scenario.assumptions.safeWithdrawalRate,
-    ),
+    () => (baselineResult ? getReadinessSummary(baselineResult, scenario) : null),
     [baselineResult, scenario],
   );
 
@@ -220,6 +221,7 @@ export function WhatIfPanel({ scenario, defaultOpen = false }: { scenario: Scena
 
   // Chart data: total net worth (today's $) for baseline + what-if, aligned by age.
   const chartData = useMemo(() => {
+    if (!baselineResult || !draftResult) return [];
     const map = new Map<number, { age: number; Baseline?: number; 'What If'?: number }>();
     for (const y of baselineResult.years) {
       map.set(y.age, { age: y.age, Baseline: Math.round(y.realAssets + y.realPropertyEquity) });
@@ -236,7 +238,11 @@ export function WhatIfPanel({ scenario, defaultOpen = false }: { scenario: Scena
 
   // The fields we'd commit if the user clicks Apply. We only patch assumptions
   // fields; the spending multiplier is applied by editing expense amounts.
-  const buildApplyPatch = (): { assumptions: Partial<Assumptions>; expenseScale: number } => ({
+  // (Only reachable while open — the Apply button lives in the open body —
+  // but guard for TS anyway.)
+  const buildApplyPatch = (): { assumptions: Partial<Assumptions>; expenseScale: number } | null => {
+    if (!draftScenario) return null;
+    return {
     assumptions: {
       retirementAge: draftScenario.assumptions.retirementAge,
       preRetirementReturn: draftScenario.assumptions.preRetirementReturn,
@@ -244,10 +250,13 @@ export function WhatIfPanel({ scenario, defaultOpen = false }: { scenario: Scena
       inflationRate: draftScenario.assumptions.inflationRate,
     },
     expenseScale: draft.spendingMultiplier,
-  });
+    };
+  };
 
   const handleApply = () => {
-    const { assumptions, expenseScale } = buildApplyPatch();
+    const patch = buildApplyPatch();
+    if (!patch) return;
+    const { assumptions, expenseScale } = patch;
     store.updateAssumptions(scenario.id, assumptions);
     if (expenseScale !== 1) {
       for (const e of scenario.expenses) {
@@ -274,7 +283,10 @@ export function WhatIfPanel({ scenario, defaultOpen = false }: { scenario: Scena
     higherIsBetter: boolean;
     isOutcome?: boolean;
   };
-  const deltas: Delta[] = [
+  // Only computed while the body is visible (the projections are skipped when
+  // collapsed — see the memos above), so the reads below are non-null here.
+  const showBody = !!(open && baselineReadiness && draftReadiness && baselineResult && draftResult);
+  const deltas: Delta[] = showBody ? [
     {
       label: 'Nest egg at retirement',
       baseline: baselineReadiness.nestEggAtRetirementReal,
@@ -305,7 +317,7 @@ export function WhatIfPanel({ scenario, defaultOpen = false }: { scenario: Scena
       higherIsBetter: true,
       isOutcome: true,
     },
-  ];
+  ] : [];
 
   return (
     <div className="panel whatif-panel">
@@ -329,7 +341,7 @@ export function WhatIfPanel({ scenario, defaultOpen = false }: { scenario: Scena
         <ChevronDown size={18} aria-hidden="true" className={`whatif-chevron${open ? ' open' : ''}`} />
       </button>
 
-      {open && (
+      {open && draftScenario && baselineResult && draftResult && baselineReadiness && draftReadiness && (
         <div id="whatif-body" className="whatif-body">
           <p className="section-help whatif-help">
             These sliders build a <strong>throwaway copy</strong> of your plan and re-run the
@@ -368,6 +380,7 @@ export function WhatIfPanel({ scenario, defaultOpen = false }: { scenario: Scena
                       max={s.max}
                       step={s.step}
                       value={value}
+                      aria-valuetext={formatSliderValue(value, s.unit)}
                       onChange={(e) =>
                         setDraft((d) => ({ ...d, [s.key]: Number(e.target.value) }))
                       }

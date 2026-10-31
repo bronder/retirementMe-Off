@@ -11,6 +11,8 @@ import type {
   ProjectionYear,
   ProjectionResult,
   Account,
+  Assumptions,
+  IncomeSource,
   MonteCarloOptions,
   MonteCarloResult,
   MonteCarloPercentileYear,
@@ -38,9 +40,51 @@ export type AnnualReturnSampler = (account: Account, age: number, year: number) 
  * This is the existing single-run behavior used by every UI view. To run
  * randomized simulations, see `runMonteCarloProjection` below.
  */
+/**
+ * Nominal gross amount of an income source at a given age — the single
+ * source of truth for income growth. The engine's projection AND the
+ * year-detail breakdown table both call this, so the UI can never drift
+ * from the projection (it used to grow COLA income at general inflation,
+ * mismatching the engine's SS-COLA math whenever the two rates differ).
+ *
+ * Semantics:
+ * - Amounts are entered in today's dollars.
+ * - Already in payment (startAge ≤ currentAge): the entered amount is its
+ *   value today; COLA income grows from today at its own rate, fixed income
+ *   stays at the same nominal amount.
+ * - Future start: inflate to nominal at startAge, then COLA income grows at
+ *   its own rate while fixed income holds that nominal.
+ */
+export function incomeNominalAtAge(
+  inc: IncomeSource,
+  age: number,
+  assumptions: Assumptions,
+): number {
+  if (inc.startAge <= assumptions.currentAge) {
+    return inc.cola
+      ? inc.annualAmount *
+          Math.pow(1 + assumptions.socialSecurityCola, age - assumptions.currentAge)
+      : inc.annualAmount;
+  }
+  const startAgeInflation = Math.pow(
+    1 + assumptions.inflationRate,
+    inc.startAge - assumptions.currentAge,
+  );
+  if (inc.cola) {
+    return (
+      inc.annualAmount *
+      startAgeInflation *
+      Math.pow(1 + assumptions.socialSecurityCola, age - inc.startAge)
+    );
+  }
+  return inc.annualAmount * startAgeInflation;
+}
+
 export function runProjection(scenario: Scenario): ProjectionResult {
   // Default sampler: just return the account's configured expected return.
-  const deterministic: AnnualReturnSampler = (acc) => acc.annualReturn;
+  // (An unset annualReturn never reaches the sampler — the growth loop
+  // substitutes the phase fallback before calling it.)
+  const deterministic: AnnualReturnSampler = (acc) => acc.annualReturn ?? 0;
   return runProjectionCore(scenario, deterministic);
 }
 
@@ -314,16 +358,17 @@ export function runProjectionCore(
     // --- Growth ---
     // Use the provided sampler so Monte Carlo can randomize per (account, year)
     // while the deterministic path still gets the account's configured return.
-    // Accounts with no configured return (annualReturn === 0, the "unconfigured"
-    // sentinel) fall back to the phase-appropriate assumption: preRetirementReturn
-    // during accumulation, postRetirementReturn after retirement. Accounts that
-    // carry an explicit return always use it.
+    // Accounts with no configured return (annualReturn undefined) fall back to
+    // the phase-appropriate assumption: preRetirementReturn during
+    // accumulation, postRetirementReturn after retirement. An explicit return
+    // is always used as-is — including a deliberate 0% (cash), which used to
+    // be swallowed by a 0-means-unset sentinel.
     let growth = 0;
     const phaseReturn = isRetired
       ? assumptions.postRetirementReturn
       : assumptions.preRetirementReturn;
     for (const s of accountStates) {
-      const effAccount = s.account.annualReturn === 0
+      const effAccount = s.account.annualReturn == null
         ? { ...s.account, annualReturn: phaseReturn }
         : s.account;
       const r = sampleAnnualReturn(effAccount, age, year);
@@ -334,33 +379,12 @@ export function runProjectionCore(
 
     // --- Income (any active income source, pre- or post-retirement) ---
     // All income amounts are entered in today's dollars (same as expenses).
+    // Growth math lives in incomeNominalAtAge so the year-detail table and
+    // the projection can never disagree.
     let income = 0;
     for (const inc of scenario.incomeSources) {
       if (age >= inc.startAge && (inc.endAge === null || age <= inc.endAge)) {
-        let nominalGross: number;
-        if (inc.cola) {
-          // COLA income (e.g. Social Security): the amount is in today's
-          // dollars at the start age, so first inflation-adjust it to nominal
-          // at startAge, then grow it by its OWN COLA rate each year after.
-          // This decouples the benefit's growth from general inflation — SS
-          // COLA is set independently of CPI and may differ from inflationRate.
-          const startAgeInflation = Math.pow(
-            1 + assumptions.inflationRate,
-            inc.startAge - assumptions.currentAge,
-          );
-          const nominalAtStart = inc.annualAmount * startAgeInflation;
-          const yearsSinceStart = age - inc.startAge;
-          const colaFactor = Math.pow(1 + assumptions.socialSecurityCola, yearsSinceStart);
-          nominalGross = nominalAtStart * colaFactor;
-        } else {
-          // Non-COLA income (e.g. fixed pension): the nominal amount is set
-          // at startAge (inflated from today's dollars) and stays fixed.
-          const startAgeInflation = Math.pow(
-            1 + assumptions.inflationRate,
-            inc.startAge - assumptions.currentAge,
-          );
-          nominalGross = inc.annualAmount * startAgeInflation;
-        }
+        const nominalGross = incomeNominalAtAge(inc, age, assumptions);
         const nominalNet = inc.taxable
           ? nominalGross * (1 - assumptions.retirementTaxRate)
           : nominalGross;
@@ -371,7 +395,16 @@ export function runProjectionCore(
     // --- Expenses ---
     let expenses = 0;
     for (const exp of scenario.expenses) {
-      const activePre = exp.preRetirement && !isRetired;
+      // Property-linked tax/insurance rows are created postRetirement-only,
+      // but housing costs don't stop at retirement's doorstep: while still
+      // working they reduce the salary surplus that gets auto-deposited.
+      // Previously pre-retirement housing was ignored entirely, overstating
+      // the nest egg for homeowners. Read the SAME rows in both phases so
+      // user edits apply consistently.
+      const isLinkedHousingTax =
+        !!exp._propertyId &&
+        (exp._propertyId.endsWith(':tax') || exp._propertyId.endsWith(':insurance'));
+      const activePre = !isRetired && (exp.preRetirement || isLinkedHousingTax);
       const activePost = exp.postRetirement && isRetired;
       if (!activePre && !activePost) continue;
       if (exp.startAge !== null && age < exp.startAge) continue;
@@ -406,9 +439,12 @@ export function runProjectionCore(
     // --- Mortgage payments (engine-computed, not a linked expense) ---
     // Fixed-rate mortgage payments are contractual — they do NOT inflate with
     // the cost of living. The engine computes the payment from the property
-    // fields so it stays flat and the balance amortizes down. Counted in
-    // retirement only (matching the old linked-expense's preRetirement: false).
-    if (isRetired && scenario.properties) {
+    // fields so it stays flat and the balance amortizes down. Counted in BOTH
+    // phases: while still working, the payment comes out of the salary surplus
+    // before any auto-deposit (previously ignored pre-retirement, which
+    // overstated savings for homeowners). mortgagePaymentAtAge itself handles
+    // the ownership window (future purchase / sale) and loan payoff.
+    if (scenario.properties) {
       for (const prop of scenario.properties) {
         if (prop.saleAge && age >= prop.saleAge) continue;
         if (prop.purchaseAge && age < prop.purchaseAge) continue;
@@ -625,9 +661,9 @@ export interface ReadinessSummary {
 
 export function getReadinessSummary(
   result: ProjectionResult,
-  retirementAge: number,
-  safeWithdrawalRate: number,
+  scenario: { assumptions: Assumptions },
 ): ReadinessSummary {
+  const { retirementAge, safeWithdrawalRate, inflationRate, currentAge } = scenario.assumptions;
   const retirementYear = result.years.find((y) => y.age === retirementAge);
   if (!retirementYear) {
     return {
@@ -646,10 +682,15 @@ export function getReadinessSummary(
   const withdrawal = retirementYear.withdrawals;
   const income = retirementYear.income;
   const safe = nestEgg * safeWithdrawalRate;
+  // The nominal figure is the START of the retirement year (before the first
+  // withdrawal); the real figure must describe the same moment. The year
+  // row's realAssets is an END-of-year number (after that year's spending),
+  // which understated the real nest egg by the first-year withdrawal.
+  const inflationAtRetirement = Math.pow(1 + inflationRate, retirementAge - currentAge);
 
   return {
     nestEggAtRetirement: nestEgg,
-    nestEggAtRetirementReal: retirementYear.realAssets,
+    nestEggAtRetirementReal: nestEgg / inflationAtRetirement,
     firstYearExpenses: retirementYear.expenses,
     firstYearIncome: income,
     firstYearWithdrawal: withdrawal,
@@ -747,9 +788,12 @@ export function createLogNormalReturnSampler(
 ): AnnualReturnSampler {
   const normal = new NormalSampler(rng);
   return (acc) => {
-    const mu = acc.annualReturn;
+    const mu = acc.annualReturn ?? 0;
     if (sigma <= 0) return mu; // degenerate: deterministic
-    const m = Math.log(1 + mu) - (sigma * sigma) / 2;
+    // Guard the log: a user-entered return ≤ −100% makes log(1 + mu) NaN,
+    // which silently poisons every downstream percentile. Clamp to just
+    // above total loss instead.
+    const m = Math.log(Math.max(1 + mu, 1e-9)) - (sigma * sigma) / 2;
     const x = m + sigma * normal.next();
     return Math.exp(x) - 1; // log-normal: r > -1 always when x is finite
   };

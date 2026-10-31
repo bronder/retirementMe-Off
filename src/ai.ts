@@ -152,7 +152,7 @@ export function buildPlanContext(
     const a = scenario.assumptions;
     const isActive = scenario.id === activeScenarioId;
     const readiness = result
-      ? getReadinessSummary(result, a.retirementAge, a.safeWithdrawalRate)
+      ? getReadinessSummary(result, { assumptions: a })
       : null;
 
     lines.push(`### Scenario: "${scenario.name}"${isActive ? ' (active)' : ''}`);
@@ -177,7 +177,7 @@ export function buildPlanContext(
     lines.push(`**Accounts** (total: ${formatCurrency(totalBalance)}, annual savings: ${formatCurrency(totalContrib)}):`);
     for (const acct of scenario.accounts) {
       lines.push(
-        `  - ${acct.name} (${prettify(acct.type)}): ${formatCurrency(acct.balance)} @ ${formatPercent(acct.annualReturn)}, contributing ${formatCurrency(acct.annualContribution)}/yr${acct.employerMatch > 0 ? ` + ${formatCurrency(acct.employerMatch)} match` : ''}`,
+        `  - ${acct.name} (${prettify(acct.type)}): ${formatCurrency(acct.balance)} @ ${acct.annualReturn != null ? formatPercent(acct.annualReturn) : 'plan default rate'}, contributing ${formatCurrency(acct.annualContribution)}/yr${acct.employerMatch > 0 ? ` + ${formatCurrency(acct.employerMatch)} match` : ''}`,
       );
     }
     lines.push('');

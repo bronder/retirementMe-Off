@@ -24,8 +24,8 @@ export function OverviewPanel({ scenario }: {
   const miniChartHeight = useResponsiveChartHeight({ min: 220, max: 360, vhFraction: 0.32 });
   const result = useMemo(() => projectScenario(scenario), [scenario]);
   const readiness = useMemo(
-    () => getReadinessSummary(result, scenario.assumptions.retirementAge, scenario.assumptions.safeWithdrawalRate),
-    [result, scenario.assumptions.retirementAge, scenario.assumptions.safeWithdrawalRate],
+    () => getReadinessSummary(result, scenario),
+    [result, scenario],
   );
 
   const currentNetWorth = scenario.accounts.reduce((s, a) => s + a.balance, 0);
