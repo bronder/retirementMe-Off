@@ -7,6 +7,7 @@ import {
   deriveMortgageRate,
   mortgageBalanceAtAge,
   mortgagePaymentAtAge,
+  getReadinessSummary,
 } from './engine';
 import type { Scenario } from './types';
 
@@ -729,6 +730,58 @@ describe('runProjection property net worth', () => {
     // The summary's nestEggAtRetirement uses the accounts-only beginningAssets;
     // net worth including property lives in the year row directly.
     expect(totalNetWorth).toBeGreaterThan(retYear.endingAssets);
+  });
+
+  it('does not double-count income in getReadinessSummary.onTrack', () => {
+    // `withdrawals` is already net of income (expenses − income). The
+    // sustainability bar is the safe-withdrawal amount alone. Regression:
+    // this previously computed `withdrawal <= safe + income`, which marked
+    // under-funded plans as on track whenever retirement income existed.
+    const base = makeScenario({
+      assumptions: {
+        ...makeScenario().assumptions,
+        currentAge: 65,
+        retirementAge: 65,
+        endAge: 75,
+        inflationRate: 0,
+        socialSecurityCola: 0,
+        retirementTaxRate: 0,
+      },
+      accounts: [
+        { id: 'a1', name: 'IRA', type: 'traditional_ira', balance: 1000000, annualReturn: 0.05, annualContribution: 0, employerMatch: 0 },
+      ],
+      incomeSources: [
+        { id: 'i1', name: 'SS', type: 'social_security', annualAmount: 60000, startAge: 65, endAge: null, cola: false, taxable: false },
+      ],
+      expenses: [
+        { id: 'e1', name: 'Living', category: 'housing', annualAmount: 105000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
+      ],
+    });
+    const result = runProjection(base);
+    // Net need = 105000 − 60000 income = 45000; safe amount = 4% × $1M = 40000.
+    // 45000 > 40000 → NOT on track — even though 45000 ≤ 40000 + 60000 was
+    // true under the old (buggy) check.
+    const summary = getReadinessSummary(result, 65, base.assumptions.safeWithdrawalRate);
+    expect(summary.firstYearWithdrawal).toBeCloseTo(45000, 0);
+    expect(summary.safeWithdrawalAmount).toBeCloseTo(40000, 0);
+    expect(summary.onTrack).toBe(false);
+
+    // Control: the same plan with the need under the safe amount IS on track.
+    const funded = makeScenario({
+      assumptions: base.assumptions,
+      accounts: base.accounts,
+      incomeSources: [],
+      expenses: [
+        { id: 'e1', name: 'Living', category: 'housing', annualAmount: 35000, preRetirement: false, postRetirement: true, startAge: null, endAge: null },
+      ],
+    });
+    const ok = getReadinessSummary(
+      runProjection(funded),
+      65,
+      funded.assumptions.safeWithdrawalRate,
+    );
+    expect(ok.firstYearWithdrawal).toBeCloseTo(35000, 0);
+    expect(ok.onTrack).toBe(true);
   });
 });
 

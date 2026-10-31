@@ -654,7 +654,10 @@ export function getReadinessSummary(
     firstYearIncome: income,
     firstYearWithdrawal: withdrawal,
     safeWithdrawalAmount: safe,
-    onTrack: withdrawal <= safe + income,
+    // `withdrawal` is already net of income (expenses − income), so the
+    // sustainability bar is simply the safe-withdrawal amount. Adding income
+    // here double-counts it and marks failing plans as on track.
+    onTrack: withdrawal <= safe,
     neededWithdrawalRate: nestEgg > 0 ? withdrawal / nestEgg : 1,
   };
 }
